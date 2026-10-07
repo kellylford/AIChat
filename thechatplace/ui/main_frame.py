@@ -1234,7 +1234,7 @@ class MainFrame(wx.Frame):
         copy = menu.Append(wx.ID_ANY, "&Copy Message\tCtrl+C")
         message = self._selected_message()
         if message is not None and message.kind == QUEUED:
-            now = menu.Append(wx.ID_ANY, "Send &Now (Claude stops what it's doing)")
+            now = menu.Append(wx.ID_ANY, "Send &Now\tCtrl+Enter")
             edit = menu.Append(wx.ID_ANY, "&Edit Queued Message")
             remove = menu.Append(wx.ID_ANY, "&Remove Queued Message\tDelete")
             menu.Bind(wx.EVT_MENU, lambda e: self.send_queued_now(), now)
@@ -2400,14 +2400,15 @@ class MainFrame(wx.Frame):
             return
         text = waiting[index]
         if not runner.send_now(text):
-            self._feedback("The turn just ended: the queued message goes now anyway.")
+            self._feedback("The turn is already ending: the message stays queued and goes "
+                           "when it's done.")
             return
         del waiting[index]
         if not waiting:
             self._queued.pop(info.cli_session_id, None)
         self._rebuild_chat_list()
         self._update_send_state()
-        self._feedback(f"Sent now. {info.title} stopped what it was doing to answer it.")
+        self._feedback(f"Sent now. {info.title} is stopping what it was doing to answer it.")
 
     def edit_queued(self):
         """Take the selected queued message back into the reply box, to
@@ -3163,6 +3164,9 @@ class MainFrame(wx.Frame):
         if key in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER):
             if ctrl and focus is self.reply_text:
                 self.on_send()
+                return
+            if ctrl and focus is self.chat_list and self._selected_queued() is not None:
+                self.send_queued_now()  # Send Now on a queued message
                 return
             if not ctrl and not event.AltDown() and focus is self.session_list:
                 self.on_open_session()

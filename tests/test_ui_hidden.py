@@ -3429,12 +3429,13 @@ def test_send_now_takes_a_queued_message_into_the_running_turn(frame, env, fake_
     frame.chat_list.SetSelection(frame.chat_list.GetCount() - 1)  # "Queued: third"
     menu = frame._message_menu()
     labels = [item.GetItemLabelText() for item in menu.GetMenuItems()]
-    assert "Send Now (Claude stops what it's doing)" in labels
+    assert "Send Now" in labels
     menu.Destroy()
     frame.send_queued_now()
     assert runner.sent_now == ["third"]
     assert frame._queued == {"own-1": ["second"]}
-    assert env["feedback"][-1] == "Sent now. Hub probe stopped what it was doing to answer it."
+    assert env["feedback"][-1] == ("Sent now. Hub probe is stopping what it was doing to "
+                                   "answer it.")
     # The turn just ended: it stays queued, to go as usual.
     runner.ended = True
     frame.chat_list.SetSelection(frame.chat_list.GetCount() - 1)
