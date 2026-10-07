@@ -742,6 +742,22 @@ def describe_elapsed(seconds: float) -> str:
     return unit(secs, "second")
 
 
+_UNKNOWN_OPTION = re.compile(r"unknown option '?(--[\w-]+)'?")
+
+
+def exit_message(returncode, detail: str) -> str:
+    """Why a turn ended before its result, in words. An older Claude Code
+    that doesn't know an option The Chat Place passes (``--permission-prompts``
+    is newer than 2.1.258, say) gets told to update, not shown the raw error."""
+    unknown = _UNKNOWN_OPTION.search(detail or "")
+    if unknown:
+        return (f"Claude Code is too old for The Chat Place: it doesn't know the option "
+                f"{unknown.group(1)}. Update it (in a terminal, run: claude update), then "
+                "send again. The Chat Place is checked with Claude Code 2.1.286.")
+    message = f"Claude exited without finishing the turn (exit code {returncode})."
+    return f"{message} {detail}" if detail else message
+
+
 class TurnRunner:
     """Runs one turn in a background thread and reports ``TurnEvent``s.
 
@@ -1001,10 +1017,7 @@ class TurnRunner:
                                       session_id=self.parser.session_id)
                 else:
                     detail = next((x for x in reversed(stderr_lines) if x.strip()), "")
-                    message = ("Claude exited without finishing the turn "
-                               f"(exit code {process.returncode}).")
-                    if detail:
-                        message += f" {detail}"
+                    message = exit_message(process.returncode, detail)
                     final = TurnEvent("failed", text=message, is_error=True,
                                       session_id=self.parser.session_id)
         except _Cancelled:
