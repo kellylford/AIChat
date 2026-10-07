@@ -82,14 +82,16 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
 - **Escape** in the messages or the reply box (or Backspace in the messages) goes back to the
   session list, on the same session. Enter there on the session that's already loaded takes you
   back to its messages where you left them, without reloading.
-- **Commands and skills** (Ctrl+/, Session, Insert Command or Skill), in TheClaudeHub's own
+- **Commands and skills** (Ctrl+/, the Commands button after Stop, or Session, Insert Command
+  or Skill), in TheClaudeHub's own
   sessions: a searchable list of your skills and custom commands, then Claude Code's own
   (/compact, /context, /code-review and the rest), each with its description and what it
   takes. Type to filter by name or description, Down to the list, Enter to choose: it goes
   at the start of the reply box ("/compact "), replacing a command already there and keeping
   what you typed, ready to finish and send. The list is Claude Code's own for the session's
   folder, asked for in the background when the session loads (no turn, no cost) and kept
-  current by each turn.
+  current by each turn. If it isn't there yet, you hear "Commands are ready" when it is; the list
+  never opens by itself.
 - **Export** (Ctrl+E, Session, Export Session) saves the selected session's conversation,
   or the loaded one's, to a file: **Markdown**, a **web page** (formatted like the full-message
   view, nothing fetched from the internet) or **plain text**, chosen by the Save as type list

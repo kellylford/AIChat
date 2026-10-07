@@ -863,7 +863,10 @@ class CommandPickerDialog(wx.Dialog):
 
     def _on_search_key(self, event):
         if event.GetKeyCode() in (wx.WXK_DOWN, wx.WXK_UP) and self._shown:
+            # Down lands on the first entry (the top one is already chosen by
+            # default, so Down from the box shouldn't need pressing twice).
             self.list.SetFocus()
+            self.list.SetSelection(0)
             return
         event.Skip()
 

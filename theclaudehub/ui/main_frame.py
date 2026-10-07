@@ -39,6 +39,7 @@ Accessibility decisions, and why
 from __future__ import annotations
 
 import os
+import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -108,8 +109,9 @@ class MainFrame(wx.Frame):
         self._pending_refresh: Optional[bool] = None
         self._claude_version = ""  # for bug reports; found in the background
         # Slash commands and skills per folder (#23), fetched in the background.
-        self._commands: Dict[str, List[dict]] = {}
+        self._commands: Dict[str, List[dict]] = {}  # by _folder_key
         self._commands_fetching: set = set()
+        self._commands_waiting: Dict[str, list] = {}
         self._last_announcement = ""
 
         # Session view state.
@@ -278,14 +280,18 @@ class MainFrame(wx.Frame):
         orow = wx.BoxSizer(wx.HORIZONTAL)
         self.send_btn = wx.Button(self.own_reply, label="Sen&d")
         self.stop_btn = wx.Button(self.own_reply, label="Sto&p")
+        # After Stop, so Tab from the reply box is still Send, then Stop (#175).
+        self.commands_btn = wx.Button(self.own_reply, label="C&ommands...")
         orow.Add(self.send_btn, 0, wx.RIGHT, 6)
-        orow.Add(self.stop_btn, 0, wx.RIGHT, 12)
+        orow.Add(self.stop_btn, 0, wx.RIGHT, 6)
+        orow.Add(self.commands_btn, 0, wx.RIGHT, 12)
         self.turn_status = wx.StaticText(self.own_reply, label="")
         orow.Add(self.turn_status, 1, wx.ALIGN_CENTER_VERTICAL)
         osizer.Add(orow, 0, wx.EXPAND | wx.TOP, 6)
         self.own_reply.SetSizer(osizer)
         self.send_btn.Bind(wx.EVT_BUTTON, self.on_send)
         self.stop_btn.Bind(wx.EVT_BUTTON, self.on_stop)
+        self.commands_btn.Bind(wx.EVT_BUTTON, lambda e: self.on_insert_command())
 
         self.desktop_reply = wx.Panel(root)
         dsizer = wx.BoxSizer(wx.VERTICAL)
@@ -706,7 +712,7 @@ class MainFrame(wx.Frame):
             if self.session_list.GetSelection() != row:
                 self.session_list.SetSelection(row)
         self.SetTitle(f"{info.title} \u2014 {APP_NAME}")
-        if info.is_own:
+        if info.is_own and _folder_key(info.cwd) not in self._commands:
             self._fetch_commands(info.cwd)  # ready by the time you want them
         self.chat_list.SetFocus()
         self._refresh_chat()
@@ -1616,7 +1622,8 @@ class MainFrame(wx.Frame):
             self._pending.pop(session_id, None)
             parser = getattr(self._runners.get(session_id), "parser", None)
             if parser is not None and parser.commands:
-                self._commands[self._runners[session_id].cwd] = usable_commands(parser.commands)
+                self._commands[_folder_key(self._runners[session_id].cwd)] = \
+                    usable_commands(parser.commands)
             if is_open_now:
                 # The reply is announced next; activity not yet spoken is
                 # older news, and its last text is that same reply.
@@ -2049,26 +2056,31 @@ class MainFrame(wx.Frame):
     # ------------------------------------------- slash commands and skills (#23)
 
     def _fetch_commands(self, cwd: str, then=None):
-        """Get the folder's commands in the background (no turn, no cost)."""
-        if not cwd or cwd in self._commands_fetching:
+        """Get the folder's commands in the background (no turn, no cost).
+        ``then`` runs when they've arrived (or the fetch gave up)."""
+        key = _folder_key(cwd)
+        if then is not None:
+            self._commands_waiting.setdefault(key, []).append(then)
+        if not cwd or key in self._commands_fetching:
             return
         lookup = platform_paths.find_claude()
         if not lookup.path:
+            self._commands_fetched(key, [])
             return
-        self._commands_fetching.add(cwd)
+        self._commands_fetching.add(key)
 
         def work():
             commands = fetch_commands(lookup.path, cwd)
-            wx.CallAfter(self._commands_fetched, cwd, commands, then)
+            wx.CallAfter(self._commands_fetched, key, commands)
         self._pool.submit(work)
 
-    def _commands_fetched(self, cwd: str, commands: List[dict], then):
-        self._commands_fetching.discard(cwd)
+    def _commands_fetched(self, key: str, commands: List[dict]):
+        self._commands_fetching.discard(key)
         if not self:
             return
         if commands:
-            self._commands[cwd] = commands
-        if then is not None:
+            self._commands[key] = commands
+        for then in self._commands_waiting.pop(key, []):
             then()
 
     def on_insert_command(self):
@@ -2080,38 +2092,40 @@ class MainFrame(wx.Frame):
             self._feedback("Commands and skills are for TheClaudeHub's own sessions: load one "
                            "first.")
             return
-        commands = self._commands.get(info.cwd)
+        commands = self._commands.get(_folder_key(info.cwd))
         if commands is None:
-            if info.cwd in self._commands_fetching:
-                self._feedback("Still getting the commands for this folder.")
-                return
             self._feedback("Getting the commands for this folder.")
-            key = info.key
 
             def when_ready():
-                if self._open is not None and self._open.key == key and info.cwd in self._commands:
-                    self.on_insert_command()
-                elif info.cwd not in self._commands:
+                # Said, never opened by itself: a dialog appearing a moment
+                # later would take keys you were typing elsewhere.
+                if _folder_key(info.cwd) in self._commands:
+                    self._feedback("Commands are ready: press Ctrl+/ or Commands.")
+                else:
                     self._feedback("Couldn't get the commands from Claude Code.")
             self._fetch_commands(info.cwd, then=when_ready)
             return
+        returning_to = wx.Window.FindFocus()
         dialog = CommandPickerDialog(self, commands)
         try:
             if dialog.ShowModal() != wx.ID_OK or dialog.chosen is None:
-                self.reply_text.SetFocus()
+                if returning_to is not None:
+                    returning_to.SetFocus()
                 return
             chosen = dialog.chosen
         finally:
             dialog.Destroy()
-        self._insert_command(chosen["name"])
+        self._insert_command(chosen["name"], commands)
 
-    def _insert_command(self, name: str):
+    def _insert_command(self, name: str, commands: Optional[List[dict]] = None):
         """Put ``/name `` at the start of the reply, replacing a command
-        that's already there, keeping the rest of what you typed."""
-        text = self.reply_text.GetValue()
-        rest = text.lstrip()
-        if rest.startswith("/"):
-            rest = rest.split(None, 1)[1] if len(rest.split(None, 1)) > 1 else ""
+        that's already there (only a real one: "/path/x is broken" stays),
+        keeping the rest of what you typed, line breaks and all."""
+        rest = self.reply_text.GetValue().lstrip(" \t")
+        known = {c["name"] for c in commands or []}
+        match = re.match(r"/(\S*)[ \t]*", rest)
+        if match and (match.group(1) in known or not commands):
+            rest = rest[match.end():]
         command = f"/{name} "
         self.reply_text.SetValue(command + rest)
         self.reply_text.SetFocus()
@@ -2305,6 +2319,11 @@ class MainFrame(wx.Frame):
         speaker.stop()
         self._pool.shutdown(wait=False, cancel_futures=True)
         event.Skip()
+
+
+def _folder_key(cwd: str) -> str:
+    """One key per folder, whatever its case or a trailing slash."""
+    return os.path.normcase(os.path.normpath(cwd)) if cwd else ""
 
 
 def _fitting_size(width: int, height: int):

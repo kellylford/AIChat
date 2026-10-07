@@ -932,6 +932,7 @@ def fetch_commands(executable: str, cwd: str, timeout: float = 20.0,
             process.wait(timeout=5)
         except Exception:  # noqa: BLE001
             _quietly(process.kill)
+            _quietly(lambda: process.wait(timeout=2))
 
 
 def _quietly(action) -> None:

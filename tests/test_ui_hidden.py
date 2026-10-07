@@ -275,7 +275,8 @@ def test_tab_order_own_session(frame):
     frame.on_open_session()
     order = tab_order(frame)
     assert order == [frame.session_list, frame.chat_list, frame.reply_text, frame.send_btn,
-                     frame.stop_btn, frame.activity_check, frame.new_btn, frame.refresh_btn]
+                     frame.stop_btn, frame.commands_btn, frame.activity_check, frame.new_btn,
+                     frame.refresh_btn]
     frame._runners["own-1"] = FakeRunner([], "", "", None)
     frame._update_send_state()
     # Issue #175: a running turn doesn't move anything. Tab, Enter from the
@@ -2249,7 +2250,7 @@ def test_commands_are_fetched_when_an_own_session_loads_and_inserted(frame, env,
     from theclaudehub.ui import dialogs
     select(frame, "Hub probe")
     frame.on_open_session()
-    assert pump(lambda: "C:\\G\\Scratch" in frame._commands)
+    assert pump(lambda: _folder_key("C:\\G\\Scratch") in frame._commands)
     seen = {}
 
     class Picks(dialogs.CommandPickerDialog):
@@ -2278,7 +2279,41 @@ def test_a_turn_keeps_the_folder_commands_current(frame, env):
     runner.parser.commands = [{"name": "fresh-skill"}]
     frame._runners["own-1"] = runner
     frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("finished", text="ok"))
-    assert [c["name"] for c in frame._commands["C:\\G\\Scratch"]] == ["fresh-skill"]
+    assert [c["name"] for c in frame._commands[_folder_key("c:\\g\\scratch\\")]] == \
+        ["fresh-skill"]  # one key per folder, whatever the case or a trailing slash
+
+
+def _folder_key(cwd):
+    from theclaudehub.ui.main_frame import _folder_key as key
+    return key(cwd)
+
+
+def test_commands_never_open_by_themselves(frame, env, monkeypatch):
+    from theclaudehub.ui import main_frame
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    assert pump(lambda: frame._commands)
+    frame._commands.clear()
+    monkeypatch.setattr("theclaudehub.ui.main_frame.CommandPickerDialog",
+                        lambda *a: pytest.fail("opened by itself"))
+    frame.on_insert_command()
+    assert env["feedback"][-1] == "Getting the commands for this folder."
+    assert pump(lambda: env["feedback"][-1] == "Commands are ready: press Ctrl+/ or Commands.")
+    frame._commands.clear()
+    monkeypatch.setattr(main_frame, "fetch_commands", lambda exe, cwd: [])
+    frame.on_insert_command()
+    assert pump(lambda: env["feedback"][-1] == "Couldn't get the commands from Claude Code.")
+
+
+def test_inserting_keeps_line_breaks_and_leaves_paths_alone(frame):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame.reply_text.SetValue("/context\n\nSecond paragraph.")
+    frame._insert_command("compact", FAKE_COMMANDS)
+    assert frame.reply_text.GetValue() == "/compact \n\nSecond paragraph."
+    frame.reply_text.SetValue("/path/x is broken")
+    frame._insert_command("compact", FAKE_COMMANDS)
+    assert frame.reply_text.GetValue() == "/compact /path/x is broken"
 
 
 def test_picker_with_nothing_matching_chooses_nothing(frame):
