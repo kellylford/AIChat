@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import os
 import re
-import shutil
 import sys
 from pathlib import Path
 from typing import List, Optional
@@ -88,71 +87,6 @@ def desktop_sessions_dirs() -> List[Path]:
 def app_data_dir() -> Path:
     """The Chat Place's own settings and session store."""
     return _roaming_dir() / APP_DIR_NAME
-
-
-#: The app was TheClaudeHub until #25; its data folder had that name.
-OLD_APP_DIR_NAME = "TheClaudeHub"
-_CARRIED_OVER = "carried over from TheClaudeHub.txt"
-#: Not worth carrying: logs of the old app.
-_LEFT_BEHIND = {"update.log", "error.log"}
-
-
-_CARRYING = ".carrying"
-
-
-def carry_over_old_data(roaming: Optional[Path] = None) -> List[str]:
-    """Once, at first start after the rename: copy TheClaudeHub's sessions,
-    groups, settings and pasted images into The Chat Place's folder. Copied,
-    never moved, and nothing already there is replaced; the old folder stays
-    as it was. Each item is copied under a temporary name and renamed into
-    place, so a copy cut short is never taken for a whole one. The marker is
-    written only when everything came across: otherwise it's tried again at
-    the next start. Returns what went wrong (empty when all is well)."""
-    roaming = roaming or _roaming_dir()
-    old, new = roaming / OLD_APP_DIR_NAME, roaming / APP_DIR_NAME
-    if not old.is_dir() or (new / _CARRIED_OVER).exists():
-        return []
-    problems: List[str] = []
-    copied: List[str] = []
-    try:
-        new.mkdir(parents=True, exist_ok=True)
-        items = list(old.iterdir())
-    except OSError as exc:
-        return [str(exc)]
-    for item in items:
-        target = new / item.name
-        partial = new / (item.name + _CARRYING)
-        if item.name in _LEFT_BEHIND or target.exists():
-            continue
-        try:
-            _remove(partial)  # left by a copy cut short last time
-            if item.is_dir():
-                shutil.copytree(item, partial)
-            else:
-                shutil.copy2(item, partial)
-            os.rename(partial, target)
-            copied.append(item.name)
-        except (OSError, shutil.Error) as exc:
-            _remove(partial)
-            problems.append(f"{item.name}: {exc}")
-    if not problems:
-        try:
-            (new / _CARRIED_OVER).write_text(
-                f"Copied from {old} at first start: {', '.join(copied) or 'nothing'}.\n",
-                encoding="utf-8")
-        except OSError as exc:
-            problems.append(str(exc))
-    return problems
-
-
-def _remove(path: Path) -> None:
-    try:
-        if path.is_dir():
-            shutil.rmtree(path)
-        elif path.exists():
-            path.unlink()
-    except OSError:
-        pass
 
 
 def default_projects_root() -> Path:
