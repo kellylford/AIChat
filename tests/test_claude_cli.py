@@ -324,7 +324,7 @@ def test_runner_sends_prompt_on_stdin_and_reports_events(tmp_path):
     assert sent[1]["type"] == "user"
     assert sent[1]["message"] == {"role": "user", "content": "Hello -p --bare"}
     assert captured["cwd"] == str(tmp_path)
-    assert captured["env"] == {"PATH": "x"}
+    assert captured["env"] == {"PATH": "x", "CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS": "1"}
     assert "encoding" not in captured and "text" not in captured  # byte pipes
     assert [e.kind for e in events] == ["started", "text", "finished"]
     assert events[-1].session_id == "s1"
@@ -833,3 +833,99 @@ def test_an_old_claude_code_is_told_to_update():
     assert cli.exit_message(3, "boom") == \
         "Claude exited without finishing the turn (exit code 3). boom"
     assert cli.exit_message(3, "") == "Claude exited without finishing the turn (exit code 3)."
+
+
+def _with_answer(events_list, runner_box):
+    """on_event that answers a permission at once, recording whether it went."""
+    def on_event(event):
+        if event.kind == "permission":
+            runner_box["answered"] = runner_box["runner"].respond(
+                event.request.request_id, {"behavior": "allow", "updatedInput": {}})
+    return on_event
+
+
+def test_the_turn_ends_when_claude_code_says_idle_not_at_the_first_result(tmp_path):
+    from thechatplace.claude_cli import TurnRunner
+    process = FakeProcess([
+        ev(type="system", subtype="session_state_changed", state="running"),
+        ev(type="system", subtype="init", session_id="s1", apiKeySource="none"),
+        # A background agent's notification answered first, as its own result.
+        ev(type="result", subtype="success", result="noted",
+           permission_denials=[{"tool_name": "Write", "tool_input": {"file_path": "a"}}]),
+        ev(type="assistant", message={"content": [{"type": "text", "text": "Real reply."}]}),
+        ev(type="control_request", request_id="q1", request={
+            "subtype": "can_use_tool", "tool_name": "Bash", "input": {"command": "ls"},
+            "tool_use_id": "t1"}),
+        ev(type="result", subtype="success", result="Real reply."),
+        ev(type="system", subtype="session_state_changed", state="idle"),
+    ])
+    events, box, done = [], {}, threading.Event()
+    answer = _with_answer(events, box)
+
+    def on_event(event):
+        events.append(event)
+        answer(event)
+        if event.kind in ("finished", "failed"):
+            done.set()
+    captured = {}
+
+    def popen(cmd, **kwargs):
+        captured.update(kwargs)
+        return process
+    runner = TurnRunner(["claude", "-p"], str(tmp_path), "Hi", on_event, popen=popen,
+                        env={"PATH": "x"})
+    box["runner"] = runner
+    runner.start()
+    assert done.wait(5)
+    kinds = [e.kind for e in events]
+    assert kinds.count("finished") == 1 and kinds[-1] == "finished"
+    assert events[-1].text == "Real reply."
+    assert events[-1].denials  # the first result's refusal isn't lost
+    assert box["answered"] is True  # stdin still open after the first result
+    assert b"control_response" in process.written
+    assert "state" not in kinds
+    assert captured["env"]["CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS"] == "1"
+
+
+def test_idle_before_the_result_still_ends_the_turn(tmp_path):
+    process = FakeProcess([
+        ev(type="system", subtype="session_state_changed", state="running"),
+        ev(type="system", subtype="session_state_changed", state="idle"),
+        ev(type="result", subtype="success", result="done"),
+    ])
+    _runner, events, _ = run_turn(process, tmp_path)
+    assert [e.kind for e in events][-1] == "finished"
+
+
+def test_no_idle_after_a_result_ends_at_the_ceiling(tmp_path, monkeypatch):
+    from thechatplace import claude_cli
+    monkeypatch.setattr(claude_cli, "IDLE_AFTER_RESULT_WAIT", 0.2)
+
+    class Hanging(FakeProcess):
+        """stdout stays open until stdin is closed, as the real CLI's does."""
+        def __init__(self, lines):
+            super().__init__([])
+            closed = threading.Event()
+            self.stdin.close = closed.set
+            queue = [(line + "\n").encode("utf-8") for line in lines]
+
+            class Out:
+                def readline(self, *args):
+                    if queue:
+                        return queue.pop(0)
+                    closed.wait(5)
+                    return b""
+            self.stdout = Out()
+    process = Hanging([ev(type="system", subtype="session_state_changed", state="running"),
+                       ev(type="result", subtype="success", result="done")])
+    _runner, events, _ = run_turn(process, tmp_path)
+    assert [e.kind for e in events][-1] == "finished"
+
+
+def test_an_older_claude_code_without_state_events_ends_at_the_result(tmp_path):
+    process = FakeProcess([
+        ev(type="system", subtype="init", session_id="s1", apiKeySource="none"),
+        ev(type="result", subtype="success", result="done"),
+    ])
+    _runner, events, _ = run_turn(process, tmp_path)
+    assert [e.kind for e in events][-1] == "finished"
