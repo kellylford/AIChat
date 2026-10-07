@@ -60,17 +60,26 @@ log_route() {
         > "$WORKDIR/last-route.log" 2>/dev/null || true
 }
 
-# exec, not a plain call: the hook records this process's pid so the next reply
-# can interrupt it. After exec the pid *is* the speaking process.
+# Not exec, unlike say: VoiceOver can refuse ("AppleEvent handler failed",
+# -10000, when "Allow VoiceOver to be controlled with AppleScript" is off), and
+# then this falls through to say rather than speaking nothing. Nothing is lost
+# for interrupting: osascript returns as soon as VoiceOver has the text, and
+# VoiceOver's own speech is stopped by its own key, not by killing a process.
 speak_voiceover() {
     log_route voiceover
-    exec /usr/bin/osascript - "$path" <<'APPLESCRIPT'
+    local error
+    if error=$(/usr/bin/osascript - "$path" 2>&1 >/dev/null <<'APPLESCRIPT'
 on run argv
     set p to item 1 of argv
     set t to (read POSIX file p as «class utf8»)
     tell application "VoiceOver" to output t
 end run
 APPLESCRIPT
+    ); then
+        exit 0
+    fi
+    mkdir -p "$WORKDIR" 2>/dev/null && printf '%s  VoiceOver refused: %s\n' \
+        "$(date '+%Y-%m-%d %H:%M:%S')" "$error" >> "$WORKDIR/voiceover-refused.log" 2>/dev/null
 }
 
 speak_say() {

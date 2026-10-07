@@ -162,6 +162,10 @@ def main(argv: Optional[list] = None) -> int:
     frame = MainFrame()
     frame.Centre()
     frame.Show()
+    # On a Mac, the window can be in front while another app keeps the menu
+    # bar (and VO+M); see mac_a11y.activate_app. Does nothing elsewhere.
+    from .ui import mac_a11y
+    mac_a11y.activate_app()
     app.MainLoop()
     del checker
     return 0

@@ -69,6 +69,7 @@ from ..speech import ANNOUNCE_FULL, NOTIFY_ALL, NOTIFY_OFF, SpeechSettings, defa
 from ..transcript import (ASSISTANT, ERROR, PLAN, QUESTION, QUEUED, TOOL, ChatMessage,
                           TranscriptReader)
 from ..updater import AVAILABLE, FAILED, CheckResult, UpdateService
+from . import mac_a11y
 from .a11y import set_accessible_name, set_list_items_accessible
 from .notify import Notifier
 from .statusbar import StatusParts
@@ -92,6 +93,11 @@ _REPLY_KINDS = (ASSISTANT, QUESTION, PLAN, ERROR)
 
 def claude_link(desktop_session_id: str) -> str:
     return f"claude://claude.ai/epitaxy/{desktop_session_id}"
+
+
+#: The narrowest the lists go. Without it a list's minimum is its longest row
+#: (see session_list in _build_ui).
+LIST_MIN_WIDTH = 200
 
 
 class MainFrame(wx.Frame):
@@ -286,6 +292,12 @@ class MainFrame(wx.Frame):
         self.sessions_label = wx.StaticText(root, label="Session &list:")
         left.Add(self.sessions_label, 0, wx.LEFT | wx.TOP, 8)
         self.session_list = wx.ListBox(root, style=wx.LB_SINGLE, name="Session list")
+        # A list box's best width is its longest row, and the sizer won't go
+        # below it. On a Mac, real session titles made the session list take
+        # nearly the whole window and squeezed the reply box to one point
+        # wide, so VoiceOver read one letter per line. Fixed minimums let the
+        # lists share the width by proportion instead.
+        self.session_list.SetMinSize((LIST_MIN_WIDTH, -1))
         set_accessible_name(self.session_list, "Session list")
         left.Add(self.session_list, 1, wx.EXPAND | wx.ALL, 8)
         self.session_list.Bind(wx.EVT_LISTBOX_DCLICK, self.on_open_session)
@@ -298,12 +310,13 @@ class MainFrame(wx.Frame):
         self.messages_label = wx.StaticText(root, label="&Messages:")
         vsizer.Add(self.messages_label, 0, wx.LEFT | wx.TOP, 8)
         self.chat_list = wx.ListBox(root, style=wx.LB_SINGLE, name="Messages")
+        self.chat_list.SetMinSize((LIST_MIN_WIDTH, -1))  # see session_list
         set_accessible_name(self.chat_list, "Messages")
         # Each row shows the first line; the screen reader reads it whole (#11).
         set_list_items_accessible(self.chat_list, self.chat_list.GetName,
                                   self._message_item_text)
         self._spoken: Dict[str, tuple] = {}  # message key -> (text, spoken words)
-        vsizer.Add(self.chat_list, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
+        vsizer.Add(self.chat_list, 2, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
         self.chat_list.Bind(wx.EVT_CONTEXT_MENU, self._on_message_menu)
         self.chat_list.Bind(wx.EVT_LISTBOX_DCLICK, lambda e: self.on_read_message())
 
@@ -318,7 +331,7 @@ class MainFrame(wx.Frame):
         # while a RichEdit takes its name from the label before it.
         self.reply_text = wx.TextCtrl(self.own_reply, style=wx.TE_MULTILINE | wx.TE_RICH2)
         set_accessible_name(self.reply_text, "Your message")
-        self.reply_text.SetMinSize((-1, 90))
+        self.reply_text.SetMinSize((-1, 120))
         osizer.Add(self.reply_text, 1, wx.EXPAND)
         orow = wx.BoxSizer(wx.HORIZONTAL)
         self.send_btn = wx.Button(self.own_reply, label="Sen&d")
@@ -343,7 +356,7 @@ class MainFrame(wx.Frame):
         # something; Delete removes the selected one.
         self.attach_list = wx.ListBox(self.own_reply, style=wx.LB_SINGLE)
         set_accessible_name(self.attach_list, "Attachments, Delete removes one")
-        self.attach_list.SetMinSize((-1, 48))
+        self.attach_list.SetMinSize((LIST_MIN_WIDTH, 48))  # see session_list
         osizer.Add(self.attach_list, 0, wx.EXPAND | wx.TOP, 6)
         self.attach_list.Hide()
         self.attach_list.Bind(wx.EVT_KEY_DOWN, self._on_attach_key)
@@ -364,7 +377,7 @@ class MainFrame(wx.Frame):
                    "conversation so far, that you can reply to here; the desktop app "
                    "session isn't changed."))
         set_accessible_name(self.desktop_note, "About replying")
-        self.desktop_note.SetMinSize((-1, 90))
+        self.desktop_note.SetMinSize((-1, 120))
         dsizer.Add(self.desktop_note, 1, wx.EXPAND)
         drow = wx.BoxSizer(wx.HORIZONTAL)
         self.reply_claude_btn = wx.Button(self.desktop_reply, label="Open in &Claude")
@@ -376,8 +389,11 @@ class MainFrame(wx.Frame):
         self.reply_claude_btn.Bind(wx.EVT_BUTTON, self.on_open_in_claude)
         self.continue_btn.Bind(wx.EVT_BUTTON, self.on_continue_here)
 
-        vsizer.Add(self.own_reply, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
-        vsizer.Add(self.desktop_reply, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        # The reply area takes a third of the height and grows with the
+        # window: held at its minimum, the reply box was about four lines
+        # however big the window was.
+        vsizer.Add(self.own_reply, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        vsizer.Add(self.desktop_reply, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
 
         crow = wx.BoxSizer(wx.HORIZONTAL)
         self.activity_check = wx.CheckBox(root, label="Show tool &activity")
@@ -1561,6 +1577,7 @@ class MainFrame(wx.Frame):
         modal = next((w for w in wx.GetTopLevelWindows()
                       if isinstance(w, wx.Dialog) and w.IsModal()), None)
         (modal or self).Raise()
+        mac_a11y.activate_app()  # Raise alone leaves a Mac's menu bar with the last app
         if not self._app_is_active():
             self.RequestUserAttention()  # Windows wouldn't let it come forward
         if modal is not None or key is None:

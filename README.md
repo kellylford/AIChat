@@ -526,10 +526,11 @@ Checked with Claude Code 2.1.286 (issues #187 and #188):
 
 ## Limitations
 
-- The Mac version is new and hasn't had a full pass with VoiceOver. The Windows screen reader
-  names the app gives some controls (whole messages in the messages list, for one) use MSAA,
-  which wxPython has only on Windows, so VoiceOver reads those controls' own text instead.
-  The OS-specific parts are in `thechatplace/platform_paths.py`, `thechatplace/ui/a11y.py` and
+- The Mac version is new and hasn't had a full pass with VoiceOver. Edit boxes, lists and
+  choices have their names under VoiceOver, as under JAWS and NVDA. But the text a screen reader
+  reads for each row of the messages list (the whole message) uses MSAA, which wxPython has only
+  on Windows, so VoiceOver reads the row's own text instead. The OS-specific parts are in
+  `thechatplace/platform_paths.py`, `thechatplace/ui/a11y.py`, `thechatplace/ui/mac_a11y.py` and
   the speech scripts.
 - "Needs you" for desktop sessions depends on the desktop app's turn summary, which it doesn't
   always write. A session without one shows as idle once it stops working.
