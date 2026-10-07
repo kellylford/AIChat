@@ -2260,7 +2260,7 @@ def test_report_a_bug_opens_github_with_the_report(frame, env, monkeypatch):
     fills = _fake_bug_dialog(monkeypatch, "open",
                              ("Sort resets", "It went back to status.", "Stay sorted", ""))
     frame.on_report_bug()
-    assert any(line.startswith("Sessions listed: 2 desktop app, 1 The Chat Place")
+    assert any(line.startswith("Sessions listed: 2 desktop app, 1 Chat Place")
                for line in fills.seen)
     assert env["opened"][-1].startswith("https://github.com/kellylford/AIChat/issues/new?")
     assert "title=Sort+resets" in env["opened"][-1]
