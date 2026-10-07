@@ -3537,3 +3537,29 @@ def test_the_reply_box_grows_with_the_window(frame):
     assert large_frame > small_frame
     assert large - small >= (large_frame - small_frame) / 5  # about a third goes to the reply
     assert frame.chat_list.GetSize().height > frame.own_reply.GetSize().height
+
+
+def test_long_session_titles_leave_the_reply_box_its_width(env):
+    """A list box's minimum width was its longest row. With real session
+    titles the session list took nearly the whole window, the reply box was
+    one point wide, and VoiceOver read it one letter per line."""
+    from thechatplace.ui.main_frame import MainFrame
+    long_title = "A session whose title goes on and on " * 12
+    add_desktop(env, "local_a", "cli-a", long_title)
+    store = OwnSessionStore(env["tmp"] / "own.json")
+    store.add(OwnSession("own-1", "Hub probe " + long_title, "/tmp", last_activity_ms=now_ms()))
+    window = MainFrame(store=store, check_updates_at_start=False)
+    try:
+        assert pump(lambda: window.session_list.GetCount() == 2)
+        select(window, "Hub probe")
+        window.on_open_session()
+        window.SetSize((1000, 720))
+        window.Layout()
+        window.own_reply.Layout()
+        assert window.reply_text.GetSize().width > 300
+        assert window.session_list.GetSize().width < window.GetSize().width / 2
+    finally:
+        window._list_timer.Stop()
+        window._chat_timer.Stop()
+        window._pool.shutdown(wait=True)
+        window.Destroy()

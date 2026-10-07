@@ -95,6 +95,11 @@ def claude_link(desktop_session_id: str) -> str:
     return f"claude://claude.ai/epitaxy/{desktop_session_id}"
 
 
+#: The narrowest the lists go. Without it a list's minimum is its longest row
+#: (see session_list in _build_ui).
+LIST_MIN_WIDTH = 200
+
+
 class MainFrame(wx.Frame):
     def __init__(self, store: Optional[OwnSessionStore] = None,
                  updates: Optional[UpdateService] = None,
@@ -287,6 +292,12 @@ class MainFrame(wx.Frame):
         self.sessions_label = wx.StaticText(root, label="Session &list:")
         left.Add(self.sessions_label, 0, wx.LEFT | wx.TOP, 8)
         self.session_list = wx.ListBox(root, style=wx.LB_SINGLE, name="Session list")
+        # A list box's best width is its longest row, and the sizer won't go
+        # below it. On a Mac, real session titles made the session list take
+        # nearly the whole window and squeezed the reply box to one point
+        # wide, so VoiceOver read one letter per line. Fixed minimums let the
+        # lists share the width by proportion instead.
+        self.session_list.SetMinSize((LIST_MIN_WIDTH, -1))
         set_accessible_name(self.session_list, "Session list")
         left.Add(self.session_list, 1, wx.EXPAND | wx.ALL, 8)
         self.session_list.Bind(wx.EVT_LISTBOX_DCLICK, self.on_open_session)
@@ -299,6 +310,7 @@ class MainFrame(wx.Frame):
         self.messages_label = wx.StaticText(root, label="&Messages:")
         vsizer.Add(self.messages_label, 0, wx.LEFT | wx.TOP, 8)
         self.chat_list = wx.ListBox(root, style=wx.LB_SINGLE, name="Messages")
+        self.chat_list.SetMinSize((LIST_MIN_WIDTH, -1))  # see session_list
         set_accessible_name(self.chat_list, "Messages")
         # Each row shows the first line; the screen reader reads it whole (#11).
         set_list_items_accessible(self.chat_list, self.chat_list.GetName,
@@ -344,7 +356,7 @@ class MainFrame(wx.Frame):
         # something; Delete removes the selected one.
         self.attach_list = wx.ListBox(self.own_reply, style=wx.LB_SINGLE)
         set_accessible_name(self.attach_list, "Attachments, Delete removes one")
-        self.attach_list.SetMinSize((-1, 48))
+        self.attach_list.SetMinSize((LIST_MIN_WIDTH, 48))  # see session_list
         osizer.Add(self.attach_list, 0, wx.EXPAND | wx.TOP, 6)
         self.attach_list.Hide()
         self.attach_list.Bind(wx.EVT_KEY_DOWN, self._on_attach_key)
