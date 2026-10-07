@@ -35,7 +35,10 @@ def collect(own: Iterable[OwnSession], running_own_ids: Set[str],
     (a permission request, question or plan): it needs you, not working.
     ``order`` is how the list is sorted (see ``sessions.SORT_ORDERS``)."""
     live = load_live_status(live_dir, alive=alive)
-    desktop: DesktopLoadResult = load_desktop_sessions(desktop_dir, live)
+    # Archived ones too, flagged: the list shows them only in its Archived view
+    # (#32) or a group they're in.
+    desktop: DesktopLoadResult = load_desktop_sessions(desktop_dir, live,
+                                                       include_archived=True)
     sessions = list(desktop.sessions)
     waiting = waiting or {}
     for item in own:

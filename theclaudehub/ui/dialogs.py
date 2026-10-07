@@ -689,3 +689,105 @@ class PlanDialog(wx.Dialog):
 
     def note_text(self) -> str:
         return self.note.GetValue().strip()
+
+
+class ManageGroupsDialog(wx.Dialog):
+    """Session, Manage Groups (#31): the groups, each with how many sessions
+    it has, and New, Rename, Delete. Changes are saved as they're made;
+    Close (or Escape) closes. Deleting a group asks first, and never touches
+    its sessions."""
+
+    def __init__(self, parent, groups, counts):
+        super().__init__(parent, title="Manage Groups", size=(480, 420),
+                         style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+        self.groups = groups
+        self._counts = dict(counts)
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer.Add(wx.StaticText(self, label="&Groups:"), 0, wx.LEFT | wx.TOP, 8)
+        self.list = wx.ListBox(self, style=wx.LB_SINGLE)
+        set_accessible_name(self.list, "Groups")
+        sizer.Add(self.list, 1, wx.EXPAND | wx.ALL, 8)
+        row = wx.BoxSizer(wx.HORIZONTAL)
+        self.new_btn = wx.Button(self, label="&New...")
+        self.rename_btn = wx.Button(self, label="&Rename...")
+        self.delete_btn = wx.Button(self, label="&Delete...")
+        for button in (self.new_btn, self.rename_btn, self.delete_btn):
+            row.Add(button, 0, wx.RIGHT, 6)
+        row.AddStretchSpacer()
+        row.Add(wx.Button(self, wx.ID_CANCEL, "&Close"), 0)
+        sizer.Add(row, 0, wx.EXPAND | wx.ALL, 8)
+        self.SetSizer(sizer)
+        self.SetEscapeId(wx.ID_CANCEL)
+        self.new_btn.Bind(wx.EVT_BUTTON, lambda e: self.on_new())
+        self.rename_btn.Bind(wx.EVT_BUTTON, lambda e: self.on_rename())
+        self.delete_btn.Bind(wx.EVT_BUTTON, lambda e: self.on_delete())
+        self._fill()
+        wx.CallAfter(self.list.SetFocus)
+
+    def _row(self, name: str) -> str:
+        count = self._counts.get(name, 0)
+        return f"{name}, {count} session{'s' if count != 1 else ''}"
+
+    def _fill(self, select: str = ""):
+        names = self.groups.names()
+        if names:
+            self.list.Set([self._row(n) for n in names])
+            self.list.SetSelection(names.index(select) if select in names else 0)
+        else:
+            self.list.Set(["No groups yet. New makes one."])
+            self.list.SetSelection(0)
+        # Always enabled, so the Tab order doesn't change; they say if
+        # there's nothing to act on.
+
+    def _selected(self):
+        names = self.groups.names()
+        index = self.list.GetSelection()
+        return names[index] if names and 0 <= index < len(names) else None
+
+    def _ask(self, title: str, value: str = ""):
+        dialog = wx.TextEntryDialog(self, "Group name:", title, value)
+        try:
+            return dialog.GetValue() if dialog.ShowModal() == wx.ID_OK else None
+        finally:
+            dialog.Destroy()
+
+    def _try(self, action):
+        try:
+            return action()
+        except (ValueError, OSError) as exc:
+            wx.MessageBox(str(exc), self.GetTitle(), wx.OK | wx.ICON_WARNING, self)
+            return None
+
+    def on_new(self):
+        name = self._ask("New Group")
+        if name is not None:
+            made = self._try(lambda: self.groups.create(name))
+            if made:
+                self._fill(made)
+        self.list.SetFocus()
+
+    def on_rename(self):
+        old = self._selected()
+        if old is None:
+            wx.MessageBox("There's no group to rename.", self.GetTitle(),
+                          wx.OK | wx.ICON_INFORMATION, self)
+        else:
+            new = self._ask("Rename Group", old)
+            if new is not None:
+                renamed = self._try(lambda: self.groups.rename(old, new))
+                if renamed:
+                    self._counts[renamed] = self._counts.pop(old, 0)
+                    self._fill(renamed)
+        self.list.SetFocus()
+
+    def on_delete(self):
+        name = self._selected()
+        if name is None:
+            wx.MessageBox("There's no group to delete.", self.GetTitle(),
+                          wx.OK | wx.ICON_INFORMATION, self)
+        elif wx.MessageBox(f"Delete the group {name}? Its sessions stay; only the group "
+                           "goes.", self.GetTitle(),
+                           wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION, self) == wx.YES:
+            self._try(lambda: self.groups.delete(name))
+            self._fill()
+        self.list.SetFocus()

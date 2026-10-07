@@ -40,6 +40,8 @@ def env(tmp_path, monkeypatch, app):
     monkeypatch.setattr(platform_paths, "live_sessions_dir", lambda: live)
     monkeypatch.setattr(platform_paths, "projects_dir", lambda: projects)
     monkeypatch.setattr(speech, "DEFAULT_SETTINGS_PATH", tmp_path / "speech.json")
+    # TheClaudeHub's own files (groups.json) go here, never in the real %APPDATA%.
+    monkeypatch.setattr(platform_paths, "app_data_dir", lambda: tmp_path / "appdata")
     spoken = []
     feedback = []
 
@@ -1913,5 +1915,108 @@ def test_whole_message_setting_round_trips_and_is_in_settings(frame, tmp_path):
         assert dialog.whole_in_list.GetValue()
         dialog.whole_in_list.SetValue(False)
         assert not dialog.get_settings().full_messages_in_list
+    finally:
+        dialog.Destroy()
+
+
+# -- views and groups in the window (#31, #32) ------------------------------------------------
+
+
+def _titles(frame):
+    return [s.split(",")[0] for s in frame.session_list.GetStrings()]
+
+
+def test_show_sessions_filters_names_the_list_and_remembers(frame, env):
+    add_desktop(env, "local_z", "cli-z", "Old work", isArchived=True)
+    frame.refresh_sessions(resort=True)
+    settle(frame)
+    assert "Old work" not in _titles(frame)  # archived: not in All
+    assert frame.view_items["all"].IsChecked()
+    frame.on_view("needs")
+    assert _titles(frame) == ["Blocked one"]
+    assert frame.session_list.GetName() == "Session list, needs you, 1 of 3"
+    assert frame.sessions_label.GetLabel() == "&Session list, needs you, 1 of 3:"
+    assert env["feedback"][-1] == "Showing needs you: 1 session."
+    assert speech.SpeechSettings.load().session_view == "needs"
+    frame.on_view("archived")
+    assert _titles(frame) == ["Old work"]
+    assert frame.session_list.GetString(0).endswith(", archived")
+    frame.on_view("own")
+    assert _titles(frame) == ["Hub probe"]
+    frame.on_view("all")
+    assert frame.session_list.GetName() == "Session list"
+    assert sorted(_titles(frame)) == ["Blocked one", "Hub probe", "Quiet one"]
+
+
+def test_a_refresh_keeps_the_view(frame, env):
+    frame.on_view("own")
+    frame.refresh_sessions(force=True, resort=True)
+    settle(frame)
+    assert _titles(frame) == ["Hub probe"]
+    assert env["feedback"][-1].endswith("Showing TheClaudeHub sessions: 1.")
+
+
+def test_add_to_a_new_group_then_show_it_then_remove(frame, env, monkeypatch):
+    select(frame, "Quiet one")
+    picks = iter([0, 0])  # "New group..." (the only choice so far), then the group
+    monkeypatch.setattr(frame, "_choose", lambda title, prompt, choices: next(picks))
+    monkeypatch.setattr(frame, "_ask_group_name", lambda title, value="": "Work")
+    frame.on_add_to_group()
+    assert env["feedback"][-1] == "Added Quiet one to Work."
+    assert frame.groups.names() == ["Work"] and frame.groups.members("Work") == ["local_a"]
+    row = [s for s in frame.session_list.GetStrings() if s.startswith("Quiet one")][0]
+    assert row.endswith(", group Work")
+    assert "group:Work" in frame.view_items
+    frame.on_view("group:Work")
+    assert _titles(frame) == ["Quiet one"]
+    assert env["feedback"][-1] == "Showing group Work: 1 session."
+    select(frame, "Quiet one")
+    frame.on_remove_from_group()
+    assert env["feedback"][-1] == "Removed Quiet one from Work."
+    assert _titles(frame) == []
+    assert frame.session_list.GetName() == "Session list, group Work, 0 of 3"
+
+
+def test_deleting_the_group_being_shown_goes_back_to_all(frame, env, monkeypatch):
+    frame.groups.create("Temp")
+    frame._build_show_menu()
+    frame.on_view("group:Temp")
+    frame.groups.delete("Temp")
+
+    class Closes:
+        def __init__(self, *a):
+            pass
+
+        def ShowModal(self):
+            return wx.ID_CANCEL
+
+        def Destroy(self):
+            pass
+    monkeypatch.setattr("theclaudehub.ui.main_frame.ManageGroupsDialog", Closes)
+    frame.on_manage_groups()
+    assert frame.speech.session_view == "all" and frame.view_items["all"].IsChecked()
+    assert "group:Temp" not in frame.view_items
+
+
+def test_manage_groups_dialog_lists_renames_and_deletes(frame, env, monkeypatch):
+    from theclaudehub.ui.dialogs import ManageGroupsDialog
+    frame.groups.create("Work")
+    frame.groups.add("Work", "local_a")
+    frame.groups.create("Home")
+    dialog = ManageGroupsDialog(frame, frame.groups, {"Work": 1, "Home": 0})
+    try:
+        assert list(dialog.list.GetStrings()) == ["Work, 1 session", "Home, 0 sessions"]
+        monkeypatch.setattr(dialog, "_ask", lambda title, value="": "Jobs")
+        dialog.list.SetSelection(0)
+        dialog.on_rename()
+        assert frame.groups.names() == ["Jobs", "Home"]
+        assert dialog.list.GetString(0) == "Jobs, 1 session"
+        dialog.list.SetSelection(1)
+        dialog.on_delete()  # wx.MessageBox is patched to say yes
+        assert frame.groups.names() == ["Jobs"]
+        monkeypatch.setattr(dialog, "_ask", lambda title, value="": "jobs")
+        dialog.on_new()  # same name, other case: refused, says why
+        assert frame.groups.names() == ["Jobs"]
+        assert "already a group" in env["boxes"][-1]
     finally:
         dialog.Destroy()
