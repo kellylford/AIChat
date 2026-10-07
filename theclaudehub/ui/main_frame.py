@@ -858,7 +858,9 @@ class MainFrame(wx.Frame):
 
     def on_shortcuts(self, _event=None):
         """The keyboard shortcuts as a page: a heading and a table per group.
-        The text box when the page can't be shown, or on Read as Plain Text."""
+        The text box when the page can't be shown, or on Read as Plain Text.
+        Deliberately not tied to the "formatted page" setting, which is about
+        Claude's messages: the shortcuts read best as tables either way."""
         if self._show_page("Keyboard Shortcuts",
                            html_page("Keyboard Shortcuts", shortcuts_html())):
             return

@@ -1606,7 +1606,37 @@ def test_f1_shows_the_shortcuts_page_or_the_text_box(frame, env, monkeypatch):
     monkeypatch.setattr(frame, "_modal", lambda dialog: texts.append(dialog) or dialog.Destroy())
     frame.on_shortcuts()
     assert shown[0][0] == "Keyboard Shortcuts"
-    assert "<h2>Session list</h2>" in shown[0][1] and texts == []
+    assert ">Session list</h2>" in shown[0][1] and texts == []
     shown2 = _fake_viewer(monkeypatch, ID_PLAIN_TEXT)
     frame.on_shortcuts()
     assert len(shown2) == 1 and len(texts) == 1  # Read as Plain Text: the text box
+
+
+def test_shortcuts_and_messages_fall_back_to_the_text_box(frame, env, monkeypatch):
+    from theclaudehub.ui import main_frame
+    texts = []
+    monkeypatch.setattr(frame, "_modal", lambda dialog: texts.append(dialog) or dialog.Destroy())
+    # No WebView2 (the fixture's default): straight to the text box.
+    frame.on_shortcuts()
+    assert len(texts) == 1
+
+    class Broken:
+        def __init__(self, *args):
+            raise RuntimeError("Couldn't show the formatted page: no runtime")
+    monkeypatch.setattr(main_frame, "formatted_view_available", lambda: True)
+    monkeypatch.setattr(main_frame, "FormattedMessageDialog", Broken)
+    frame.on_shortcuts()
+    assert len(texts) == 2
+    assert frame.GetStatusBar().GetStatusText() == "Couldn't show the formatted page: no runtime"
+    # Read Full Message takes the same way back to its text box.
+    from theclaudehub.ui.dialogs import MessageDialog
+    _load_reply(frame, env, "## Result")
+    opened = []
+
+    class Plain(MessageDialog):
+        def ShowModal(self):
+            opened.append(self.text.GetValue())
+            return wx.ID_CANCEL
+    monkeypatch.setattr(main_frame, "MessageDialog", Plain)
+    frame.on_read_message()
+    assert opened == ["## Result"]

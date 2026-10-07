@@ -60,11 +60,23 @@ def test_shortcuts_page_has_a_heading_and_a_table_per_group():
     from theclaudehub.ui_text import SHORTCUTS, shortcuts_html
     body = shortcuts_html()
     assert body.startswith("<h1>Keyboard shortcuts</h1>")
-    assert body.count("<h2>") == len(SHORTCUTS) == body.count("<table ")
+    assert body.count("<h2 ") == len(SHORTCUTS) == body.count("<table ")
     assert '<th scope="col">Keys</th><th scope="col">What it does</th>' in body
     assert '<tr><th scope="row">F1</th><td>This list of shortcuts</td></tr>' in body
-    assert '<table aria-label="Session list shortcuts">' in body
-    # Every shortcut is in it, escaped.
+    # Each table is named by the heading above it, not by a second label.
+    assert '<h2 id="group2">Session list</h2>\n<table aria-labelledby="group2">' in body
+    assert "aria-label=" not in body
+    # Every shortcut is in it.
     rows = sum(len(items) for _group, items in SHORTCUTS)
     assert body.count('<th scope="row">') == rows
     assert "default-src 'none'" in html_page("Keyboard Shortcuts", body)
+
+
+def test_shortcuts_page_escapes_everything(monkeypatch):
+    from theclaudehub import ui_text
+    monkeypatch.setattr(ui_text, "SHORTCUTS", [("A<b>", [("x&y", '"q" <i>')])])
+    monkeypatch.setattr(ui_text, "LAYOUT", "<script>")
+    body = ui_text.shortcuts_html()
+    assert "<b>" not in body and "<i>" not in body and "<script>" not in body
+    assert "<h2 id=\"group1\">A&lt;b&gt;</h2>" in body
+    assert '<th scope="row">x&amp;y</th><td>&quot;q&quot; &lt;i&gt;</td>' in body

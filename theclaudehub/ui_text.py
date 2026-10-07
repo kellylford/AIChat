@@ -67,9 +67,11 @@ def shortcuts_html() -> str:
     import html
 
     parts = ["<h1>Keyboard shortcuts</h1>", f"<p>{html.escape(LAYOUT)}</p>"]
-    for group, items in SHORTCUTS:
-        parts.append(f"<h2>{html.escape(group)}</h2>")
-        parts.append(f'<table aria-label="{html.escape(group, quote=True)} shortcuts">'
+    for number, (group, items) in enumerate(SHORTCUTS, start=1):
+        # The table takes its name from the heading above it, so the group
+        # is named once, not as a heading and again as a separate label.
+        parts.append(f'<h2 id="group{number}">{html.escape(group)}</h2>')
+        parts.append(f'<table aria-labelledby="group{number}">'
                      '<thead><tr><th scope="col">Keys</th><th scope="col">What it does</th>'
                      "</tr></thead><tbody>")
         for key, action in items:
