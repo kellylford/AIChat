@@ -80,6 +80,8 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   move through by line. **Edit in Your Editor** opens the file in your own editor (on Windows,
   the program set to edit that kind of file, or Notepad); The Chat Place itself never writes to
   Claude Code's files. Reload shows your changes; Show in Folder and Copy Path find the file.
+  Not listed yet: what plugins add, `CLAUDE.md` files in a project's parent folders,
+  `.claude/rules`, and an organization's managed settings.
 - **Find** (Ctrl+F, View, Find). In the session list it asks for some text and shows only
   sessions whose title, folder or "needs you" note contains it, within the current view; the
   list's name says so ("Session list, matching \"build\", 3 of 139") and Escape shows them
