@@ -125,12 +125,26 @@ def _own_words(message: str, level: str, read_back: bool) -> Optional[str]:
     return f"{cut}… and {' and '.join(more)}." if more else f"{cut}…"
 
 
-def spoken_markdown(message: str) -> str:
+def spoken_markdown(message: str, describe_code: bool = False) -> str:
     """A message's markdown as words to be spoken, whole: headings, list
     items, code blocks and blank lines end sentences, wrapped lines read on,
-    markdown marks are dropped, and a code block is "Code block omitted".
-    "" if nothing is left. Used for read-back and for reading a whole message
-    in the messages list (#11)."""
+    markdown marks are dropped, and a code block is "Code block omitted", or
+    with ``describe_code`` says what it is ("Code block, Python, 14 lines.",
+    #17). "" if nothing is left. Used for read-back and for reading a whole
+    message in the messages list (#11)."""
+    flat = _spoken_markdown(message)
+    if describe_code and CODE_NOTE in flat:
+        from .codeblocks import find_code_blocks
+        blocks = find_code_blocks(message)
+        # Only when both ways of finding blocks agree; otherwise the plain note.
+        if len(blocks) == flat.count(CODE_NOTE):
+            for block in blocks:
+                flat = flat.replace(CODE_NOTE, block.describe() + "\uE000", 1)
+            flat = flat.replace("\uE000", ".")
+    return flat
+
+
+def _spoken_markdown(message: str) -> str:
     text = without_code_blocks(message or "", f"\n{CODE_NOTE}\n")
     lines = []  # (spoken text, whether a sentence must end after it)
     quoting = False

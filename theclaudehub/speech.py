@@ -317,7 +317,6 @@ def list_speech_options(timeout: float = 25.0) -> List[SpeechOption]:
 #: What a code block is read as.
 CODE_NOTE = "Code block omitted."
 # An unclosed fence (a pasted, truncated snippet) runs to the end of the text.
-_FENCED_CODE = re.compile(r"```.*?(?:```|\Z)", re.DOTALL)
 _INLINE_CODE = re.compile(r"`([^`\n]+)`")
 _LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
 _HEADING = re.compile(r"^#{1,6}\s*", re.MULTILINE)
@@ -332,8 +331,10 @@ _EMPHASIS_UNDERSCORE = re.compile(r"(?<!\w)(_{1,3})(\S(?:.*?\S)?)\1(?!\w)")
 
 
 def without_code_blocks(text: str, replacement: str) -> str:
-    """Fenced code blocks, closed or not, replaced by ``replacement``."""
-    return _FENCED_CODE.sub(replacement, text)
+    """Fenced code blocks (backticks or tildes), closed or not, replaced by
+    ``replacement``."""
+    from .codeblocks import replace_code_blocks
+    return replace_code_blocks(text, lambda block: replacement)
 
 
 def strip_for_speech(text: str) -> str:

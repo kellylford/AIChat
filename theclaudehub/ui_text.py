@@ -51,6 +51,8 @@ SHORTCUTS = [
          "Read the whole message as a formatted page (move by heading, table, list and "
          "code block); Alt+P reads it as plain text instead; Escape comes back to it"),
         ("Ctrl+C", "Copy the whole message"),
+        ("Ctrl+Shift+C", "Copy the message's last code block"),
+        ("Applications key / Shift+F10 then Code Blocks", "List, read and copy each code block"),
         ("Ctrl+F, then F3 and Shift+F3", "Find a message containing some text (its whole "
                                          "text, not just the first line), then the next or "
                                          "previous one"),
