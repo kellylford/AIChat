@@ -178,3 +178,68 @@ def status_text(text: str, limit: int = 150) -> str:
 __all__ = ["first_sentence", "reply_text", "turn_end_text", "status_text",
            "sent_text", "queued_text",
            "ANNOUNCE_FULL", "ANNOUNCE_SUMMARY", "ANNOUNCE_SILENT"]
+
+
+#: Tool calls in a row, each this many characters at most when read one by one.
+ACTIVITY_DETAIL_LIMIT = 120
+#: How many tool calls in a row are read one by one before they're counted.
+ACTIVITY_LIST_MAX = 3
+
+
+def activity_text(items, level: str) -> Optional[str]:
+    """What to say for a burst of activity in the open session (#12), with
+    Show Tool Activity on. ``items`` are ("tool", "Bash: git status") and
+    ("text", "Let me check the build.") pairs, oldest first; text is what
+    Claude wrote between tool calls.
+
+    Full: up to three tool calls in a row are read with what they act on
+    ("Using Bash: git status; Read: main.py."); more are counted ("Using Read
+    4 times, then Bash."), so speech never falls far behind. Text is read
+    as written, up to about a sentence or two. Summary: tools are always
+    counted, text is its first sentence. Silent: nothing (the status bar
+    still shows it). None if there's nothing to say.
+    """
+    if level == ANNOUNCE_SILENT or not items:
+        return None
+    parts = []
+    run = []
+
+    def end_run():
+        if not run:
+            return
+        if level == ANNOUNCE_FULL and len(run) <= ACTIVITY_LIST_MAX:
+            def short(detail):
+                detail = " ".join(detail.split())
+                return detail if len(detail) <= ACTIVITY_DETAIL_LIMIT \
+                    else _cut_at_word(detail, ACTIVITY_DETAIL_LIMIT) + "…"
+            listed = "; ".join(short(d) for d in run)
+            parts.append(_end_sentence(f"Using {listed}"))
+        else:
+            names = []  # (name, count), consecutive repeats merged
+            for detail in run:
+                name = detail.split(":", 1)[0].strip() or "a tool"
+                if names and names[-1][0] == name:
+                    names[-1] = (name, names[-1][1] + 1)
+                else:
+                    names.append((name, 1))
+            said = [f"{n} {c} times" if c > 1 else n for n, c in names]
+            parts.append(_end_sentence("Using " + ", then ".join(said)))
+        run.clear()
+
+    for kind, text in items:
+        if kind == "tool":
+            run.append(text or "a tool")
+            continue
+        end_run()
+        words = " ".join(strip_for_speech(without_code_blocks(text or "", f" {CODE_NOTE} "))
+                         .split())
+        if not words:
+            continue
+        if level == ANNOUNCE_SUMMARY:
+            parts.append(_end_sentence(first_sentence(words)))
+        elif len(words) <= OWN_LIMIT:
+            parts.append(_end_sentence(words))
+        else:
+            parts.append(_cut_at_word(words, OWN_LIMIT) + "…")
+    end_run()
+    return " ".join(parts) or None

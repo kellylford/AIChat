@@ -55,6 +55,12 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   Question cards read as "Claude asked: Which version?" with the
   options in the full text, then "You answered: ...". Refused tools read "Permission denied:
   ...". Tool calls and tool results are hidden unless you turn on Show Tool Activity (Ctrl+T).
+  With it on, the open session's tool calls are also **spoken as they happen**, so a long turn
+  isn't silent: "Using Bash: git status; Read: main.py." In TheClaudeHub's own sessions, what
+  Claude writes between tool calls ("Let me check the build.") is spoken too. A run of calls is
+  gathered for a moment and said together, counted when there are many ("Using Read 4 times,
+  then Bash."), and never cuts off your screen reader. At the summary level tools are always
+  counted; at silent only the status bar shows them. Tool results aren't spoken.
   New messages arrive at the end without moving you.
 - **Reply box:** for TheClaudeHub's own sessions, type and press Ctrl+Enter (or Send). You stay in
   the reply box. For desktop app sessions the same place holds a read-only note saying why

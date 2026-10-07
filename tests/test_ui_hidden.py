@@ -1787,3 +1787,61 @@ def test_status_bar_waits_while_you_read_it(frame, monkeypatch):
     assert frame.GetStatusBar().GetStatusText() == "Second."
     frame._on_status_focus(wx.FocusEvent(wx.wxEVT_SET_FOCUS))
     assert frame.status_text.GetValue() == "Second."  # caught up on arriving
+
+
+# -- announcing tool activity (#12) ----------------------------------------------------------
+
+
+def test_own_session_tool_calls_and_notes_are_spoken_together(frame, env):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame._runners["own-1"] = FakeRunner([], "", "", None)
+    frame._set_activity(True)
+    for event in (TurnEvent("text", text="Let me check the **build**."),
+                  TurnEvent("tool", text="Bash", detail="Bash: git status"),
+                  TurnEvent("tool", text="Read", detail="Read: C:\\r\\main.py")):
+        frame._on_turn_event({"id": "own-1"}, "Hub probe", event)
+    assert frame._activity_timer is not None
+    frame._activity_timer.Stop()
+    frame._flush_activity()
+    assert env["feedback"][-1] == ("Let me check the build. Using Bash: git status; "
+                                   "Read: C:\\r\\main.py.")
+
+
+def test_activity_is_quiet_with_tool_activity_off_or_another_session(frame, env):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame._runners["own-1"] = FakeRunner([], "", "", None)
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("tool", text="Bash"))
+    assert frame._activity == []  # Show Tool Activity is off
+    frame._set_activity(True)
+    frame._on_turn_event({"id": "own-2"}, "Other", TurnEvent("tool", text="Bash"))
+    assert frame._activity == []  # not the open session
+
+
+def test_finishing_the_turn_drops_unspoken_activity(frame, env):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame._runners["own-1"] = FakeRunner([], "", "", None)
+    frame._set_activity(True)
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("text", text="All done."))
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("finished", text="All done."))
+    assert frame._activity == [] and frame._activity_timer is None
+    assert env["spoken"][-1].startswith("Hub probe replied. All done")  # said once, as the reply
+
+
+def test_desktop_session_tool_calls_are_spoken(frame, env):
+    from records import tool_use_block
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [user_text("Build it")])
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    assert pump(lambda: frame._chat_loaded)
+    frame._set_activity(True)
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [
+        user_text("Build it"),
+        assistant_block(tool_use_block("Bash", {"command": "make"}), "m1")])
+    frame._refresh_chat()
+    assert pump(lambda: frame._activity)
+    frame._activity_timer.Stop()
+    frame._flush_activity()
+    assert env["feedback"][-1] == "Using Bash: make."

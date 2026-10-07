@@ -687,3 +687,12 @@ def test_fork_command_reads_the_source_and_writes_a_new_session():
 def test_fork_command_refuses_bad_ids(source, new):
     with pytest.raises(ValueError):
         cli.build_fork_command(EXE, source, new, "t", "auto", taken_ids=OWN)
+
+
+def test_tool_events_say_what_the_tool_acts_on():
+    parser = StreamParser()
+    events = parser.feed(ev(type="assistant", message={"content": [
+        {"type": "tool_use", "name": "Bash", "input": {"command": "git  status"}},
+        {"type": "tool_use", "name": "Task", "input": {}}]}))
+    assert [(e.text, e.detail) for e in events] == [("Bash", "Bash: git status"),
+                                                    ("Task", "Task")]

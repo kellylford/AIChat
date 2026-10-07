@@ -488,6 +488,7 @@ class TurnEvent:
     denials: List[str] = field(default_factory=list)
     raw_type: str = ""
     request: Optional[PermissionRequest] = None
+    detail: str = ""
 
 
 class StreamParser:
@@ -582,7 +583,14 @@ class StreamParser:
                     if block.get("type") == "text" and str(block.get("text") or "").strip():
                         events.append(TurnEvent("text", text=str(block["text"]).strip()))
                     elif block.get("type") == "tool_use":
-                        events.append(TurnEvent("tool", text=str(block.get("name") or "tool")))
+                        name = str(block.get("name") or "tool")
+                        tool_input = block.get("input") if isinstance(block.get("input"), dict) \
+                            else {}
+                        target = _tool_target(tool_input)
+                        # detail is what it acts on, as the messages list shows
+                        # it ("Bash: git status"), for announcing it (#12).
+                        events.append(TurnEvent("tool", text=name,
+                                                detail=f"{name}: {target}" if target else name))
             return events
         if etype == "result":
             self.finished = True
