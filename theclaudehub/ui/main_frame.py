@@ -46,7 +46,7 @@ from typing import Dict, List, Optional
 
 import wx
 
-from .. import __version__, announce, export, hub, platform_paths
+from .. import __version__, announce, bugreport, export, hub, platform_paths
 from ..claude_cli import (PERMISSION_MODES, PermissionRequest, ResumeRefused, TurnEvent,
                           TurnRunner, allow_response, answer_questions_response,
                           build_fork_command, build_new_command, build_resume_command,
@@ -65,7 +65,7 @@ from .a11y import set_accessible_name, set_list_items_accessible
 from ..rendering import html_page, message_page
 from ..ui_text import shortcuts_html
 from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, FormattedMessageDialog,
-                      MessageDialog, NewSessionDialog, PermissionDialog, PlanDialog,
+                      BugReportDialog, MessageDialog, NewSessionDialog, PermissionDialog, PlanDialog,
                       ManageGroupsDialog, QuestionDialog, SettingsDialog, ShortcutsDialog,
                       formatted_view_available)
 
@@ -106,6 +106,7 @@ class MainFrame(wx.Frame):
         self._runners: Dict[str, TurnRunner] = {}
         self._denials: Dict[str, List[str]] = {}
         self._pending_refresh: Optional[bool] = None
+        self._claude_version = ""  # for bug reports; found in the background
         self._last_announcement = ""
 
         # Session view state.
@@ -147,6 +148,7 @@ class MainFrame(wx.Frame):
             wx.CallAfter(wx.MessageBox, self.groups.load_error, APP_NAME,
                          wx.OK | wx.ICON_WARNING, self)
         self.refresh_sessions()
+        self._check_claude_version()
         self.session_list.SetFocus()
         if check_updates_at_start:
             # A few seconds in, so the list is read first.
@@ -211,6 +213,7 @@ class MainFrame(wx.Frame):
         help_menu = wx.Menu()
         self._item(help_menu, "&Keyboard Shortcuts\tF1", self.on_shortcuts)
         self._item(help_menu, "Check for &Updates...", lambda e: self.check_for_updates(True))
+        self._item(help_menu, "Report a &Bug...", lambda e: self.on_report_bug())
         self._item(help_menu, "&About", self.on_about, wx.ID_ABOUT)
         bar.Append(help_menu, "&Help")
         self.SetMenuBar(bar)
@@ -2032,6 +2035,52 @@ class MainFrame(wx.Frame):
             self._restart_timers()
             self._say("Couldn't install the update. It will be tried again the next time "
                       "TheClaudeHub starts.", force=True)
+
+    def on_report_bug(self):
+        """Help, Report a Bug (#28): what happened, plus non-sensitive facts
+        about the app, to a GitHub issue (see bugreport.py)."""
+        listed = [s for s in self._snapshot.sessions if not s.archived]
+        counts = {"desktop app": sum(1 for s in listed if not s.is_own),
+                  "TheClaudeHub": sum(1 for s in listed if s.is_own)}
+        facts = bugreport.environment(self.speech, counts,
+                                      claude_version=self._claude_version or "checking")
+        dialog = BugReportDialog(self, [f"{label}: {value}" for label, value in facts])
+        try:
+            if dialog.ShowModal() != wx.ID_OK:
+                return
+            summary, happened, expected, steps = dialog.values()
+            action = dialog.action
+        finally:
+            dialog.Destroy()
+        report = bugreport.BugReport(summary, happened, expected, steps, facts)
+        copied = self._copy_text(f"{summary}\n\n{bugreport.report_text(report)}")
+        if action == "copy":
+            self._feedback("Report copied." if copied else "Couldn't copy the report.")
+            return
+        try:
+            platform_paths.open_url(bugreport.new_issue_url(report))
+        except OSError as exc:
+            wx.MessageBox(f"Couldn't open the browser: {exc}. The report is on your clipboard.",
+                          APP_NAME, wx.OK | wx.ICON_WARNING, self)
+            return
+        self._feedback("Opened GitHub's new issue page with your report filled in"
+                       + (", and copied it." if copied else "."))
+
+    def _copy_text(self, text: str) -> bool:
+        if not wx.TheClipboard.Open():
+            return False
+        try:
+            return bool(wx.TheClipboard.SetData(wx.TextDataObject(text)))
+        finally:
+            wx.TheClipboard.Close()
+
+    def _check_claude_version(self):
+        """Claude Code's version for bug reports, found once in the background:
+        asking takes a second or more, too long to wait for in a dialog."""
+        def work():
+            version = bugreport.claude_code_version()
+            wx.CallAfter(setattr, self, "_claude_version", version)
+        self._pool.submit(work)
 
     def on_about(self, _event=None):
         wx.MessageBox(
