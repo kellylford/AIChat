@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -49,7 +50,7 @@ import wx
 
 from ..changes import by_file, summary_text
 from ..codeblocks import find_code_blocks
-from .. import (__version__, announce, attachments, bugreport, export, hub, platform_paths,
+from .. import (__version__, announce, attachments, bugreport, signin, export, hub, platform_paths,
                usage)
 from ..claude_cli import (PERMISSION_MODES, PermissionRequest, ResumeRefused, TurnEvent,
                           TurnRunner, allow_response, answer_questions_response,
@@ -182,6 +183,7 @@ class MainFrame(wx.Frame):
                          wx.OK | wx.ICON_WARNING, self)
         self.refresh_sessions()
         self._check_claude_version()
+        self._check_sign_in(manual=False)
         self._pool.submit(attachments.remove_old_pastes)  # pasted pictures over 30 days old
         self.session_list.SetFocus()
         if check_updates_at_start:
@@ -255,6 +257,7 @@ class MainFrame(wx.Frame):
         help_menu = wx.Menu()
         self._item(help_menu, "&Keyboard Shortcuts\tF1", self.on_shortcuts)
         self._item(help_menu, "Check for &Updates...", lambda e: self.check_for_updates(True))
+        self._item(help_menu, "Claude Code &Sign-in...", lambda e: self.on_sign_in())
         self._item(help_menu, "Report a &Bug...", lambda e: self.on_report_bug())
         self._item(help_menu, "&About", self.on_about, wx.ID_ABOUT)
         bar.Append(help_menu, "&Help")
@@ -2925,6 +2928,50 @@ class MainFrame(wx.Frame):
             version = bugreport.claude_code_version()
             wx.CallAfter(setattr, self, "_claude_version", version)
         self._pool.submit(work)
+
+    def on_sign_in(self):
+        """Help, Claude Code Sign-in (#52): whether Claude Code is signed in,
+        to which plan, and a way to sign in if it isn't."""
+        self._feedback("Checking Claude Code's sign-in.")
+        self._check_sign_in(manual=True)
+
+    def _check_sign_in(self, manual: bool):
+        def work():
+            status = signin.check()
+            wx.CallAfter(self._on_sign_in_result, status, manual)
+        self._pool.submit(work)
+
+    def _on_sign_in_result(self, status, manual: bool):
+        if not self:
+            return
+        text = signin.describe(status)
+        if not manual:
+            # At start-up, only a problem is news.
+            if status.known and not (status.signed_in and status.subscription):
+                self._say(f"{text} Help, Claude Code Sign-in signs in.")
+            return
+        if not status.known:
+            wx.MessageBox(text, "Claude Code Sign-in", wx.OK | wx.ICON_WARNING, self)
+            return
+        if status.signed_in and status.subscription:
+            wx.MessageBox(text, "Claude Code Sign-in", wx.OK | wx.ICON_INFORMATION, self)
+            return
+        answer = wx.MessageBox(
+            f"{text}\n\nSign in now? A window opens, and your browser shows Claude's sign-in "
+            "page. When you've finished, choose Help, Claude Code Sign-in again to check.",
+            "Claude Code Sign-in", wx.YES_NO | wx.YES_DEFAULT | wx.ICON_QUESTION, self)
+        if answer != wx.YES:
+            return
+        command = signin.login_command()
+        try:
+            if command is None:
+                raise OSError("Claude Code wasn't found")
+            subprocess.Popen(command, creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
+        except OSError as exc:
+            wx.MessageBox(f"Couldn't start the sign-in: {exc}", APP_NAME,
+                          wx.OK | wx.ICON_ERROR, self)
+            return
+        self._feedback("Signing in, in a new window.")
 
     def on_about(self, _event=None):
         wx.MessageBox(
