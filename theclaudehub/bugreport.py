@@ -10,12 +10,14 @@ public issue.
 QuickMail sends reports through a small relay (a Cloudflare Worker holding a
 GitHub App key), so nobody needs a GitHub account. TheClaudeHub has no relay
 yet: the dialog opens a GitHub "new issue" page with the report filled in,
-and copies the full report to the clipboard in case the page is cut short.
-When a relay exists, ``RELAY_URL`` and ``RELAY_KEY`` are the only change.
+and copies the full report to the clipboard in case the page is cut short. A
+relay would add a POST with a timeout, this page as the fallback, and its
+rate-limit message.
 """
 from __future__ import annotations
 
 import platform
+import re
 import subprocess
 import sys
 import urllib.parse
@@ -24,13 +26,12 @@ from typing import Dict, List, Optional
 
 from . import __version__, platform_paths
 
-#: Where issues are filed. One place to change when the app is renamed.
+#: Where issues are filed. One place to change when the app moves.
 REPO = "kellylford/AIChat"
-#: A bug-report relay, as QuickMail has; empty until one is set up.
-RELAY_URL = ""
-RELAY_KEY = ""
-#: Browsers and the shell cut very long URLs; the clipboard has it all.
-MAX_URL_BODY = 4000
+#: The longest the body may be once it's URL-encoded: browsers and the shell
+#: cut longer URLs (GitHub's limit is about 8 KB); the clipboard has it all.
+MAX_URL_BODY = 6000
+_VERSION = re.compile(r"^\d+\.\d+[\w.+-]*( \(Claude Code\))?$")
 
 
 @dataclass
@@ -51,9 +52,11 @@ def claude_code_version() -> str:
     try:
         out = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=8,
                              creationflags=platform_paths.hidden_window_flags())
-        return (out.stdout or out.stderr).strip().splitlines()[0][:80] or "unknown"
+        first = (out.stdout or "").strip().splitlines()[0].strip()
     except (OSError, subprocess.SubprocessError, IndexError):
         return "unknown"
+    # Only a version number: an error message could carry a path or a name.
+    return first if _VERSION.match(first) else "unknown"
 
 
 def environment(speech, counts: Dict[str, int], claude_version: Optional[str] = None) -> List[tuple]:
@@ -72,7 +75,10 @@ def environment(speech, counts: Dict[str, int], claude_version: Optional[str] = 
         ("wxPython", wx_version),
         ("Claude Code", claude_version if claude_version is not None else claude_code_version()),
         ("Announcements", f"{speech.announce}, speech engine {speech.engine}"),
-        ("Session list", f"showing {speech.session_view}, sorted {speech.session_order}"),
+        # A group's name is yours and may name people or work: never in a report.
+        ("Session list", "showing " + ("a group" if speech.session_view.startswith("group:")
+                                       else speech.session_view)
+         + f", sorted {speech.session_order}"),
         ("Reading", "formatted full messages" if speech.formatted_messages else "plain text",),
     ]
     if counts:
@@ -98,9 +104,20 @@ def new_issue_url(report: BugReport) -> str:
     """A GitHub "new issue" page with the report filled in (cut to fit a
     URL; the clipboard holds all of it)."""
     body = report_text(report)
-    if len(body) > MAX_URL_BODY:
-        body = body[:MAX_URL_BODY] + ("\n\n…(cut short here: the whole report is on your "
-                                      "clipboard; paste it over this)")
+    if len(urllib.parse.quote(body)) > MAX_URL_BODY:
+        # Shorten your words, never the environment: halve the longest field
+        # until it fits once encoded (non-ASCII text grows a lot).
+        note = "\n…(cut short: the whole report is on your clipboard; paste it over this)"
+        fields = {"what_happened": report.what_happened, "expected": report.expected,
+                  "steps": report.steps}
+        while len(urllib.parse.quote(body)) > MAX_URL_BODY:
+            longest = max(fields, key=lambda k: len(fields[k]))
+            if len(fields[longest]) < 40:
+                break
+            fields[longest] = fields[longest][: len(fields[longest]) // 2]
+            body = report_text(BugReport(report.summary, fields["what_happened"] + note,
+                                         fields["expected"], fields["steps"],
+                                         report.environment))
     query = urllib.parse.urlencode({"title": report.summary.strip(), "body": body,
                                     "labels": "bug"})
     return f"https://github.com/{REPO}/issues/new?{query}"

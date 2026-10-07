@@ -106,6 +106,7 @@ class MainFrame(wx.Frame):
         self._runners: Dict[str, TurnRunner] = {}
         self._denials: Dict[str, List[str]] = {}
         self._pending_refresh: Optional[bool] = None
+        self._claude_version = ""  # for bug reports; found in the background
         self._last_announcement = ""
 
         # Session view state.
@@ -147,6 +148,7 @@ class MainFrame(wx.Frame):
             wx.CallAfter(wx.MessageBox, self.groups.load_error, APP_NAME,
                          wx.OK | wx.ICON_WARNING, self)
         self.refresh_sessions()
+        self._check_claude_version()
         self.session_list.SetFocus()
         if check_updates_at_start:
             # A few seconds in, so the list is read first.
@@ -2040,7 +2042,8 @@ class MainFrame(wx.Frame):
         listed = [s for s in self._snapshot.sessions if not s.archived]
         counts = {"desktop app": sum(1 for s in listed if not s.is_own),
                   "TheClaudeHub": sum(1 for s in listed if s.is_own)}
-        facts = bugreport.environment(self.speech, counts)
+        facts = bugreport.environment(self.speech, counts,
+                                      claude_version=self._claude_version or "checking")
         dialog = BugReportDialog(self, [f"{label}: {value}" for label, value in facts])
         try:
             if dialog.ShowModal() != wx.ID_OK:
@@ -2050,13 +2053,7 @@ class MainFrame(wx.Frame):
         finally:
             dialog.Destroy()
         report = bugreport.BugReport(summary, happened, expected, steps, facts)
-        text = f"{summary}\n\n{bugreport.report_text(report)}"
-        copied = False
-        if wx.TheClipboard.Open():
-            try:
-                copied = wx.TheClipboard.SetData(wx.TextDataObject(text))
-            finally:
-                wx.TheClipboard.Close()
+        copied = self._copy_text(f"{summary}\n\n{bugreport.report_text(report)}")
         if action == "copy":
             self._feedback("Report copied." if copied else "Couldn't copy the report.")
             return
@@ -2068,6 +2065,22 @@ class MainFrame(wx.Frame):
             return
         self._feedback("Opened GitHub's new issue page with your report filled in"
                        + (", and copied it." if copied else "."))
+
+    def _copy_text(self, text: str) -> bool:
+        if not wx.TheClipboard.Open():
+            return False
+        try:
+            return bool(wx.TheClipboard.SetData(wx.TextDataObject(text)))
+        finally:
+            wx.TheClipboard.Close()
+
+    def _check_claude_version(self):
+        """Claude Code's version for bug reports, found once in the background:
+        asking takes a second or more, too long to wait for in a dialog."""
+        def work():
+            version = bugreport.claude_code_version()
+            wx.CallAfter(setattr, self, "_claude_version", version)
+        self._pool.submit(work)
 
     def on_about(self, _event=None):
         wx.MessageBox(

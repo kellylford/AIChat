@@ -148,8 +148,8 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   (TheClaudeHub, Windows, Python, wxPython, Claude Code), the announcement level and speech
   engine, the list's view and sort, and how many sessions it lists. Never a session's title,
   folder or messages. **Open on GitHub** copies the whole report and opens GitHub's new-issue
-  page with it filled in; **Copy Report** only copies it. (QuickMail files reports through a
-  small relay so nobody needs a GitHub account; TheClaudeHub will once it has its final name.)
+  page with it filled in; **Copy Report** only copies it. Filing on GitHub needs access to the
+  repository; anyone else can Copy Report and send it on.
 
 ## Install
 

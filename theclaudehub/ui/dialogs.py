@@ -823,8 +823,10 @@ class BugReportDialog(wx.Dialog):
             return control
 
         self.summary = field("&Summary (the issue's title):", "Summary")
+        self.summary.SetMaxLength(200)
         self.happened = field("What &happened:", "What happened", True, 70)
-        self.expected = field("What you &expected:", "What you expected", True, 50)
+        self.expected = field("What you &expected (optional):", "What you expected (optional)",
+                              True, 50)
         self.steps = field("S&teps to reproduce (optional):", "Steps to reproduce", True, 50)
         outer.Add(wx.StaticText(self, label="What the report &includes besides your words "
                                             "(no session titles, folders or messages):"),
@@ -832,6 +834,10 @@ class BugReportDialog(wx.Dialog):
         self.included = _read_only_text(self, "\n".join(environment_lines),
                                         "What the report includes", min_height=90)
         outer.Add(self.included, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        outer.Add(wx.StaticText(self, label=(
+            "Open on GitHub needs access to the app's repository on GitHub. Without it, "
+            "use Copy Report and send the report to the app's author.")),
+            0, wx.LEFT | wx.RIGHT | wx.TOP, 8)
 
         row = wx.BoxSizer(wx.HORIZONTAL)
         self.open_btn = wx.Button(self, wx.ID_OK, "&Open on GitHub")

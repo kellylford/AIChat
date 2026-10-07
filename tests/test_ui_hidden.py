@@ -42,13 +42,19 @@ def env(tmp_path, monkeypatch, app):
     monkeypatch.setattr(speech, "DEFAULT_SETTINGS_PATH", tmp_path / "speech.json")
     # TheClaudeHub's own files (groups.json) go here, never in the real %APPDATA%.
     monkeypatch.setattr(platform_paths, "app_data_dir", lambda: tmp_path / "appdata")
+    # No real claude --version (bug reports) or clipboard from the tests.
+    from theclaudehub import bugreport
+    from theclaudehub.ui import dialogs, main_frame
+    monkeypatch.setattr(bugreport, "claude_code_version", lambda: "2.1.286 (Claude Code)")
+    copied = []
+    monkeypatch.setattr(main_frame.MainFrame, "_copy_text",
+                        lambda self, text: copied.append(text) or True)
     spoken = []
     feedback = []
 
     def speak(text, settings, interrupt=True):
         (spoken if interrupt else feedback).append(text)
     monkeypatch.setattr(speech.speaker, "speak", speak)
-    from theclaudehub.ui import dialogs, main_frame
     monkeypatch.setattr(main_frame, "list_speech_options", lambda: speech.default_options())
     # No real web page: it would open modal and wait. Tests that want the
     # formatted view put a fake in.
@@ -58,7 +64,7 @@ def env(tmp_path, monkeypatch, app):
     monkeypatch.setattr(platform_paths, "open_url", lambda url: opened.append(url))
     boxes = []
     monkeypatch.setattr(wx, "MessageBox", lambda *a, **k: boxes.append(a[0]) or wx.YES)
-    return {"desktop": desktop, "projects": projects, "spoken": spoken,
+    return {"desktop": desktop, "projects": projects, "spoken": spoken, "copied": copied,
             "feedback": feedback, "opened": opened, "boxes": boxes, "tmp": tmp_path,
             "live": live}
 
@@ -2170,7 +2176,6 @@ def _fake_bug_dialog(monkeypatch, action, values):
         def Destroy(self):
             pass
     monkeypatch.setattr("theclaudehub.ui.main_frame.BugReportDialog", Fills)
-    monkeypatch.setattr("theclaudehub.bugreport.claude_code_version", lambda: "2.1.286")
     return Fills
 
 
@@ -2189,7 +2194,8 @@ def test_copy_report_only_copies(frame, env, monkeypatch):
     _fake_bug_dialog(monkeypatch, "copy", ("Sort resets", "It went back.", "", ""))
     frame.on_report_bug()
     assert env["opened"] == []
-    assert env["feedback"][-1] in ("Report copied.", "Couldn't copy the report.")
+    assert env["feedback"][-1] == "Report copied."
+    assert env["copied"][-1].startswith("Sort resets\n\n### What happened\nIt went back.")
 
 
 def test_bug_dialog_needs_a_summary_and_what_happened(frame, env):
@@ -2207,3 +2213,13 @@ def test_bug_dialog_needs_a_summary_and_what_happened(frame, env):
         assert dialog.values()[0] == "Two words"
     finally:
         dialog.Destroy()
+
+
+def test_bug_report_never_names_a_group(frame, env, monkeypatch):
+    frame.groups.create("Acme client work")
+    frame._build_show_menu()
+    frame.on_view("group:Acme client work")
+    fills = _fake_bug_dialog(monkeypatch, "copy", ("x", "y", "", ""))
+    frame.on_report_bug()
+    assert "Acme" not in "\n".join(fills.seen) and "Acme" not in env["copied"][-1]
+    assert "Session list: showing a group, sorted status" in fills.seen

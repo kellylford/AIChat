@@ -31,9 +31,12 @@ def test_new_issue_url_is_prefilled_and_cut_to_fit():
     assert url.startswith(f"https://github.com/{bugreport.REPO}/issues/new?")
     query = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
     assert query["title"] == ["F6 skips the reply box"] and query["labels"] == ["bug"]
-    long = bugreport.new_issue_url(_report(what_happened="x " * 5000))
-    body = urllib.parse.parse_qs(urllib.parse.urlparse(long).query)["body"][0]
-    assert len(body) < bugreport.MAX_URL_BODY + 200 and "clipboard" in body
+    for words in ("x " * 5000, "é" * 4000):  # non-ASCII grows a lot when encoded
+        long = bugreport.new_issue_url(_report(what_happened=words))
+        query = urllib.parse.urlparse(long).query
+        body = urllib.parse.parse_qs(query)["body"][0]
+        assert len(urllib.parse.quote(body)) <= bugreport.MAX_URL_BODY
+        assert "clipboard" in body and "### Environment" in body  # the environment survives
 
 
 def test_environment_names_no_people_or_paths():
@@ -44,3 +47,17 @@ def test_environment_names_no_people_or_paths():
     assert ("Sessions listed", "3 desktop app, 1 TheClaudeHub") in facts
     text = " ".join(str(value) for _label, value in facts)
     assert "Users" not in text and "\\" not in text
+
+
+def test_only_a_version_number_is_kept(monkeypatch):
+    import subprocess
+
+    class Out:
+        def __init__(self, stdout):
+            self.stdout, self.stderr = stdout, ""
+    monkeypatch.setattr(bugreport.platform_paths, "claude_executable", lambda: "claude.exe")
+    for printed, kept in (("2.1.286 (Claude Code)\n", "2.1.286 (Claude Code)"),
+                          ("Error: C:\\Users\\kelly\\x not found", "unknown"),
+                          ("", "unknown")):
+        monkeypatch.setattr(subprocess, "run", lambda *a, **k: Out(printed))
+        assert bugreport.claude_code_version() == kept
