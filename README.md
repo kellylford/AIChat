@@ -174,6 +174,13 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   Markdown is read as words: a code block is "Code block omitted", and headings and list items
   are read as separate sentences. Turn it off in Settings with "Read your own messages back when
   they're sent" (Alt+M), and you hear just "Sent. Hub probe is working."
+- **Windows notifications** while you're in another window: when one of TheClaudeHub's own
+  sessions finishes a turn, fails or needs you (a permission or a question), when a desktop app
+  session starts needing you, and when the loaded session finishes. Choosing one brings
+  TheClaudeHub forward with that session loaded. Settings, Windows notifications chooses every
+  finished turn (the default), only when a session needs you, or off. They're ordinary Windows
+  notifications: in the notification centre, read by your screen reader, and quiet under Do Not
+  Disturb. While TheClaudeHub is the active window, the announcement is enough and none are shown.
 - **Changed Files** (Ctrl+Shift+D, View menu) lists the files Claude changed since your latest
   message, or in the whole session, each with its line counts ("main_frame.py, 40 lines added, 12
   removed, in theclaudehub\ui"). Enter on a file reads its changes in a text box, a line at a
