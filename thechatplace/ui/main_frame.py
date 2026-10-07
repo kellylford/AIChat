@@ -52,7 +52,7 @@ from ..changes import by_file, summary_text
 from ..codeblocks import find_code_blocks
 from .. import (__version__, announce, attachments, bugreport, signin, export, hub, platform_paths,
                usage)
-from ..claude_cli import (PERMISSION_MODES, PermissionRequest, ResumeRefused, TurnEvent,
+from ..claude_cli import (MODELS, PERMISSION_MODES, PermissionRequest, ResumeRefused, TurnEvent,
                           TurnRunner, allow_response, answer_questions_response,
                           build_fork_command, build_new_command, build_resume_command,
                           child_environment,
@@ -206,6 +206,7 @@ class MainFrame(wx.Frame):
         self._item(session, "&Answer Claude...\tCtrl+Shift+A", lambda e: self.on_answer())
         self._item(session, "Con&tinue Here...\tCtrl+Shift+N", self.on_continue_here)
         self._item(session, "&New Session...\tCtrl+N", self.on_new_session)
+        self._item(session, "Change Mo&del...", lambda e: self.on_change_model())
         self._item(session, "&Refresh\tF5",
                    lambda e: self.refresh_sessions(force=True, resort=True))
         self._item(session, "&Forget Chat Place Session...", self.on_forget)
@@ -1449,8 +1450,8 @@ class MainFrame(wx.Frame):
                 label = f"Claude is working ({elapsed})."
                 waiting_count = len(self._queued.get(info.cli_session_id, []))
                 if waiting_count:
-                    label += (" A message is queued." if waiting_count == 1
-                              else f" {waiting_count} messages are queued.")
+                    # What's queued first: it's yours, and the news (#59).
+                    label = f"{self._queued_words(waiting_count)} {label}"
             else:
                 label = "Ready."
             if self.turn_status.GetLabel() != label:
@@ -1586,28 +1587,48 @@ class MainFrame(wx.Frame):
     def _own_key(session_id: str) -> str:
         return f"own:{session_id}"
 
+    @staticmethod
+    def _queued_words(count: int) -> str:
+        return "1 message queued." if count == 1 else f"{count} messages queued."
+
+    def on_change_model(self):
+        """Session, Change Model: the model for this session's next turns. A
+        session's model goes with every turn, so it can change at any time."""
+        info = self._selected_session()
+        if self._open is not None and wx.Window.FindFocus() is not self.session_list:
+            info = self._open
+        if info is None or not info.is_own:
+            self._feedback("Choose one of The Chat Place's sessions first: a desktop app "
+                           "session's model is set in the desktop app.")
+            return
+        own = self.store.get(info.cli_session_id)
+        if own is None:
+            return
+        values = [value for value, _label in MODELS]
+        labels = [f"{label} (now)" if value == own.model else label for value, label in MODELS]
+        index = self._choose("Change Model", f"Model for {info.title}:", labels)
+        if index is None or values[index] == own.model:
+            return
+        if not self._store_write(self.store.update, info.cli_session_id, model=values[index]):
+            return
+        self._update_heading()
+        self._feedback(f"{info.title} now uses {model_label(values[index])}, from its next "
+                       "turn.")
+
     def _check_model(self, session_id: str, title: str, actual: str):
         """Say once if Claude Code runs another model than the session chose
-        (it falls back to its default when a model isn't allowed, #8), or if
-        its own default is Fable, which some plans bill to usage credits in
-        turns like The Chat Place's."""
+        (it falls back to its default when a model isn't allowed, #8). A turn
+        that would run on Fable unchosen never gets here: it's stopped (#58)."""
         own = self.store.get(session_id)
         if own is None or not actual:
             return
         key = ("model", session_id, actual)
         if key in self._warned:
             return
-        fable = "fable" in actual.lower()
-        credits = (" On some plans, Fable is billed to usage credits. Choose another model "
-                   "in New Session to avoid this.") if fable else ""
-        spoken = model_spoken(actual)
-        if own.model and not model_matches(own.model, actual):
-            text = (f"{title} is using {spoken} instead of {model_label(own.model)}, the "
-                    f"model this session chose.{credits}")
-        elif not own.model and fable:
-            text = f"{title} is using {spoken}, Claude Code's default model.{credits}"
-        else:
+        if not own.model or model_matches(own.model, actual):
             return
+        text = (f"{title} is using {model_spoken(actual)} instead of "
+                f"{model_label(own.model)}, the model this session chose.")
         self._warned.add(key)
         self._say(text)
 
@@ -1639,11 +1660,10 @@ class MainFrame(wx.Frame):
                            "Ctrl+Shift+A answers.")
             return
         if runner is not None:
-            waiting = (" A message is queued." if info.cli_session_id in self._queued
-                       else "")
-            self._feedback(f"{info.title}: Claude has been working for "
-                           f"{describe_elapsed(runner.elapsed())}, last {runner.last_activity}."
-                           f"{waiting}")
+            count = len(self._queued.get(info.cli_session_id, []))
+            waiting = f"{self._queued_words(count)} " if count else ""
+            self._feedback(f"{info.title}: {waiting}Claude has been working for "
+                           f"{describe_elapsed(runner.elapsed())}, last {runner.last_activity}.")
             return
         if not self._runners:
             self._feedback("No turns are running.")

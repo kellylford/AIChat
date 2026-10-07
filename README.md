@@ -144,7 +144,10 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   Sonnet and Haiku, each the latest of its family. The model is kept with the session and
   passed to every turn. Arriving in the messages, you hear it ("Messages in Build (idle, on
   Opus)"). Fable isn't offered: on some plans it bills to usage credits, and in the headless
-  mode The Chat Place uses, Claude Code does that without asking. If that first message never reaches Claude (Claude Code not signed in, say), it goes
+  mode The Chat Place uses, Claude Code does that without asking. So if a turn would run on
+  Fable anyway (Claude Code's own default, or a fallback), The Chat Place stops it before
+  anything is sent and says why. **Session, Change Model** changes a session's model from its
+  next turn. If that first message never reaches Claude (Claude Code not signed in, say), it goes
   back into the reply box and Send starts the session again.
 - **Claude asks, you answer.** In The Chat Place's own sessions, when Claude needs permission
   for something the permission mode doesn't allow, asks you a question, or has a plan for you

@@ -342,6 +342,27 @@ def test_runner_stops_when_an_api_key_would_be_billed(tmp_path):
     assert "API key" in events[0].text
 
 
+@pytest.mark.parametrize("command,stopped", [
+    (["claude", "-p"], True),                          # Claude Code's default
+    (["claude", "-p", "--model", "opus"], True),       # a fallback to Fable
+    (["claude", "-p", "--model", "claude-fable-5-1"], False),  # chosen
+])
+def test_runner_stops_a_turn_on_an_unchosen_fable(tmp_path, command, stopped):
+    process = FakeProcess([
+        ev(type="system", subtype="init", session_id="s1", apiKeySource="none",
+           model="claude-fable-5-1"),
+        ev(type="assistant", message={"content": [{"type": "text", "text": "hi"}]}),
+        ev(type="result", subtype="success", result="hi"),
+    ])
+    _runner, events, _ = run_turn(process, tmp_path, command=command)
+    if stopped:
+        assert process.killed
+        assert [e.kind for e in events] == ["failed"]
+        assert "Fable" in events[0].text and "Change Model" in events[0].text
+    else:
+        assert events[-1].kind == "finished"
+
+
 def test_runner_reports_exit_without_result(tmp_path):
     process = FakeProcess([], returncode=1, stderr_lines=["Error: not logged in"])
     runner, events, _ = run_turn(process, tmp_path)
@@ -759,3 +780,14 @@ def test_model_ids_as_words():
     assert model_spoken("claude-haiku-4-5-20251001") == "Haiku 4.5"
     assert model_spoken("claude-opus-5-5[1m]") == "Opus 5.5"
     assert model_spoken("something-else") == "something-else"
+
+
+def test_a_turn_on_an_unchosen_fable_is_stopped():
+    from thechatplace.claude_cli import chosen_model, fable_problem
+    assert chosen_model(["claude", "-p", "--model", "opus"]) == "opus"
+    assert chosen_model(["claude", "-p"]) == ""
+    assert fable_problem("claude-fable-5-1", "").startswith("Claude Code was about to use Fable")
+    assert fable_problem("claude-fable-5-1", "opus")  # a fallback to Fable: stopped too
+    assert fable_problem("claude-fable-5-1", "claude-fable-5-1") is None  # chosen
+    assert fable_problem("claude-opus-5-5", "") is None
+    assert fable_problem("", "") is None

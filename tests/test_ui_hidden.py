@@ -500,8 +500,8 @@ def test_send_speaks_confirmation_and_one_turn_at_a_time(frame, env, fake_runner
     assert len(fake_runner.instances) == 1  # queued, not a second turn
     assert env["feedback"][-1] == "Queued for Hub probe: again."
     frame.on_turn_status()
-    assert env["feedback"][-1] == ("Hub probe: Claude has been working for 1 minute "
-                                   "15 seconds, last starting. A message is queued.")
+    assert env["feedback"][-1] == ("Hub probe: 1 message queued. Claude has been working for "
+                                   "1 minute 15 seconds, last starting.")
 
 
 def test_send_refused_when_busy_elsewhere(frame, env, fake_runner, monkeypatch):
@@ -1055,7 +1055,7 @@ def test_send_during_a_turn_queues_and_goes_when_it_ends(frame, env, fake_runner
     frame.on_send()
     assert frame.reply_text.GetValue() == ""
     assert frame._queued == {"own-1": ["second"]}
-    assert frame.turn_status.GetLabel().endswith("A message is queued.")
+    assert frame.turn_status.GetLabel().startswith("1 message queued. Claude is working")
     frame.reply_text.SetValue("third")
     frame.on_send()
     assert env["feedback"][-1] == "Also queued for Hub probe: third."
@@ -1215,8 +1215,8 @@ def test_turn_status_mentions_a_queued_message(frame, env, fake_runner):
     frame.reply_text.SetValue("more")
     frame.on_send()
     frame.on_turn_status()
-    assert env["feedback"][-1] == ("Hub probe: Claude has been working for 1 minute "
-                                   "15 seconds, last starting. A message is queued.")
+    assert env["feedback"][-1] == ("Hub probe: 1 message queued. Claude has been working for "
+                                   "1 minute 15 seconds, last starting.")
 
 
 def test_queued_message_follows_a_renamed_session_id(frame, env, fake_runner):
@@ -2989,19 +2989,13 @@ def test_a_different_model_is_said_once(frame, env):
     frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent(
         "started", session_id="own-1", data={"model": "claude-opus-5-5"}))
     assert len(env["spoken"]) == count  # the chosen one: nothing to say
-    # The default model, when it's Fable: a warning about usage credits.
+    # No model chosen: nothing to compare (a Fable default never gets here,
+    # its turn is stopped first, #58).
     frame.store.update("own-1", model="")
+    count = len(env["spoken"])
     frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent(
-        "started", session_id="own-1", data={"model": "claude-fable-5-1"}))
-    assert env["spoken"][-1] == (
-        "Hub probe is using Fable 5.1, Claude Code's default model. On some plans, Fable is "
-        "billed to usage credits. Choose another model in New Session to avoid this.")
-    # A chosen model that falls back to Fable: both said.
-    frame.store.update("own-1", model="haiku")
-    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent(
-        "started", session_id="own-1", data={"model": "claude-fable-5-2"}))
-    assert env["spoken"][-1].startswith("Hub probe is using Fable 5.2 instead of Haiku")
-    assert env["spoken"][-1].endswith("Choose another model in New Session to avoid this.")
+        "started", session_id="own-1", data={"model": "claude-opus-5-5"}))
+    assert len(env["spoken"]) == count
     # A turn for a session no longer in the store: nothing.
     count = len(env["spoken"])
     frame._check_model("gone", "Gone", "claude-fable-5-1")
@@ -3237,3 +3231,24 @@ def test_sign_in_is_checked_and_offered(frame, env, monkeypatch):
     monkeypatch.setattr(signin, "login_command", lambda: None)
     frame._on_sign_in_result(signin.SignIn(True, signed_in=False), manual=True)
     assert shown[-1][0].startswith("Couldn't start the sign-in")
+
+
+def test_change_model_for_the_next_turns(frame, env, monkeypatch):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.chat_list))
+    offered = []
+
+    def choose(title, prompt, choices):
+        offered.append(choices)
+        return [c.split(" (")[0] for c in choices].index("Sonnet")
+    monkeypatch.setattr(frame, "_choose", choose)
+    frame.on_change_model()
+    assert frame.store.get("own-1").model == "sonnet"
+    assert env["feedback"][-1] == "Hub probe now uses Sonnet, from its next turn."
+    assert "Sonnet" in offered[0] and any(c.endswith("(now)") for c in offered[0])
+    # A desktop app session's model isn't The Chat Place's to change.
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    frame.on_change_model()
+    assert env["feedback"][-1].startswith("Choose one of The Chat Place's sessions first")

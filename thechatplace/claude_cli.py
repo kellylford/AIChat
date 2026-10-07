@@ -530,6 +530,7 @@ class StreamParser:
     ``TurnEvent``s. Unknown event types are ignored; bad lines are counted."""
 
     def __init__(self) -> None:
+        self.model = ""  # the model system/init reports (#8, #58)
         self.session_id = ""
         self.api_key_source: Optional[str] = None
         self.bad_lines = 0
@@ -607,6 +608,7 @@ class StreamParser:
             source = event.get("apiKeySource")
             self.api_key_source = source if isinstance(source, str) else None
             model = event.get("model")
+            self.model = model if isinstance(model, str) else ""
             # The model actually in use (#8), which may not be the one asked for.
             return [TurnEvent("started", session_id=self.session_id, raw_type="init",
                               text=str(event.get("permissionMode") or ""),
@@ -668,6 +670,25 @@ def api_key_problem(source: Optional[str]) -> Optional[str]:
     return (f"Claude would have used an API key ({source}) instead of your subscription "
             "login, so The Chat Place stopped the turn before anything was sent. Remove "
             "that key from the environment or settings that set it, then try again.")
+
+
+def fable_problem(actual: str, chosen: str) -> Optional[str]:
+    """A message if the turn is about to run on Fable without it having been
+    chosen (#58): Claude Code's default, or its fallback. Some plans bill
+    Fable to usage credits, and in ``-p`` turns without asking."""
+    if "fable" not in (actual or "").lower() or "fable" in (chosen or "").lower():
+        return None
+    return ("Claude Code was about to use Fable, its default model, which some plans bill "
+            "to usage credits, so The Chat Place stopped the turn before anything was sent. "
+            "Choose a model for this session with Session, Change Model, then send again.")
+
+
+def chosen_model(command: List[str]) -> str:
+    """The ``--model`` a turn's command asks for, "" for Claude Code's default."""
+    try:
+        return command[command.index("--model") + 1]
+    except (ValueError, IndexError):
+        return ""
 
 
 # ---------------------------------------------------------------------------
@@ -857,7 +878,9 @@ class TurnRunner:
                 for event in self.parser.feed(_decode(raw)):
                     if event.kind == "started":
                         self.session_started = True
-                        problem = api_key_problem(self.parser.api_key_source)
+                        problem = (api_key_problem(self.parser.api_key_source)
+                                   or fable_problem(getattr(self.parser, "model", ""),
+                                                    chosen_model(self.command)))
                         if problem:
                             self._stopped_for_key = True
                             self._kill()
