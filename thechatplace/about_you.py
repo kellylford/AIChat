@@ -14,6 +14,7 @@ plus the project-level ones in the folders your sessions work in.
 from __future__ import annotations
 
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
@@ -76,7 +77,7 @@ class KnownKind:
         return f"{self.name}, {count} item" + ("" if count == 1 else "s")
 
 
-_FRONT = re.compile(r"\A﻿?---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(\r?\n|\Z)", re.S)
+_FRONT = re.compile(r"\A\ufeff?---[ \t]*\r?\n(?:(.*?)\r?\n)?---[ \t]*(?:\r?\n|\Z)", re.S)
 _FIELD = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*):[ \t]*(.*)$")
 
 
@@ -90,7 +91,7 @@ def front_matter(text: str) -> Dict[str, str]:
     if not match:
         return {}
     fields: Dict[str, str] = {}
-    for line in match.group(1).splitlines():
+    for line in (match.group(1) or "").splitlines():
         found = _FIELD.match(line)
         if not found:
             continue
@@ -107,7 +108,7 @@ def _first_line(text: str) -> str:
     body = _FRONT.sub("", text or "", count=1)
     for line in body.splitlines():
         line = line.strip().lstrip("#").strip()
-        if line:
+        if line and line.strip("-*_ "):  # not a rule, or front matter cut short
             return line
     return ""
 
@@ -162,12 +163,17 @@ def _files(folder: Path, pattern: str) -> List[Path]:
 
 
 def _project_names(cwds: Iterable[str]) -> Dict[str, str]:
-    """Each session folder's name, by Claude Code's folder name for it."""
-    names: Dict[str, str] = {}
+    """Each session folder's label, by Claude Code's folder name for it:
+    its own name, or its whole path when two folders share a name
+    (``C:\\a\\App`` and ``D:\\b\\App``)."""
+    distinct: Dict[str, str] = {}
     for cwd in cwds:
+        cwd = (cwd or "").rstrip("\\/")
         if cwd:
-            names.setdefault(platform_paths.encode_cwd(cwd), _folder_name(cwd))
-    return names
+            distinct.setdefault(platform_paths.encode_cwd(cwd), cwd)
+    counts = Counter(_folder_name(cwd).casefold() for cwd in distinct.values())
+    return {encoded: (_folder_name(cwd) if counts[_folder_name(cwd).casefold()] == 1 else cwd)
+            for encoded, cwd in distinct.items()}
 
 
 def _folder_name(cwd: str) -> str:
@@ -214,6 +220,11 @@ def collect(cwds: Iterable[str] = (), home: Optional[Path] = None,
     user_home = user_home if user_home is not None else str(Path.home())
     cwds = list(cwds)
     folders = _project_folders(cwds)
+    names = _project_names(cwds)
+
+    def whose(folder: Path) -> str:
+        return names.get(platform_paths.encode_cwd(str(folder)), folder.name)
+
     kinds = {name: KnownKind(name, about) for name, about in KINDS}
 
     def add(kind: str, item: KnownItem) -> None:
@@ -229,10 +240,9 @@ def collect(cwds: Iterable[str] = (), home: Optional[Path] = None,
                                 ("CLAUDE.local.md", "Your private project instructions")):
             path = folder / relative
             if path.is_file():
-                add(INSTRUCTIONS, _labelled(INSTRUCTIONS, path, label, project=folder.name))
+                add(INSTRUCTIONS, _labelled(INSTRUCTIONS, path, label, project=whose(folder)))
 
     # Memories, a folder per project, the index (MEMORY.md) first.
-    names = _project_names(cwds)
     projects = home / "projects"
     try:
         memory_dirs = sorted((d / "memory" for d in projects.iterdir()
@@ -259,7 +269,7 @@ def collect(cwds: Iterable[str] = (), home: Optional[Path] = None,
         add(SKILLS, _markdown_item(SKILLS, path, path.parent.name, project="From your account"))
     for folder in folders:
         for path in _files(folder / ".claude" / "skills", "*/SKILL.md"):
-            add(SKILLS, _markdown_item(SKILLS, path, path.parent.name, project=folder.name))
+            add(SKILLS, _markdown_item(SKILLS, path, path.parent.name, project=whose(folder)))
 
     for kind, sub in ((SUBAGENTS, "agents"), (COMMANDS, "commands"),
                       (OUTPUT_STYLES, "output-styles")):
@@ -269,7 +279,7 @@ def collect(cwds: Iterable[str] = (), home: Optional[Path] = None,
             continue
         for folder in folders:
             for path in _files(folder / ".claude" / sub, "*.md"):
-                add(kind, _markdown_item(kind, path, project=folder.name))
+                add(kind, _markdown_item(kind, path, project=whose(folder)))
 
     for name, label in (("settings.json", "Your settings"),
                         ("settings.local.json", "Your local settings")):
@@ -281,7 +291,7 @@ def collect(cwds: Iterable[str] = (), home: Optional[Path] = None,
                             ("settings.local.json", "Your local project settings")):
             path = folder / ".claude" / name
             if path.is_file():
-                add(SETTINGS, KnownItem(SETTINGS, label, path, project=folder.name))
+                add(SETTINGS, KnownItem(SETTINGS, label, path, project=whose(folder)))
 
     return [kinds[name] for name, _about in KINDS]
 

@@ -329,7 +329,6 @@ class MainFrame(wx.Frame):
         left.Add(self.session_list, 1, wx.EXPAND | wx.ALL, 8)
         self.session_list.Bind(wx.EVT_LISTBOX_DCLICK, self.on_open_session)
         self.session_list.Bind(wx.EVT_CONTEXT_MENU, self._on_session_menu)
-        self.session_list.Bind(wx.EVT_KEY_UP, self._on_list_key_up)  # see chat_list
         outer.Add(left, 2, wx.EXPAND)
 
         vsizer = wx.BoxSizer(wx.VERTICAL)
@@ -347,10 +346,6 @@ class MainFrame(wx.Frame):
         self._spoken: Dict[str, tuple] = {}  # message key -> (text, spoken words)
         vsizer.Add(self.chat_list, 2, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
         self.chat_list.Bind(wx.EVT_CONTEXT_MENU, self._on_message_menu)
-        # The key-up half of Shift+F10 is swallowed (#89): left to Windows,
-        # an F10 key-up opens the menu bar, which took focus to the File menu
-        # for a moment before the context menu opened.
-        self.chat_list.Bind(wx.EVT_KEY_UP, self._on_list_key_up)
         self.chat_list.Bind(wx.EVT_LISTBOX_DCLICK, lambda e: self.on_read_message())
 
         # Where the reply goes: one panel for The Chat Place's sessions, one for
@@ -644,6 +639,12 @@ class MainFrame(wx.Frame):
             info.hidden = info.key in self.hidden
             if not info.is_own and info.key in self.titles:
                 info.title = self.titles.get(info.key)  # your name for it (#93)
+            elif info.is_own:
+                # From the store as it is now: a read that began before a
+                # rename would otherwise bring the old name back.
+                own = self.store.get(info.cli_session_id)
+                if own is not None:
+                    info.title = own.title
         ended = [info for info in ended if info.key not in self.hidden]
         if not snap.desktop_groups.read_ok:
             snap.desktop_groups = previous_desktop_groups  # keep the last good read
@@ -875,9 +876,16 @@ class MainFrame(wx.Frame):
             if not title:
                 self._feedback("A Chat Place session needs a name; it wasn't changed.")
                 return
+            if self.store.get(info.cli_session_id) is None:
+                # Its first turn is just reporting its id; there's nothing to rename yet.
+                self._feedback(f"Couldn't rename {old} just now. Try again in a moment.")
+                return
             if not self._store_write(self.store.update, info.cli_session_id, title=title):
                 return
         else:
+            if not title and info.key not in self.titles:
+                self._feedback(f"{old} already has the desktop app's name.")
+                return
             try:
                 self.titles.set(info.key, title)
             except OSError as exc:
@@ -1481,16 +1489,34 @@ class MainFrame(wx.Frame):
         instructions, memories, skills and the rest, read from Claude Code's
         files, with the projects your sessions work in."""
         cwds = sorted({s.cwd for s in self._snapshot.sessions if s.cwd})
+        self._feedback("Reading what Claude knows about you…")
+        # On the pool: a session folder on a disconnected or network drive
+        # can take seconds to answer.
+        self._read_about_you(cwds, lambda kinds: self._show_about_you(kinds, cwds))
 
+    def _read_about_you(self, cwds, done):
+        """``about_you.collect`` in the background, then ``done(kinds)`` on
+        the UI thread (or a message if it failed)."""
+        def work():
+            try:
+                kinds = about_you.collect(cwds)
+            except Exception as exc:  # noqa: BLE001
+                wx.CallAfter(self._feedback, f"Couldn't read what Claude knows about you: {exc}")
+                return
+            wx.CallAfter(done, kinds)
+        self._pool.submit(work)
+
+    def _show_about_you(self, kinds, cwds):
         def copy(path: str):
             self._feedback("Copied the file's location." if self._copy_text(path)
                            else "Couldn't open the clipboard.")
 
-        def load():
-            kinds = about_you.collect(cwds)
-            self._feedback(about_you.summary(kinds))
-            return kinds
-        self._modal(AboutYouDialog(self, load, platform_paths.edit_file,
+        def reload(done):
+            def reloaded(fresh):
+                self._feedback("Reloaded. " + about_you.summary(fresh))
+                done(fresh)
+            self._read_about_you(cwds, reloaded)
+        self._modal(AboutYouDialog(self, kinds, reload, platform_paths.edit_file,
                                    platform_paths.show_in_folder, copy))
 
     def copy_last_code_block(self):
@@ -1514,7 +1540,8 @@ class MainFrame(wx.Frame):
 
     def _message_menu_position(self, event=None, listbox=None) -> wx.Point:
         """Where a list's menu opens: at the mouse for a right-click, at the
-        selected row for the Applications key or Shift+F10."""
+        selected row for the Applications key or Shift+F10 where wx can say
+        where that row is (wxPython 4.3's ListBox can't: its top left)."""
         listbox = listbox or self.chat_list
         position = event.GetPosition() if event is not None else wx.DefaultPosition
         if position != wx.DefaultPosition:
@@ -1541,27 +1568,29 @@ class MainFrame(wx.Frame):
         info = self._selected_session()
         menu = wx.Menu()
         actions = {}
+        if info is None:
+            return menu, actions
 
         def add(label, handler, enable=True):
             item = menu.Append(wx.ID_ANY, label)
-            item.Enable(enable and info is not None)
+            item.Enable(enable)
             actions[item.GetId()] = handler
-            return item
         add("&Load Session\tEnter", self.on_open_session)
-        add("Open in &Claude\tCtrl+O", self.on_open_in_claude)
-        if info is not None and not info.is_own:
+        add("Open in &Claude\tCtrl+O", self.on_open_in_claude, info.can_open_in_claude)
+        if not info.is_own:
             add("Con&tinue Here...\tCtrl+Shift+N", self.on_continue_here)
         add("Re&name Session...\tF2", self.on_rename)
         menu.AppendSeparator()
         add("Add to &Group...\tCtrl+G", self.on_add_to_group)
-        add("Remove from Gro&up...", self.on_remove_from_group)
+        add("Remove from Gro&up...", self.on_remove_from_group,
+            bool(self.groups.groups_of(info.key)))
         add("&Export Session...\tCtrl+E", self.on_export)
         menu.AppendSeparator()
-        if info is not None and info.key in self.hidden:
+        if info.key in self.hidden:
             add("&Bring Back Session", self.on_unhide)
         else:
             add("H&ide Session\tDelete", self.on_hide)
-        if info is None or info.is_own:
+        if info.is_own:
             add("Delete Session &Permanently...\tShift+Delete", self.on_delete_permanently)
         return menu, actions
 
@@ -1570,7 +1599,21 @@ class MainFrame(wx.Frame):
         The choice runs once the menu has closed and focus is back on the
         list, so the command means the highlighted session, not the loaded
         one (see _selected_session)."""
+        position = event.GetPosition() if event is not None else wx.DefaultPosition
+        if position != wx.DefaultPosition:
+            # A right-click: a list box neither selects the row clicked nor
+            # takes focus, so do both first, or the menu and its command
+            # would mean the loaded session or the old highlight.
+            row = self.session_list.HitTest(self.session_list.ScreenToClient(position))
+            if row == wx.NOT_FOUND:
+                return
+            self.session_list.SetSelection(row)
+        self.session_list.SetFocus()
         menu, actions = self._session_menu()
+        if not actions:
+            menu.Destroy()
+            self._feedback("No session selected.")
+            return
         try:
             chosen = self.session_list.GetPopupMenuSelectionFromUser(
                 menu, self._message_menu_position(event, self.session_list))
@@ -3466,9 +3509,10 @@ class MainFrame(wx.Frame):
             self.cycle_focus(forward=not event.ShiftDown())
             return
         if self._is_menu_key(event) and focus in (self.session_list, self.chat_list):
-            # Opened here, on key-down, rather than left to Windows (#89): its
-            # Shift+F10 also started the menu bar, so focus went to the File
-            # menu for a moment first and a screen reader said so.
+            # Opened here, on key-down, rather than left to Windows (#89).
+            # The session list had no menu of its own, so Windows took
+            # Shift+F10 as F10 and started the menu bar: focus went to the
+            # File menu for a moment and a screen reader said so.
             if focus is self.session_list:
                 self._on_session_menu()
             else:
@@ -3525,11 +3569,6 @@ class MainFrame(wx.Frame):
         plain = not event.ControlDown() and not event.AltDown()
         return plain and ((key == wx.WXK_F10 and event.ShiftDown())
                           or (key == wx.WXK_WINDOWS_MENU and not event.ShiftDown()))
-
-    def _on_list_key_up(self, event: wx.KeyEvent):
-        if event.GetKeyCode() == wx.WXK_F10 and event.ShiftDown():
-            return  # see the EVT_KEY_UP binding (#89)
-        event.Skip()
 
     # F6 and Shift+F6 (#10), as in QuickMail: the window's parts in order,
     # wrapping round. The reply stop is the reply box for The Chat Place's own

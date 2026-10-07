@@ -179,3 +179,68 @@ def test_a_long_description_is_cut_for_its_row(tmp_path):
     write(home / "agents" / "a.md", "---\nname: a\ndescription: " + "word " * 100 + "\n---\n")
     item = about_you.collect([], home=home, user_home="")[3].items[0]
     assert len(item.description) <= 160 and item.description.endswith("…")
+
+
+def test_empty_front_matter_and_a_leading_rule(tmp_path):
+    assert about_you.front_matter("---\n---\nBody") == {}
+    home = tmp_path / "claude"
+    write(home / "commands" / "a.md", "---\n---\n# Real heading\n")
+    write(home / "commands" / "b.md", "---\n\nText after a rule\n")
+    rows = [c.description for c in about_you.collect([], home=home, user_home="")[4].items]
+    assert rows == ["Real heading", "Text after a rule"]
+
+
+def test_two_session_folders_with_one_name_are_told_apart(tmp_path):
+    home = tmp_path / "claude"
+    first, second = tmp_path / "a" / "App", tmp_path / "b" / "App"
+    for folder in (first, second):
+        write(folder / "CLAUDE.md", "x\n")
+    write(home / "projects" / platform_paths.encode_cwd(str(first)) / "memory" / "m.md",
+          memory("m", "d"))
+    kinds = about_you.collect([str(first), str(second)], home=home, user_home="")
+    assert sorted(i.project for i in kinds[0].items) == sorted([str(first), str(second)])
+    assert kinds[1].items[0].project == str(first)
+
+
+def test_show_in_folder_keeps_a_spaced_path_in_quotes(monkeypatch, tmp_path):
+    import os
+    import subprocess
+    import sys
+    started = []
+    monkeypatch.setattr(subprocess, "Popen", lambda args, *a, **k: started.append(args))
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setenv("SystemRoot", r"C:\Windows")
+    platform_paths.show_in_folder(r"C:\My Projects, old\CLAUDE.md")
+    explorer = os.path.join(r"C:\Windows", "explorer.exe")
+    assert started == [f'"{explorer}" /select,"C:\\My Projects, old\\CLAUDE.md"']
+    monkeypatch.setattr(sys, "platform", "darwin")
+    platform_paths.show_in_folder("/Users/p/a b/CLAUDE.md")
+    assert started[-1] == ["open", "-R", "/Users/p/a b/CLAUDE.md"]
+
+
+def test_edit_file_tries_edit_then_open_then_notepad(monkeypatch):
+    import os
+    import subprocess
+    import sys
+    tried, started = [], []
+
+    def startfile(path, verb):
+        tried.append(verb)
+        raise OSError("no program for .md")
+    monkeypatch.setattr(os, "startfile", startfile, raising=False)
+    monkeypatch.setattr(subprocess, "Popen", lambda args, *a, **k: started.append(args))
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setenv("SystemRoot", r"C:\Windows")
+    platform_paths.edit_file(r"C:\x\CLAUDE.md")
+    assert tried == ["edit", "open"]
+    assert started == [[os.path.join(r"C:\Windows", "System32", "notepad.exe"),
+                        r"C:\x\CLAUDE.md"]]
+    # The first verb that works is the end of it.
+    tried.clear()
+    started.clear()
+    monkeypatch.setattr(os, "startfile", lambda path, verb: tried.append(verb), raising=False)
+    platform_paths.edit_file(r"C:\x\CLAUDE.md")
+    assert tried == ["edit"] and started == []
+    monkeypatch.setattr(sys, "platform", "darwin")
+    platform_paths.edit_file("/Users/p/CLAUDE.md")
+    assert started == [["open", "-t", "/Users/p/CLAUDE.md"]]

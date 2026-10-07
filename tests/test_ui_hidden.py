@@ -3828,7 +3828,7 @@ def test_rename_a_desktop_session_only_here(frame, env):
     saved = json.loads((env["tmp"] / "appdata" / "titles.json").read_text(encoding="utf-8"))
     assert saved["titles"] == {"local_a": "Calm one"}
     assert env["feedback"][-1] == "Renamed Quiet one to Calm one."
-    # It survives the next read of the desktop app's files, and the find box.
+    # It survives the next read of the desktop app's files.
     frame.refresh_sessions(force=True)
     settle(frame)
     rows = list(frame.session_list.GetStrings())
@@ -3842,6 +3842,24 @@ def test_rename_a_desktop_session_only_here(frame, env):
     frame.refresh_sessions(force=True)
     settle(frame)
     assert any(r.startswith("Quiet one") for r in frame.session_list.GetStrings())
+
+
+def test_clearing_a_name_never_given_says_so(frame, env):
+    select(frame, "Quiet one")
+    frame.rename_session(frame._selected_session(), "")
+    assert env["feedback"][-1] == "Quiet one already has the desktop app's name."
+
+
+def test_a_read_begun_before_a_rename_doesnt_bring_the_old_name_back(frame, env):
+    # The list's own refresh copies the store when it starts; one that lands
+    # after the rename must still show the new name.
+    stale = hub.collect(frame.store.all(), set())
+    select(frame, "Hub probe")
+    frame.rename_session(frame._selected_session(), "Probe two")
+    frame._apply_snapshot(stale, [], {}, False)
+    rows = list(frame.session_list.GetStrings())
+    assert any(r.startswith("Probe two") for r in rows)
+    assert not any(r.startswith("Hub probe") for r in rows)
 
 
 def test_rename_the_loaded_session_updates_its_heading(frame, env):
@@ -3915,10 +3933,10 @@ def test_menu_keys_open_the_lists_menus_themselves(frame, monkeypatch, code, shi
     for focus in (frame.session_list, frame.chat_list):
         monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda f=focus: f))
         event = _menu_key(code, shift)
-        skipped = []
-        monkeypatch.setattr(event, "Skip", lambda *a: skipped.append(True), raising=False)
+        event.Skip(False)
         frame._on_char_hook(event)
-        assert not skipped  # not handed on to Windows, which also started the menu bar
+        # Not handed on to Windows, which took Shift+F10 as F10 and started the menu bar.
+        assert not event.GetSkipped()
     assert calls == ["sessions", "messages"]
 
 
@@ -3926,25 +3944,21 @@ def test_plain_f10_and_ctrl_shift_f10_are_left_alone(frame, monkeypatch):
     calls = []
     monkeypatch.setattr(frame, "_on_session_menu", lambda event=None: calls.append("menu"))
     monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
-    frame._on_char_hook(_menu_key(wx.WXK_F10))  # F10 alone is the menu bar, as ever
+    plain = _menu_key(wx.WXK_F10)  # F10 alone is the menu bar, as ever
+    frame._on_char_hook(plain)
+    assert plain.GetSkipped()
     event = _menu_key(wx.WXK_F10, shift=True)
     event.SetControlDown(True)
     frame._on_char_hook(event)
     assert calls == []
 
 
-def test_the_shift_f10_key_up_is_swallowed(frame):
-    up = _menu_key(wx.WXK_F10, shift=True, kind=wx.wxEVT_KEY_UP)
-    up.Skip(False)
-    frame._on_list_key_up(up)
-    assert not up.GetSkipped()
-    other = _menu_key(wx.WXK_DOWN, kind=wx.wxEVT_KEY_UP)
-    frame._on_list_key_up(other)
-    assert other.GetSkipped()
-
-
 def _labels(menu):
     return [i.GetItemLabel().split("\t")[0] for i in menu.GetMenuItems() if not i.IsSeparator()]
+
+
+def _enabled(menu, label):
+    return next(i for i in menu.GetMenuItems() if i.GetItemLabel().startswith(label)).IsEnabled()
 
 
 def test_session_menu_for_an_own_and_a_desktop_session(frame, monkeypatch):
@@ -3952,27 +3966,36 @@ def test_session_menu_for_an_own_and_a_desktop_session(frame, monkeypatch):
     select(frame, "Hub probe")
     menu, actions = frame._session_menu()
     own = _labels(menu)
-    menu.Destroy()
     assert "Re&name Session..." in own and "Delete Session &Permanently..." in own
     assert "Con&tinue Here..." not in own
+    assert not _enabled(menu, "Open in &Claude")  # never opened in the desktop app
+    assert not _enabled(menu, "Remove from Gro&up")  # in no group
+    menu.Destroy()
     select(frame, "Quiet one")
     menu, actions = frame._session_menu()
     desktop = _labels(menu)
-    menu.Destroy()
     assert "Con&tinue Here..." in desktop and "Delete Session &Permanently..." not in desktop
-    assert "H&ide Session" in desktop
+    assert "H&ide Session" in desktop and _enabled(menu, "Open in &Claude")
+    menu.Destroy()
+
+
+def test_session_menu_with_nothing_selected_says_so(frame, env, monkeypatch):
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    frame.session_list.SetSelection(wx.NOT_FOUND)
+    shown = []
+    monkeypatch.setattr(frame.session_list, "GetPopupMenuSelectionFromUser",
+                        lambda menu, position: shown.append(menu) or wx.ID_NONE)
+    frame._on_session_menu()
+    assert shown == [] and env["feedback"][-1] == "No session selected."
 
 
 def test_session_menu_runs_the_choice_on_the_highlighted_session(frame, env, monkeypatch):
     monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
     select(frame, "Quiet one")
-    chosen = {}
 
     def pick(menu, position):
-        for item in menu.GetMenuItems():
-            if item.GetItemLabel().startswith("H&ide Session"):
-                chosen["id"] = item.GetId()
-        return chosen["id"]
+        return next(i.GetId() for i in menu.GetMenuItems()
+                    if i.GetItemLabel().startswith("H&ide Session"))
     monkeypatch.setattr(frame.session_list, "GetPopupMenuSelectionFromUser", pick)
     frame._on_session_menu()
     assert "local_a" in frame.hidden
@@ -3981,6 +4004,41 @@ def test_session_menu_runs_the_choice_on_the_highlighted_session(frame, env, mon
                         lambda menu, position: wx.ID_NONE)
     frame._on_session_menu()
     assert frame.hidden.keys() == ["local_a"]
+
+
+class _RightClick:
+    def GetPosition(self):
+        return wx.Point(40, 40)
+
+
+def test_a_right_click_means_the_row_under_the_mouse(frame, env, monkeypatch):
+    # A list box neither selects the row right-clicked nor takes focus: with
+    # Quiet one highlighted and focus in the messages, right-clicking Blocked
+    # one must hide Blocked one.
+    select(frame, "Quiet one")
+    target = next(i for i in range(frame.session_list.GetCount())
+                  if frame.session_list.GetString(i).startswith("Blocked one"))
+    monkeypatch.setattr(frame.session_list, "HitTest", lambda point: target)
+    focus = {"on": frame.chat_list}
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: focus["on"]))
+    monkeypatch.setattr(frame.session_list, "SetFocus",
+                        lambda: focus.update(on=frame.session_list))
+
+    def pick(menu, position):
+        return next(i.GetId() for i in menu.GetMenuItems()
+                    if i.GetItemLabel().startswith("H&ide Session"))
+    monkeypatch.setattr(frame.session_list, "GetPopupMenuSelectionFromUser", pick)
+    frame._on_session_menu(_RightClick())
+    assert "local_b" in frame.hidden and "local_a" not in frame.hidden
+
+
+def test_a_right_click_below_the_rows_does_nothing(frame, env, monkeypatch):
+    monkeypatch.setattr(frame.session_list, "HitTest", lambda point: wx.NOT_FOUND)
+    shown = []
+    monkeypatch.setattr(frame.session_list, "GetPopupMenuSelectionFromUser",
+                        lambda menu, position: shown.append(menu) or wx.ID_NONE)
+    frame._on_session_menu(_RightClick())
+    assert shown == []
 
 
 # -- what Claude knows about you (#92) ------------------------------------------------------
@@ -3996,15 +4054,23 @@ def _about_you_home(env):
     return home
 
 
-def test_about_you_dialog_lists_kinds_items_and_reads_a_file(frame, env):
+def _dialog(frame, env, home, edit=None, show=None):
     from thechatplace import about_you
     from thechatplace.ui.dialogs import AboutYouDialog
+
+    def collect():
+        return about_you.collect([], home=home, user_home="")
+    return AboutYouDialog(frame, collect(), lambda done: done(collect()),
+                          edit or platform_paths.edit_file,
+                          show or platform_paths.show_in_folder, env["copied"].append)
+
+
+def test_about_you_dialog_lists_kinds_items_and_reads_a_file(frame, env):
     home = _about_you_home(env)
-    dialog = AboutYouDialog(frame, lambda: about_you.collect([], home=home, user_home=""),
-                            platform_paths.edit_file, platform_paths.show_in_folder,
-                            env["copied"].append)
+    dialog = _dialog(frame, env, home)
     try:
-        assert dialog.kinds.GetString(0) == "Instructions, 1 item"
+        # Each kind says what it is: focus never reaches a label.
+        assert dialog.kinds.GetString(0).startswith("Instructions, 1 item: What you've told")
         assert dialog.items.GetString(0).startswith("Your instructions for every session")
         assert dialog.text.GetValue() == "# Be brief\n"
         assert dialog.location.GetValue() == str(home / "CLAUDE.md")
@@ -4022,7 +4088,7 @@ def test_about_you_dialog_lists_kinds_items_and_reads_a_file(frame, env):
         path.write_text("---\nname: code-reviewer\ndescription: Changed\n---\n",
                         encoding="utf-8")
         dialog.reload()
-        assert dialog.kinds.GetSelection() == 3
+        assert dialog.kinds.GetSelection() == 3 and dialog.reload_btn.IsEnabled()
         assert dialog.items.GetString(0) == "code-reviewer — Changed"
         # An empty kind says so and has nothing to edit.
         dialog.kinds.SetSelection(1)
@@ -4033,15 +4099,12 @@ def test_about_you_dialog_lists_kinds_items_and_reads_a_file(frame, env):
         dialog.Destroy()
 
 
-def test_about_you_dialog_says_why_a_file_cant_be_opened(frame, env, monkeypatch):
-    from thechatplace import about_you
-    from thechatplace.ui.dialogs import AboutYouDialog
+def test_about_you_dialog_says_why_a_file_cant_be_opened(frame, env):
     home = _about_you_home(env)
 
     def fail(path):
         raise OSError("no editor")
-    dialog = AboutYouDialog(frame, lambda: about_you.collect([], home=home, user_home=""),
-                            fail, fail, env["copied"].append)
+    dialog = _dialog(frame, env, home, edit=fail, show=fail)
     try:
         dialog.edit_selected()
         dialog.show_selected()
@@ -4053,7 +4116,8 @@ def test_about_you_dialog_says_why_a_file_cant_be_opened(frame, env, monkeypatch
         dialog.Destroy()
 
 
-def test_about_you_from_the_view_menu_uses_the_sessions_folders(frame, env, monkeypatch):
+def test_about_you_reads_in_the_background_with_the_sessions_folders(frame, env, monkeypatch):
+    import threading
     from thechatplace import about_you
     from thechatplace.ui import main_frame
     _about_you_home(env)
@@ -4062,13 +4126,33 @@ def test_about_you_from_the_view_menu_uses_the_sessions_folders(frame, env, monk
 
     def collect(cwds):
         seen["cwds"] = list(cwds)
+        seen["thread"] = threading.current_thread()
         return real(cwds)
     monkeypatch.setattr(main_frame.about_you, "collect", collect)
     shown = []
-    monkeypatch.setattr(main_frame.MainFrame, "_modal",
-                        lambda self, dialog: shown.append(dialog) or dialog.Destroy())
+
+    def modal(self, dialog):
+        shown.append(dialog.kinds.GetString(0))
+        dialog.reload()  # Reload reads again, also in the background
+        assert pump(lambda: dialog.reload_btn.IsEnabled())
+        dialog.Destroy()
+    monkeypatch.setattr(main_frame.MainFrame, "_modal", modal)
     frame.on_about_you()
-    assert shown and seen["cwds"] == ["C:\\G\\Repo", "C:\\G\\Scratch"]
-    assert env["feedback"][-1].startswith("Found: Instructions 1")
+    assert env["feedback"][-1] == "Reading what Claude knows about you…"
+    assert pump(lambda: shown)
+    assert seen["thread"] is not threading.main_thread()
+    assert seen["cwds"] == ["C:\\G\\Repo", "C:\\G\\Scratch"]
+    assert shown[0].startswith("Instructions, 1 item")
+    assert env["feedback"][-1].startswith("Reloaded. Found: Instructions 1")
     labels = [i.GetItemLabel() for i in frame.GetMenuBar().GetMenu(1).GetMenuItems()]
     assert "What Claude &Knows About You...\tCtrl+Shift+K" in labels
+
+
+def test_about_you_says_so_when_reading_fails(frame, env, monkeypatch):
+    from thechatplace.ui import main_frame
+
+    def broken(cwds):
+        raise RuntimeError("bad disk")
+    monkeypatch.setattr(main_frame.about_you, "collect", broken)
+    frame.on_about_you()
+    assert pump(lambda: "bad disk" in env["feedback"][-1])

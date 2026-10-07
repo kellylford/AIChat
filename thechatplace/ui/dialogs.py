@@ -1119,11 +1119,13 @@ class AboutYouDialog(wx.Dialog):
     the selected item's file to read by line. The Chat Place only reads them:
     Edit opens the file in your own editor, and Reload shows what changed."""
 
-    def __init__(self, parent, load, edit, show, copy):
+    def __init__(self, parent, kinds, load, edit, show, copy):
+        """``kinds`` is what was found; ``load(done)`` reads it all again
+        in the background and calls ``done(kinds)`` on the UI thread."""
         super().__init__(parent, title="What Claude Knows About You", size=(860, 640),
                          style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
         self._load, self._edit, self._show_file, self._copy = load, edit, show, copy
-        self._kinds = []
+        self._kinds = list(kinds)
         self._items = []
         sizer = wx.BoxSizer(wx.VERTICAL)
         sizer.Add(wx.StaticText(self, label=(
@@ -1135,8 +1137,6 @@ class AboutYouDialog(wx.Dialog):
         set_accessible_name(self.kinds, "Kind")
         self.kinds.SetMinSize((-1, 120))
         sizer.Add(self.kinds, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
-        self.about = wx.StaticText(self, label="")
-        sizer.Add(self.about, 0, wx.LEFT | wx.TOP | wx.RIGHT, 8)
         sizer.Add(wx.StaticText(self, label="&Items:"), 0, wx.LEFT | wx.TOP, 8)
         self.items = wx.ListBox(self, style=wx.LB_SINGLE)
         set_accessible_name(self.items, "Items")
@@ -1155,7 +1155,7 @@ class AboutYouDialog(wx.Dialog):
         self.edit_btn = wx.Button(self, label="&Edit in Your Editor")
         self.show_btn = wx.Button(self, label="Show in Fol&der")
         self.copy_btn = wx.Button(self, label="Copy &Path")
-        reload_btn = wx.Button(self, label="&Reload")
+        self.reload_btn = reload_btn = wx.Button(self, label="&Reload")
         for button in (self.edit_btn, self.show_btn, self.copy_btn, reload_btn):
             buttons.Add(button, 0, wx.RIGHT, 6)
         buttons.Add(wx.Button(self, wx.ID_CANCEL, "C&lose"), 0)
@@ -1171,15 +1171,27 @@ class AboutYouDialog(wx.Dialog):
         self.show_btn.Bind(wx.EVT_BUTTON, lambda e: self.show_selected())
         self.copy_btn.Bind(wx.EVT_BUTTON, lambda e: self.copy_selected())
         reload_btn.Bind(wx.EVT_BUTTON, lambda e: self.reload())
-        self.reload()
+        self._fill_kinds()
         wx.CallAfter(self.kinds.SetFocus)
 
     def reload(self):
-        """Read everything again, keeping your place where it still exists."""
+        """Read everything again (in the background), keeping your place
+        where it still exists."""
+        self.reload_btn.Disable()
+        self._load(self._reloaded)
+
+    def _reloaded(self, kinds):
+        if not self:
+            return  # closed while reading
+        self.reload_btn.Enable()
+        self._kinds = list(kinds)
+        self._fill_kinds()
+
+    def _fill_kinds(self):
         kind_index = max(self.kinds.GetSelection(), 0)
         selected = self.selected_item()
-        self._kinds = self._load()
-        self.kinds.Set([k.row() for k in self._kinds])
+        # Each kind says what it is, since focus never reaches a label.
+        self.kinds.Set([f"{k.row()}: {k.about}" for k in self._kinds])
         if self._kinds:
             self.kinds.SetSelection(min(kind_index, len(self._kinds) - 1))
         self._fill_items(keep=selected.path if selected is not None else None)
@@ -1188,7 +1200,6 @@ class AboutYouDialog(wx.Dialog):
         index = self.kinds.GetSelection()
         kind = self._kinds[index] if 0 <= index < len(self._kinds) else None
         self._items = list(kind.items) if kind is not None else []
-        self.about.SetLabel(kind.about if kind is not None else "")
         self.items.Set([i.row() for i in self._items] or ["Nothing here yet."])
         name = kind.name if kind is not None else "Items"
         set_accessible_name(self.items, f"{name}, {len(self._items)}")

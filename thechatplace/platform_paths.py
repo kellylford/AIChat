@@ -242,6 +242,12 @@ def open_url(url: str) -> None:
         subprocess.Popen(["xdg-open", url])
 
 
+def _windows_program(*parts: str) -> str:
+    """A Windows program by its full path, never found by searching the
+    current folder or the app's own first."""
+    return os.path.join(os.environ.get("SystemRoot") or r"C:\Windows", *parts)
+
+
 def edit_file(path: Path) -> None:
     """Open a text file in your own editor (What Claude Knows About You's
     Edit, #92): The Chat Place itself never writes to Claude Code's files.
@@ -257,7 +263,7 @@ def edit_file(path: Path) -> None:
                 return
             except OSError:
                 continue
-        subprocess.Popen(["notepad.exe", str(path)])  # noqa: S607
+        subprocess.Popen([_windows_program("System32", "notepad.exe"), str(path)])
     elif sys.platform == "darwin":
         subprocess.Popen(["open", "-t", str(path)])  # the default text editor
     else:
@@ -269,7 +275,10 @@ def show_in_folder(path: Path) -> None:
     import subprocess
 
     if sys.platform == "win32":
-        subprocess.Popen(["explorer.exe", f"/select,{path}"])  # noqa: S607
+        # One command line, so the path keeps its own quotes: given as a list
+        # item, Python quotes "/select,C:\a b\x.md" whole, and Explorer
+        # opens Documents instead.
+        subprocess.Popen(f'"{_windows_program("explorer.exe")}" /select,"{path}"')
     elif sys.platform == "darwin":
         subprocess.Popen(["open", "-R", str(path)])
     else:
