@@ -270,3 +270,36 @@ def test_session_order_setting_round_trips(tmp_path):
     assert SpeechSettings.load(path).session_order == "title"
     path.write_text('{"session_order": "sideways"}', encoding="utf-8")
     assert SpeechSettings.load(path).session_order == "status"
+
+
+def test_a_reused_pid_is_not_the_session(tmp_path):
+    started = 134358227762071710
+    (tmp_path / "100.json").write_text(json.dumps(
+        {"pid": 100, "sessionId": "cli-1", "status": "busy", "procStart": str(started)}))
+    (tmp_path / "200.json").write_text(json.dumps(
+        {"pid": 200, "sessionId": "cli-2", "status": "busy", "procStart": str(started)}))
+    (tmp_path / "300.json").write_text(json.dumps(
+        {"pid": 300, "sessionId": "cli-3", "status": "busy", "procStart": "soon"}))
+    starts = {100: started + 5, 200: started + 3_600 * 10_000_000, 300: started}
+    live = load_live_status(tmp_path, alive=lambda pid: True, started=starts.get)
+    # 200's pid now belongs to a process that started an hour later.
+    assert set(live) == {"cli-1", "cli-3"}
+    # Or to a system service you can't look at: not yours, so not Claude Code.
+    starts[200] = platform_paths.NOT_YOURS
+    assert set(load_live_status(tmp_path, alive=lambda pid: True,
+                                started=starts.get)) == {"cli-1", "cli-3"}
+    # Not knowing when the process started: the pid is all there is.
+    assert set(load_live_status(tmp_path, alive=lambda pid: True,
+                                started=lambda pid: None)) == {"cli-1", "cli-2", "cli-3"}
+
+
+def test_process_start_matches_for_this_process():
+    import os
+    import sys
+    import time
+    start = platform_paths.process_start(os.getpid())
+    if sys.platform == "win32":
+        # FILETIME to Unix time: this test process started in the last hour.
+        unix = start / 10_000_000 - 11_644_473_600
+        assert time.time() - 3600 < unix <= time.time()
+    assert platform_paths.process_start(0) is None
