@@ -580,6 +580,8 @@ class MainFrame(wx.Frame):
             return
         self._snapshot = snap
         self._previous_states = {s.key: s.state for s in snap.sessions}
+        if self._group_names() != getattr(self, "_menu_group_names", None):
+            self._build_show_menu()  # the desktop app's groups changed
         self._update_status_needs_you()
         first = self._first_snapshot
         if not first:
@@ -2301,17 +2303,25 @@ class MainFrame(wx.Frame):
 
     # ------------------------------------------------- views and groups (#31, #32)
 
+    def _group_names(self) -> List[str]:
+        """Every group: TheClaudeHub's own, then the desktop app's (#51)."""
+        names = list(self.groups.names())
+        names += [n for n in self._snapshot.desktop_groups.names if n not in names]
+        return names
+
     def _build_show_menu(self):
         """View, Show Sessions: the fixed views, then one item per group."""
+        self._menu_group_names = self._group_names()
         for item in list(self.show_menu.GetMenuItems()):
             self.Unbind(wx.EVT_MENU, id=item.GetId())
             self.show_menu.Delete(item)
         self.view_items = {}
         choices = list(VIEWS)
-        names = self.groups.names()
+        names = self._menu_group_names
         for name in names:
             choices.append((group_view(name), "Group: " + name.replace("&", "&&")))
-        if self.speech.session_view not in [v for v, _label in choices]:
+        if self.speech.session_view not in [v for v, _label in choices] \
+                and not self._first_snapshot:
             self.speech.session_view = VIEW_ALL  # its group is gone
             try:
                 self.speech.save()
@@ -2328,8 +2338,12 @@ class MainFrame(wx.Frame):
 
     def _in_current_view(self, sessions: List[SessionInfo]) -> List[SessionInfo]:
         """The sessions the list shows now, each told its groups for its row."""
+        desktop = self._snapshot.desktop_groups.by_session
         for info in sessions:
-            info.groups = tuple(self.groups.groups_of(info.key))
+            groups = list(self.groups.groups_of(info.key))
+            if info.key in desktop and desktop[info.key] not in groups:
+                groups.append(desktop[info.key])
+            info.groups = tuple(groups)
         shown = [s for s in sessions if in_view(s, self.speech.session_view)]
         words = self._session_filter.casefold().split()
         if words:
@@ -2495,8 +2509,8 @@ class MainFrame(wx.Frame):
         info = self._group_target()
         if info is None:
             return
-        names = self.groups.names()
-        current = set(self.groups.groups_of(info.key))
+        names = self._group_names()
+        current = set(info.groups) | set(self.groups.groups_of(info.key))
         choices = [f"{n} (already in it)" if n in current else n for n in names]
         choices.append("New group...")
         index = self._choose("Add to Group", f"Add {info.title} to:", choices)
@@ -2511,6 +2525,10 @@ class MainFrame(wx.Frame):
                 self._build_show_menu()
             else:
                 name = names[index]
+                if name not in self.groups.names():
+                    # A desktop app group: TheClaudeHub keeps its own of the
+                    # same name, so the two show as one.
+                    name = self.groups.create(name)
             added = self.groups.add(name, info.key)
         except (ValueError, OSError) as exc:
             wx.MessageBox(str(exc), APP_NAME, wx.OK | wx.ICON_WARNING, self)
@@ -2525,7 +2543,10 @@ class MainFrame(wx.Frame):
             return
         names = self.groups.groups_of(info.key)
         if not names:
-            self._feedback(f"{info.title} is not in any group.")
+            desktop = self._snapshot.desktop_groups.by_session.get(info.key)
+            self._feedback(
+                f"{info.title} is in the desktop app's group {desktop}; change that in the "
+                "desktop app." if desktop else f"{info.title} is not in any group.")
             return
         index = self._choose("Remove from Group", f"Remove {info.title} from:", names)
         if index is None:

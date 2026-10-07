@@ -3123,3 +3123,36 @@ def test_export_leaves_out_queued_messages(frame, env, fake_runner):
     frame._chat_loaded = True
     messages, _path = frame._export_source(frame._open)
     assert all(m.kind != "queued" for m in messages)
+
+
+def test_the_desktop_apps_groups_show_in_the_list_and_views(frame, env, monkeypatch):
+    quiet = next(s for s in frame._snapshot.sessions if s.title == "Quiet one")
+    prefs = {"preferences": {"epitaxyPrefs": {"dframe-group-scopes": {"a/o": {
+        "groups": [{"id": "cg-1", "name": "IDT"}],
+        "assignments": {f"code:{quiet.key}": "cg-1"}}}}}}
+    (env["desktop"].parent / "claude_desktop_config.json").write_text(
+        json.dumps(prefs), encoding="utf-8")
+    frame.refresh_sessions(force=True)
+    assert pump(lambda: "Group: IDT" in [i.GetItemLabelText()
+                                          for i in frame.show_menu.GetMenuItems()])
+    row = next(r for r in frame.session_list.GetStrings() if r.startswith("Quiet one"))
+    assert "group IDT" in row
+    frame.on_view("group:IDT")
+    settle(frame)
+    assert [r.split(",")[0] for r in frame.session_list.GetStrings()] == ["Quiet one"]
+    # Removing is for the desktop app; adding a TheClaudeHub session joins it.
+    select(frame, "Quiet one")
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    frame.on_remove_from_group()
+    assert env["feedback"][-1] == ("Quiet one is in the desktop app's group IDT; change that "
+                                   "in the desktop app.")
+    frame.on_view("all")
+    settle(frame)
+    select(frame, "Hub probe")
+    monkeypatch.setattr(frame, "_choose", lambda title, prompt, choices: choices.index("IDT"))
+    frame.on_add_to_group()
+    assert env["feedback"][-1] == "Added Hub probe to IDT."
+    frame.on_view("group:IDT")
+    settle(frame)
+    assert sorted(r.split(",")[0] for r in frame.session_list.GetStrings()) == [
+        "Hub probe", "Quiet one"]
