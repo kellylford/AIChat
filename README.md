@@ -172,7 +172,9 @@ and keeps the files as a workflow artifact; tick "sign" on a hand run to sign an
 
 ## Keyboard shortcuts
 
-The same list is in the app under Help, Keyboard Shortcuts (F1).
+The same list is in the app under Help, Keyboard Shortcuts (F1), as a page with a heading and a
+table for each group, so you can move by heading and read each key with what it does. Alt+P
+shows it as plain text instead.
 
 | Where | Key | What it does |
 |---|---|---|

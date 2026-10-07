@@ -53,3 +53,18 @@ def test_formatted_setting_round_trips(tmp_path):
     assert SpeechSettings.load(path).formatted_messages  # on by default
     SpeechSettings(formatted_messages=False).save(path)
     assert not SpeechSettings.load(path).formatted_messages
+
+
+def test_shortcuts_page_has_a_heading_and_a_table_per_group():
+    from theclaudehub.rendering import html_page
+    from theclaudehub.ui_text import SHORTCUTS, shortcuts_html
+    body = shortcuts_html()
+    assert body.startswith("<h1>Keyboard shortcuts</h1>")
+    assert body.count("<h2>") == len(SHORTCUTS) == body.count("<table ")
+    assert '<th scope="col">Keys</th><th scope="col">What it does</th>' in body
+    assert '<tr><th scope="row">F1</th><td>This list of shortcuts</td></tr>' in body
+    assert '<table aria-label="Session list shortcuts">' in body
+    # Every shortcut is in it, escaped.
+    rows = sum(len(items) for _group, items in SHORTCUTS)
+    assert body.count('<th scope="row">') == rows
+    assert "default-src 'none'" in html_page("Keyboard Shortcuts", body)

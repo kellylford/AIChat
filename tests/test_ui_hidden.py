@@ -1597,3 +1597,16 @@ def test_settings_dialog_has_the_formatted_page_choice(frame):
         assert dialog.get_settings().formatted_messages
     finally:
         dialog.Destroy()
+
+
+def test_f1_shows_the_shortcuts_page_or_the_text_box(frame, env, monkeypatch):
+    from theclaudehub.ui.dialogs import ID_PLAIN_TEXT
+    shown = _fake_viewer(monkeypatch, wx.ID_CANCEL)
+    texts = []
+    monkeypatch.setattr(frame, "_modal", lambda dialog: texts.append(dialog) or dialog.Destroy())
+    frame.on_shortcuts()
+    assert shown[0][0] == "Keyboard Shortcuts"
+    assert "<h2>Session list</h2>" in shown[0][1] and texts == []
+    shown2 = _fake_viewer(monkeypatch, ID_PLAIN_TEXT)
+    frame.on_shortcuts()
+    assert len(shown2) == 1 and len(texts) == 1  # Read as Plain Text: the text box
