@@ -188,9 +188,9 @@ def queued_text(title: str, message: str, level: str, read_back: bool,
     """Confirmation that Kelly's message waits for the running turn."""
     words = _own_words(message, level, read_back)
     if words is None:
-        head = "Added to the queued message" if added else "Queued"
+        head = "Also queued" if added else "Queued"
         return f"{head}. It will be sent when {title} finishes."
-    head = "Added to the queued message for" if added else "Queued for"
+    head = "Also queued for" if added else "Queued for"
     return f"{head} {title}: {words}"
 
 

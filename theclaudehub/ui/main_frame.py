@@ -951,6 +951,7 @@ class MainFrame(wx.Frame):
         if list(self.chat_list.GetStrings()) == [line]:
             return  # already showing it: don't make the reader re-read every tick
         self.chat_list.Set([line])
+        self._chat_keys = []  # a note, not messages: nothing to act on
         self.chat_list.SetSelection(0)
 
     def _apply_chat(self, generation, changed, messages, unreadable, error,
@@ -966,6 +967,7 @@ class MainFrame(wx.Frame):
         if error is not None:
             if not self._chat_loaded:
                 self.chat_list.Set([f"Couldn't read this transcript: {error}"])
+                self._chat_keys = []
                 self.chat_list.SetSelection(0)
                 self._chat_loaded = True
             return
@@ -987,7 +989,7 @@ class MainFrame(wx.Frame):
             wx.CallAfter(self._say_changes, generation)  # after the reply
         if first_load:
             note = f" Couldn't read {unreadable} lines." if unreadable else ""
-            count = len(self._visible_messages())
+            count = sum(1 for m in self._visible_messages() if m.kind != QUEUED)
             if self._announce_load:
                 self._announce_load = False
                 self._feedback(f"Loaded {self._open.title}, {count} "
@@ -1069,13 +1071,31 @@ class MainFrame(wx.Frame):
         selected_key = keep_key or (old_keys[index] if 0 <= index < len(old_keys) else None)
 
         current = list(self.chat_list.GetStrings())
-        if (not focus_newest and keep_key is None and old_keys
-                and keys[: len(old_keys)] == old_keys and len(current) == len(old_keys)):
-            for i, line in enumerate(lines[: len(old_keys)]):
+        # Queued messages (#50) are a tail after the conversation: new
+        # messages go in before it, so the rows above never move.
+        old_body = [k for k in old_keys if not k.startswith("queued:")]
+        body = [k for k in keys if not k.startswith("queued:")]
+        if (not focus_newest and keep_key is None and old_keys and keys
+                and body[: len(old_body)] == old_body and len(current) == len(old_keys)
+                and old_keys[: len(old_body)] == old_body):
+            for i, line in enumerate(lines[: len(old_body)]):
                 if current[i] != line:
                     self.chat_list.SetString(i, line)
-            if len(lines) > len(old_keys):
-                self.chat_list.Append(lines[len(old_keys):])
+            if len(body) > len(old_body):
+                self.chat_list.Insert(lines[len(old_body):len(body)], len(old_body))
+            tail_start = len(body)
+            new_tail = lines[tail_start:] if keys else []
+            old_tail_count = len(old_keys) - len(old_body)
+            if [s for s in list(self.chat_list.GetStrings())[tail_start:]] != new_tail:
+                for _ in range(old_tail_count):
+                    self.chat_list.Delete(tail_start)
+                if new_tail:
+                    self.chat_list.Append(new_tail)
+                if selected_key is not None and selected_key.startswith("queued:") \
+                        and keys:
+                    self.chat_list.SetSelection(
+                        keys.index(selected_key) if selected_key in keys
+                        else min(index, len(keys) - 1))
         else:
             self.chat_list.Set(lines)
             if focus_newest or not keys:
@@ -1123,9 +1143,14 @@ class MainFrame(wx.Frame):
         return cached[1]
 
     def _selected_message(self) -> Optional[ChatMessage]:
+        """The selected message, only while the list shows the messages (not
+        a "No messages yet" line, or rows from before a change)."""
         visible = self._visible_messages()
         index = self.chat_list.GetSelection()
-        return visible[index] if 0 <= index < len(visible) else None
+        if not (0 <= index < len(visible) and index < len(self._chat_keys)):
+            return None
+        message = visible[index]
+        return message if message.key == self._chat_keys[index] else None
 
     def on_read_message(self):
         """The selected message's full text, in a read-only box to read by
@@ -1286,7 +1311,7 @@ class MainFrame(wx.Frame):
         the window's thread). (messages, None), (None, path), or (None, None)
         when there's nothing on disk."""
         if self._open is not None and info.key == self._open.key and self._chat_loaded:
-            return list(self._visible_messages()), None
+            return [m for m in self._visible_messages() if m.kind != QUEUED], None
         path = platform_paths.transcript_path(info.cwd, info.cli_session_id) \
             if info.cli_session_id else None
         return None, path
@@ -1400,8 +1425,10 @@ class MainFrame(wx.Frame):
             elif running:
                 elapsed = describe_elapsed(self._runners[info.cli_session_id].elapsed())
                 label = f"Claude is working ({elapsed})."
-                if info.cli_session_id in self._queued:
-                    label += " A message is queued."
+                waiting_count = len(self._queued.get(info.cli_session_id, []))
+                if waiting_count:
+                    label += (" A message is queued." if waiting_count == 1
+                              else f" {waiting_count} messages are queued.")
             else:
                 label = "Ready."
             if self.turn_status.GetLabel() != label:
@@ -2127,6 +2154,8 @@ class MainFrame(wx.Frame):
                     if is_open:
                         self._show_attachments()
             queued = self._take_queued(session_id)
+            if queued and is_open:
+                self._rebuild_chat_list()  # sent, or given back: no longer queued
             if event.kind == "failed" or event.is_error:
                 state, detail = NEEDS_YOU, announce.status_text(event.text or "error", 120)
             elif denials:
@@ -2235,7 +2264,8 @@ class MainFrame(wx.Frame):
         self._give_back(info.cli_session_id, text, True)
         self._update_send_state()
         self.reply_text.SetFocus()
-        self._feedback("Queued message back in the message box. Send queues it again.")
+        self._feedback("Queued message back in the message box. Send queues it again, "
+                       "after any others still queued.")
 
     def _give_back(self, session_id: str, message: str, is_open: bool):
         """Put ``message`` back in the session's reply box, before anything
