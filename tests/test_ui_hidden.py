@@ -2924,3 +2924,25 @@ def test_settings_keep_the_notification_choice(frame, env):
         assert dialog.get_settings().notifications == speech.NOTIFY_OFF
     finally:
         dialog.Destroy()
+
+
+def test_a_different_model_is_said_once(frame, env):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame.store.update("own-1", model="opus")
+    frame._runners["own-1"] = FakeRunner([], "", "", None)
+    started = TurnEvent("started", session_id="own-1", data={"model": "claude-sonnet-5-5"})
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", started)
+    assert env["spoken"][-1] == ("Hub probe is running on claude-sonnet-5-5, not Opus: Claude "
+                                 "Code didn't use the model this session chose.")
+    count = len(env["spoken"])
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", started)
+    assert len(env["spoken"]) == count  # once
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent(
+        "started", session_id="own-1", data={"model": "claude-opus-5-5"}))
+    assert len(env["spoken"]) == count  # the chosen one: nothing to say
+    # The default model, when it's Fable: a warning about usage credits.
+    frame.store.update("own-1", model="")
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent(
+        "started", session_id="own-1", data={"model": "claude-fable-5-1"}))
+    assert "usage credits" in env["spoken"][-1]

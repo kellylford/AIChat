@@ -55,7 +55,7 @@ from ..claude_cli import (PERMISSION_MODES, PermissionRequest, ResumeRefused, Tu
                           TurnRunner, allow_response, answer_questions_response,
                           build_fork_command, build_new_command, build_resume_command,
                           deny_response, fetch_commands, usable_commands,
-                          describe_elapsed, model_label, new_session_id)
+                          describe_elapsed, model_label, model_matches, new_session_id)
 from ..hub import Snapshot, collect, finished_turns, last_reply_from_tail
 from ..own_store import OwnSession, OwnSessionStore
 from ..groups import GroupStore
@@ -1494,6 +1494,29 @@ class MainFrame(wx.Frame):
     def _own_key(session_id: str) -> str:
         return f"own:{session_id}"
 
+    def _check_model(self, session_id: str, title: str, actual: str):
+        """Say once if Claude Code runs another model than the session chose
+        (it falls back to its default when a model isn't allowed, #8), or if
+        its own default is Fable, which some plans bill to usage credits in
+        turns like TheClaudeHub's."""
+        own = self.store.get(session_id)
+        if own is None or not actual:
+            return
+        key = ("model", session_id, actual)
+        if key in self._warned:
+            return
+        if own.model and not model_matches(own.model, actual):
+            text = (f"{title} is running on {actual}, not {model_label(own.model)}: Claude "
+                    "Code didn't use the model this session chose.")
+        elif not own.model and "fable" in actual.lower():
+            text = (f"{title} is running on {actual}, Claude Code's default. On some plans "
+                    "Fable is billed to usage credits; to be sure, start sessions with a "
+                    "model chosen in New Session.")
+        else:
+            return
+        self._warned.add(key)
+        self._say(text)
+
     def _check_context(self):
         """Say once when the loaded session's context passes 80%."""
         info = self._open
@@ -1949,6 +1972,7 @@ class MainFrame(wx.Frame):
             return
         session_id = holder["id"]
         if event.kind == "started":
+            self._check_model(session_id, title, (event.data or {}).get("model", ""))
             reported = event.session_id
             if reported and reported != session_id and session_id in self._runners:
                 # Claude chose a different id than the one we asked for.

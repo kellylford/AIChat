@@ -159,6 +159,18 @@ def is_safe_model(model: str) -> bool:
     return not model or bool(_SAFE_MODEL.fullmatch(model))
 
 
+def model_matches(chosen: str, actual: str) -> bool:
+    """Whether the model Claude Code reports ("claude-opus-5-5") is the one
+    chosen: an alias ("opus") matches its family, a full name itself. True
+    when nothing was chosen, or Claude Code didn't say."""
+    if not chosen or not actual:
+        return True
+    chosen, actual = chosen.lower(), actual.lower()
+    if chosen in MODEL_LABELS:
+        return chosen in actual
+    return actual == chosen or actual.startswith(chosen + "-")
+
+
 def model_label(model: str) -> str:
     """How a session's model is named to Kelly."""
     return MODEL_LABELS.get(model, model) if model else "the default model"
@@ -580,8 +592,11 @@ class StreamParser:
         if etype == "system" and subtype == "init":
             source = event.get("apiKeySource")
             self.api_key_source = source if isinstance(source, str) else None
+            model = event.get("model")
+            # The model actually in use (#8), which may not be the one asked for.
             return [TurnEvent("started", session_id=self.session_id, raw_type="init",
-                              text=str(event.get("permissionMode") or ""))]
+                              text=str(event.get("permissionMode") or ""),
+                              data={"model": model if isinstance(model, str) else ""})]
         if etype == "system" and subtype == "permission_denied":
             name = str(event.get("tool_name") or "A tool")
             message = str(event.get("message") or "").strip()
