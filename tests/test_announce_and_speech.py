@@ -177,3 +177,10 @@ def test_replies_lose_quote_markers_rules_and_unclosed_fences():
     assert strip_for_speech("> quoted\n\n---\n\nAfter") == "quoted\n\n\n\nAfter"
     assert strip_for_speech("Here:\n```\nhalf a snippet") == "Here:\n Code block omitted."
     assert strip_for_speech("***bold***") == "bold"  # emphasis, not a rule
+
+
+def test_spoken_markdown_reads_a_whole_message():
+    from theclaudehub.announce import spoken_markdown
+    assert spoken_markdown("## Summary\nThe build **passes**.\n\n- one\n- two\n\n```py\nx=1\n```\nDone") == (
+        "Summary. The build passes. one. two. Code block omitted. Done.")
+    assert spoken_markdown("") == "" and spoken_markdown("```\nonly code\n```") == "Code block omitted."

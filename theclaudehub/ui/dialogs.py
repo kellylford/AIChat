@@ -174,7 +174,7 @@ class SettingsDialog(wx.Dialog):
     """Announcements and speech (the Speech tab of IDT's settings, adapted)."""
 
     def __init__(self, parent, speech: SpeechSettings, options):
-        super().__init__(parent, title="Settings", size=(660, 540))
+        super().__init__(parent, title="Settings", size=(680, 580))
         self._options = list(options)
         # Settings kept elsewhere (the session list's sort order) pass through.
         self._original = speech
@@ -207,6 +207,11 @@ class SettingsDialog(wx.Dialog):
                        "tables), not plain text")
         self.formatted.SetValue(speech.formatted_messages)
         messages.Add(self.formatted, 0, wx.ALL, 6)
+        self.whole_in_list = wx.CheckBox(
+            box, label="Read the &whole message on each item in the messages list "
+                       "(otherwise just its first line)")
+        self.whole_in_list.SetValue(speech.full_messages_in_list)
+        messages.Add(self.whole_in_list, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 6)
         outer.Add(messages, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 
         grid = wx.FlexGridSizer(rows=2, cols=2, vgap=8, hgap=8)
@@ -277,7 +282,8 @@ class SettingsDialog(wx.Dialog):
                                    announce_own=self.own_messages.GetValue(),
                                    engine=option.engine, voice=option.voice,
                                    rate_preset=preset,
-                                   formatted_messages=self.formatted.GetValue())
+                                   formatted_messages=self.formatted.GetValue(),
+                                   full_messages_in_list=self.whole_in_list.GetValue())
 
 
 class MessageDialog(wx.Dialog):
