@@ -797,3 +797,66 @@ class ManageGroupsDialog(wx.Dialog):
             self._try(lambda: self.groups.delete(name))
             self._fill()
         self.list.SetFocus()
+
+
+class BugReportDialog(wx.Dialog):
+    """Help, Report a Bug (#28), as QuickMail's: a summary, what happened,
+    what you expected and the steps, then what the report will include, to
+    read before it goes anywhere. Open on GitHub (the default) copies the
+    whole report and opens GitHub's new-issue page with it filled in; Copy
+    Report only copies it."""
+
+    def __init__(self, parent, environment_lines):
+        super().__init__(parent, title="Report a Bug", size=(660, 640),
+                         style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+        self.action = ""
+        outer = wx.BoxSizer(wx.VERTICAL)
+
+        def field(label, name, multiline=False, height=-1):
+            outer.Add(wx.StaticText(self, label=label), 0, wx.LEFT | wx.TOP, 8)
+            style = (wx.TE_MULTILINE | wx.TE_RICH2) if multiline else 0
+            control = wx.TextCtrl(self, style=style)
+            set_accessible_name(control, name)
+            if multiline:
+                control.SetMinSize((-1, height))
+            outer.Add(control, 1 if multiline else 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+            return control
+
+        self.summary = field("&Summary (the issue's title):", "Summary")
+        self.happened = field("What &happened:", "What happened", True, 70)
+        self.expected = field("What you &expected:", "What you expected", True, 50)
+        self.steps = field("S&teps to reproduce (optional):", "Steps to reproduce", True, 50)
+        outer.Add(wx.StaticText(self, label="What the report &includes besides your words "
+                                            "(no session titles, folders or messages):"),
+                  0, wx.LEFT | wx.TOP, 8)
+        self.included = _read_only_text(self, "\n".join(environment_lines),
+                                        "What the report includes", min_height=90)
+        outer.Add(self.included, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+
+        row = wx.BoxSizer(wx.HORIZONTAL)
+        self.open_btn = wx.Button(self, wx.ID_OK, "&Open on GitHub")
+        self.open_btn.SetDefault()
+        copy = wx.Button(self, label="&Copy Report")
+        row.Add(self.open_btn, 0, wx.RIGHT, 6)
+        row.Add(copy, 0, wx.RIGHT, 6)
+        row.Add(wx.Button(self, wx.ID_CANCEL), 0)
+        outer.Add(row, 0, wx.ALIGN_RIGHT | wx.ALL, 8)
+        self.SetSizer(outer)
+        self.SetEscapeId(wx.ID_CANCEL)
+        self.open_btn.Bind(wx.EVT_BUTTON, lambda e: self._finish("open"))
+        copy.Bind(wx.EVT_BUTTON, lambda e: self._finish("copy"))
+        wx.CallAfter(self.summary.SetFocus)
+
+    def _finish(self, action: str):
+        for control, what in ((self.summary, "a summary"), (self.happened, "what happened")):
+            if not control.GetValue().strip():
+                wx.MessageBox(f"Please write {what} first.", self.GetTitle(),
+                              wx.OK | wx.ICON_INFORMATION, self)
+                control.SetFocus()
+                return
+        self.action = action
+        self.EndModal(wx.ID_OK)
+
+    def values(self):
+        return (" ".join(self.summary.GetValue().split()), self.happened.GetValue(),
+                self.expected.GetValue(), self.steps.GetValue())
