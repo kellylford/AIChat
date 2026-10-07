@@ -944,3 +944,62 @@ class BugReportDialog(wx.Dialog):
     def values(self):
         return (" ".join(self.summary.GetValue().split()), self.happened.GetValue(),
                 self.expected.GetValue(), self.steps.GetValue())
+
+
+class CodeBlocksDialog(wx.Dialog):
+    """A message's code blocks (#17): a list ("Python, 14 lines: def main():
+    …"), the selected block's code in a read-only box to read by line, word
+    and character, and Copy for just that block."""
+
+    def __init__(self, parent, blocks, copy):
+        super().__init__(parent, title="Code Blocks", size=(760, 560),
+                         style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+        self._blocks = list(blocks)
+        self._copy = copy
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer.Add(wx.StaticText(self, label="Code &blocks:"), 0, wx.LEFT | wx.TOP, 8)
+        self.list = wx.ListBox(self, style=wx.LB_SINGLE,
+                               choices=[b.row() for b in self._blocks])
+        set_accessible_name(self.list, f"Code blocks, {len(self._blocks)}")
+        self.list.SetMinSize((-1, 110))
+        sizer.Add(self.list, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        sizer.Add(wx.StaticText(self, label="Co&de:"), 0, wx.LEFT | wx.TOP, 8)
+        self.code = _read_only_text(self, "", "Code", min_height=220)
+        self.code.SetFont(wx.Font(10, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL,
+                                  wx.FONTWEIGHT_NORMAL))
+        sizer.Add(self.code, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        row = wx.BoxSizer(wx.HORIZONTAL)
+        copy_btn = wx.Button(self, label="&Copy")
+        row.Add(copy_btn, 0, wx.RIGHT, 6)
+        row.Add(wx.Button(self, wx.ID_CANCEL, "C&lose"), 0)
+        sizer.Add(row, 0, wx.ALIGN_RIGHT | wx.ALL, 8)
+        self.SetSizer(sizer)
+        self.SetEscapeId(wx.ID_CANCEL)
+        self.list.Bind(wx.EVT_LISTBOX, lambda e: self._show())
+        self.list.Bind(wx.EVT_LISTBOX_DCLICK, lambda e: self.code.SetFocus())
+        self.list.Bind(wx.EVT_KEY_DOWN, self._on_list_key)
+        copy_btn.Bind(wx.EVT_BUTTON, lambda e: self.copy_selected())
+        if self._blocks:
+            self.list.SetSelection(0)
+            self._show()
+        wx.CallAfter(self.list.SetFocus)
+
+    def _show(self):
+        index = self.list.GetSelection()
+        if 0 <= index < len(self._blocks):
+            block = self._blocks[index]
+            self.code.ChangeValue(block.code)
+            self.code.SetInsertionPoint(0)
+            # Tabbing in says which block this is.
+            set_accessible_name(self.code, block.describe())
+
+    def _on_list_key(self, event):
+        if event.GetKeyCode() in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER):
+            self.code.SetFocus()  # Enter: read the block's code
+            return
+        event.Skip()
+
+    def copy_selected(self):
+        index = self.list.GetSelection()
+        if 0 <= index < len(self._blocks):
+            self._copy(self._blocks[index])

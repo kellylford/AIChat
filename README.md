@@ -66,7 +66,8 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   restart, until its next turn starts.
 - **Messages:** newest last, with focus on the newest. Each row shows "You:" or "Claude:" and its
   first line, but your screen reader reads the **whole message** as you arrow onto it, as words
-  (headings and list items as sentences, "Code block omitted" for code). Settings, Reading
+  (headings and list items as sentences, and each code block as what it is: "Code block,
+  Python, 14 lines"). Settings, Reading
   messages turns that off, to hear just the first line. The list's name says the session's state
   and whether it's read-only. **Enter**
   (or the context menu's Read Full Message, with the Applications key or Shift+F10) shows the
@@ -77,6 +78,10 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   that the default. Escape closes either, back on the same message. The page needs Microsoft's
   Edge WebView2 runtime, which comes with Windows 11; without it, the text box opens. Nothing in
   the page is fetched from the internet, and HTML in a message is shown as text, never run.
+  **Code Blocks** on the context menu lists the message's code blocks by language and size, with
+  the selected one's code in a box to read by line (Enter on a block goes there) and a Copy
+  button for just that block;
+  **Ctrl+Shift+C** copies the message's last code block straight away.
   Question cards read as "Claude asked: Which version?" with the
   options in the full text, then "You answered: ...". Refused tools read "Permission denied:
   ...". Tool calls and tool results are hidden unless you turn on Show Tool Activity (Ctrl+T).
@@ -313,6 +318,7 @@ shows it as plain text instead.
 | Session list | Delete | Forget the selected TheClaudeHub session (asks first; its transcript is kept) |
 | Messages | Enter, or Applications key then Read Full Message | Read the whole message; Escape comes back to it |
 | Messages | Ctrl+C | Copy the whole message |
+| Messages | Ctrl+Shift+C | Copy the message's last code block |
 | Messages | Ctrl+T | Show or hide tool activity |
 | Messages | Ctrl+O | Open this session in the Claude desktop app |
 | Reply box | Ctrl+Enter | Send (TheClaudeHub sessions only); you stay in the reply box |

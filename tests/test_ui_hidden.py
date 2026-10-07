@@ -1908,7 +1908,7 @@ def test_screen_reader_reads_whole_messages_in_the_list(frame, env):
     assert frame.chat_list.GetString(1) == "Claude: ## Result"  # the row shows the first line
     accessible = frame.chat_list._hub_accessible
     assert accessible.GetName(2) == (wx.ACC_OK, "Claude: Result. It passes. tests: 352. "
-                                                "Code block omitted. Ship it.")
+                                                "Code block, Python, 1 line. Ship it.")
     assert accessible.GetName(0) == (wx.ACC_OK, "Messages in Quiet one (idle, read-only)")
     # The row's own text: the name must still be a string, or MSAA errors.
     assert accessible.GetName(9) == (wx.ACC_NOT_IMPLEMENTED, "")  # no such row
@@ -2654,3 +2654,69 @@ def test_f5_mentions_the_filter(frame, env, monkeypatch):
     frame.refresh_sessions(force=True, resort=True)
     settle(frame)
     assert env["feedback"][-1].endswith('Showing sessions matching "quiet": 1.')
+
+
+def _load_code(frame, env):
+    fence = "`" * 3
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [
+        user_text("Show me"),
+        assistant_block(text_block(f"Two ways:\n\n{fence}python\nprint(1)\n{fence}\n\n"
+                                   f"or\n\n~~~bash\necho hi\necho there\n~~~\nDone."), "m1"),
+        user_text("Thanks")])
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    assert pump(lambda: frame._chat_loaded and frame.chat_list.GetCount() == 3)
+
+
+def test_code_blocks_are_described_listed_and_copied(frame, env, monkeypatch):
+    from theclaudehub.ui.dialogs import CodeBlocksDialog
+    _load_code(frame, env)
+    assert frame._message_item_text(1) == ("Claude: Two ways. Code block, Python, 1 line. or. "
+                                           "Code block, Bash, 2 lines. Done.")
+    frame.chat_list.SetSelection(1)
+    frame.copy_last_code_block()  # Ctrl+Shift+C: the last block
+    assert env["copied"][-1] == "echo hi\necho there"
+    assert env["feedback"][-1] == "Copied: Code block, Bash, 2 lines."
+    shown = []
+
+    def modal(dialog):
+        shown.append([dialog.list.GetString(i) for i in range(dialog.list.GetCount())])
+        assert dialog.code.GetValue() == "print(1)"
+        dialog.copy_selected()
+        dialog.Destroy()
+    monkeypatch.setattr(frame, "_modal", modal)
+    frame.on_code_blocks()
+    assert shown == [["Python, 1 line: print(1)", "Bash, 2 lines: echo hi"]]
+    assert env["copied"][-1] == "print(1)"
+    assert isinstance(CodeBlocksDialog, type)
+    menu = frame._message_menu()
+    labels = {item.GetItemLabelText(): item.IsEnabled() for item in menu.GetMenuItems()}
+    assert labels["Code Blocks..."] and labels["Copy Last Code Block"]
+    menu.Destroy()
+
+
+def test_messages_without_code_say_so(frame, env, monkeypatch):
+    _load_code(frame, env)
+    frame.chat_list.SetSelection(2)  # "Thanks"
+    frame.copy_last_code_block()
+    assert env["feedback"][-1] == "This message has no code blocks."
+    monkeypatch.setattr(frame, "_modal", lambda dialog: pytest.fail("no dialog"))
+    frame.on_code_blocks()
+    assert env["feedback"][-1] == "This message has no code blocks."
+    menu = frame._message_menu()
+    labels = {item.GetItemLabelText(): item.IsEnabled() for item in menu.GetMenuItems()}
+    assert not labels["Code Blocks..."] and not labels["Copy Last Code Block"]
+    menu.Destroy()
+
+
+def test_ctrl_c_copies_the_message_and_ctrl_shift_c_its_code(frame, env, monkeypatch):
+    _load_code(frame, env)
+    frame.chat_list.SetSelection(1)
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.chat_list))
+    for shift, expected in ((False, "Claude:\nTwo ways:"), (True, "echo hi\necho there")):
+        event = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
+        event.SetKeyCode(ord("C"))
+        event.SetControlDown(True)
+        event.SetShiftDown(shift)
+        frame._on_char_hook(event)
+        assert env["copied"][-1].startswith(expected)

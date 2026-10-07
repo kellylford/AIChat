@@ -47,6 +47,7 @@ from typing import Dict, List, Optional
 
 import wx
 
+from ..codeblocks import find_code_blocks
 from .. import (__version__, announce, attachments, bugreport, export, hub, platform_paths,
                usage)
 from ..claude_cli import (PERMISSION_MODES, PermissionRequest, ResumeRefused, TurnEvent,
@@ -66,7 +67,7 @@ from ..updater import AVAILABLE, FAILED, CheckResult, UpdateService
 from .a11y import set_accessible_name, set_list_items_accessible
 from ..rendering import html_page, message_page
 from ..ui_text import shortcuts_html
-from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, FormattedMessageDialog,
+from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, CodeBlocksDialog, FormattedMessageDialog,
                       BugReportDialog, CommandPickerDialog, MessageDialog, NewSessionDialog, PermissionDialog, PlanDialog,
                       ManageGroupsDialog, QuestionDialog, SettingsDialog, ShortcutsDialog,
                       formatted_view_available)
@@ -1040,7 +1041,8 @@ class MainFrame(wx.Frame):
         message = visible[index]
         cached = self._spoken.get(message.key)
         if cached is None or cached[0] != message.text:
-            spoken = announce.spoken_markdown(message.text) or message.first_line()
+            spoken = announce.spoken_markdown(message.text, describe_code=True) \
+                or message.first_line()
             cached = (message.text, f"{message.label}: {spoken}")
             self._spoken[message.key] = cached
         return cached[1]
@@ -1106,12 +1108,52 @@ class MainFrame(wx.Frame):
         menu = wx.Menu()
         read = menu.Append(wx.ID_ANY, "Read &Full Message\tEnter")
         copy = menu.Append(wx.ID_ANY, "&Copy Message\tCtrl+C")
-        enabled = self._selected_message() is not None
-        read.Enable(enabled)
-        copy.Enable(enabled)
+        message = self._selected_message()
+        has_code = message is not None and bool(find_code_blocks(message.text))
+        blocks = menu.Append(wx.ID_ANY, "Code &Blocks...")
+        copy_code = menu.Append(wx.ID_ANY, "Copy &Last Code Block\tCtrl+Shift+C")
+        read.Enable(message is not None)
+        copy.Enable(message is not None)
+        blocks.Enable(has_code)
+        copy_code.Enable(has_code)
         menu.Bind(wx.EVT_MENU, lambda e: self.on_read_message(), read)
         menu.Bind(wx.EVT_MENU, lambda e: self._copy_message(), copy)
+        menu.Bind(wx.EVT_MENU, lambda e: self.on_code_blocks(), blocks)
+        menu.Bind(wx.EVT_MENU, lambda e: self.copy_last_code_block(), copy_code)
         return menu
+
+    def on_code_blocks(self):
+        """The selected message's code blocks (#17): each listed by language
+        and size, its code to read by line, and Copy for just that block."""
+        message = self._selected_message()
+        if message is None:
+            self._feedback("No message selected.")
+            return
+        blocks = find_code_blocks(message.text)
+        if not blocks:
+            self._feedback("This message has no code blocks.")
+            return
+        self._modal(CodeBlocksDialog(self, blocks, self._copy_code_block))
+        self.chat_list.SetFocus()
+
+    def copy_last_code_block(self):
+        """Ctrl+Shift+C: the last code block of the selected message, usually
+        the one Claude means you to run or keep."""
+        message = self._selected_message()
+        if message is None:
+            self._feedback("No message selected.")
+            return
+        blocks = find_code_blocks(message.text)
+        if not blocks:
+            self._feedback("This message has no code blocks.")
+            return
+        self._copy_code_block(blocks[-1])
+
+    def _copy_code_block(self, block):
+        if self._copy_text(block.code):
+            self._feedback(f"Copied: {block.describe()}.")
+        else:
+            self._feedback("Couldn't open the clipboard.")
 
     def _message_menu_position(self, event=None) -> wx.Point:
         """Where the menu opens: at the mouse for a right-click, at the
@@ -2559,8 +2601,12 @@ class MainFrame(wx.Frame):
         if key == wx.WXK_DELETE and focus is self.session_list:
             self.on_forget(None)
             return
-        if ctrl and key in (ord("C"), ord("c")) and focus is self.chat_list:
-            self._copy_message()
+        if (ctrl and key in (ord("C"), ord("c")) and not event.AltDown()
+                and focus is self.chat_list):
+            if event.ShiftDown():
+                self.copy_last_code_block()
+            else:
+                self._copy_message()
             return
         event.Skip()
 
@@ -2622,12 +2668,10 @@ class MainFrame(wx.Frame):
         index = self.chat_list.GetSelection()
         if not (0 <= index < len(visible)):
             return
-        if wx.TheClipboard.Open():
-            try:
-                wx.TheClipboard.SetData(wx.TextDataObject(visible[index].full_text()))
-            finally:
-                wx.TheClipboard.Close()
+        if self._copy_text(visible[index].full_text()):
             self._feedback("Message copied.")
+        else:
+            self._feedback("Couldn't open the clipboard.")
 
     # ---------------------------------------------------------------- close
 
