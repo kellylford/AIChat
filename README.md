@@ -213,6 +213,12 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
 - **Turn Status** (Ctrl+Shift+T) says how long Claude has been working on the current turn and what
   it last did. There's no time limit on a turn; Stop (Ctrl+Period) ends it, along with anything it
   started, such as a build.
+- **Claude Code Sign-in** (Help menu) says whether Claude Code is signed in, to which plan and
+  as whom ("Claude Code is signed in to your Claude Max plan as …"). If it isn't, it offers to
+  sign in: `claude auth login` opens in its own window and your browser shows Claude's sign-in
+  page. TheClaudeHub also checks at start-up and says so only if there's a problem. Your
+  sessions are listed whether or not Claude Code is signed in (they're read from disk); only
+  sending a message needs a sign-in.
 - **Report a Bug** (Help menu) asks for a summary, what happened, what you expected and the
   steps, and shows exactly what else the report includes before it goes anywhere: versions
   (TheClaudeHub, Windows, Python, wxPython, Claude Code), the announcement level and speech

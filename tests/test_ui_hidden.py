@@ -58,6 +58,10 @@ def env(tmp_path, monkeypatch, app):
     copied = []
     monkeypatch.setattr(main_frame.MainFrame, "_copy_text",
                         lambda self, text: copied.append(text) or True)
+    # Nor the real claude for its sign-in (#52): signed in, unless a test says not.
+    from theclaudehub import signin
+    monkeypatch.setattr(signin, "check", lambda *a, **k: signin.SignIn(
+        True, signed_in=True, method="claude.ai", plan="max", email="k@example.com"))
     # Nor the real claude for a folder's slash commands (#23).
     monkeypatch.setattr(main_frame, "fetch_commands", lambda exe, cwd: list(FAKE_COMMANDS))
     spoken = []
@@ -3192,3 +3196,44 @@ def test_a_bad_read_of_the_desktop_apps_groups_keeps_your_view(frame, env):
     checked = [i.GetItemLabelText() for i in frame.show_menu.GetMenuItems()
                if i.IsCheckable() and i.IsChecked()]
     assert checked == ["Group: IDT (not found)"]
+
+
+def test_sign_in_is_checked_and_offered(frame, env, monkeypatch):
+    from theclaudehub import signin
+    from theclaudehub.ui import main_frame
+    shown = []
+    monkeypatch.setattr(wx, "MessageBox", lambda text, title, style, parent=None: (
+        shown.append((text, style)), wx.YES)[1])
+    frame._on_sign_in_result(signin.SignIn(True, True, "claude.ai", plan="max", email="k@example.com"),
+                             manual=True)
+    assert shown[-1][0] == "Claude Code is signed in to your Claude Max plan as k@example.com."
+    started = []
+    monkeypatch.setattr(signin, "login_command", lambda: ["claude", "auth", "login"])
+
+    class Process:
+        def wait(self):
+            return 0
+    monkeypatch.setattr(main_frame.subprocess, "Popen",
+                        lambda command, **k: started.append((command, k)) or Process())
+    frame._on_sign_in_result(signin.SignIn(True, signed_in=False), manual=True)
+    assert shown[-1][0].startswith("Claude Code isn't signed in.")
+    assert started[0][0] == ["claude", "auth", "login"]
+    assert "ANTHROPIC_API_KEY" not in started[0][1]["env"]
+    # At start-up only a problem is said, and without cutting off the list.
+    frame._sign_in_asked = False
+    count = len(env["feedback"])
+    frame._on_sign_in_result(signin.SignIn(True, True, "claude.ai", plan="max"), manual=False)
+    frame._on_sign_in_result(signin.SignIn(False, problem="no claude"), manual=False)
+    assert len(env["feedback"]) == count
+    frame._on_sign_in_result(signin.SignIn(True, signed_in=False), manual=False)
+    assert env["feedback"][-1].endswith(
+        "To sign in, choose Claude Code Sign-in on the Help menu.")
+    # Asked from the menu meanwhile: the start-up answer isn't said as well.
+    frame._sign_in_asked = True
+    count = len(env["feedback"])
+    frame._on_sign_in_result(signin.SignIn(True, signed_in=False), manual=False)
+    assert len(env["feedback"]) == count
+    # The sign-in can't start: said.
+    monkeypatch.setattr(signin, "login_command", lambda: None)
+    frame._on_sign_in_result(signin.SignIn(True, signed_in=False), manual=True)
+    assert shown[-1][0].startswith("Couldn't start the sign-in")
