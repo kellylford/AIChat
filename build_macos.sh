@@ -20,7 +20,11 @@
 set -euo pipefail
 
 OUTPUT_DIR="${1:-}"
-[ -n "$OUTPUT_DIR" ] && OUTPUT_DIR="$(cd "$(dirname "$OUTPUT_DIR")" 2>/dev/null && pwd)/$(basename "$OUTPUT_DIR")"
+# Resolved before the cd, so a relative folder means relative to where you ran it.
+if [ -n "$OUTPUT_DIR" ]; then
+    mkdir -p "$OUTPUT_DIR" || { echo "Couldn't make $OUTPUT_DIR"; exit 1; }
+    OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
+fi
 cd "$(dirname "$0")"
 
 PY=.venv/bin/python
@@ -32,6 +36,17 @@ NOTARIZE="${TCP_NOTARIZE:-0}"
 [ "$NOTARIZE" = "1" ] && SIGN=1
 
 fail() { echo ""; echo "BUILD FAILED: $*"; exit 1; }
+
+# The built app imports everything and checks its data files, without opening
+# a window. Run on the ad-hoc app, and again once it's signed, since the
+# hardened runtime can refuse what ran fine before.
+smoke_test() {
+    rm -f smoke-local.json
+    "$APP/Contents/MacOS/TheChatPlace" --smoke-test smoke-local.json \
+        || { cat smoke-local.json 2>/dev/null; fail "the $1 app's smoke test."; }
+    cat smoke-local.json
+    echo ""
+}
 
 echo "========================================================================"
 echo "Building The Chat Place for macOS"
@@ -93,17 +108,24 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || fail "ad-hoc signing"
 # ------------------------------------------------------------- smoke test ----
 echo ""
 echo "Smoke test of the built app..."
-rm -f smoke-local.json
-"$APP/Contents/MacOS/TheChatPlace" --smoke-test smoke-local.json \
-    || { cat smoke-local.json 2>/dev/null; fail "the built app's smoke test."; }
-cat smoke-local.json
-echo ""
+smoke_test built
 
 # --------------------------------------------------------------- signing ----
 if [ "$SIGN" = "1" ]; then
+    # One identity for the app and the .dmg: with two Developer ID certificates
+    # (after a renewal, say) a bare "Developer ID Application" is ambiguous.
+    if [ -z "${TCP_SIGNING_IDENTITY:-}" ]; then
+        TCP_SIGNING_IDENTITY=$(security find-identity -v -p codesigning ${TCP_KEYCHAIN:+"$TCP_KEYCHAIN"} \
+            | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/') || true
+        [ -n "$TCP_SIGNING_IDENTITY" ] || fail "no Developer ID Application certificate (see macos/sign.sh)."
+    fi
+    export TCP_SIGNING_IDENTITY
     echo ""
     echo "Signing with Developer ID..."
     bash macos/sign.sh "$APP" || fail "signing"
+    echo ""
+    echo "Smoke test of the signed app..."
+    smoke_test signed
 fi
 
 # ------------------------------------------------------------ disk image ----
@@ -112,14 +134,13 @@ bash macos/create_dmg.sh "$APP" "$DMG" "$VERSION" "$([ "$SIGN" = "1" ] && echo s
     || fail "the disk image."
 if [ "$SIGN" = "1" ]; then
     codesign --force --timestamp ${TCP_KEYCHAIN:+--keychain "$TCP_KEYCHAIN"} \
-        --sign "${TCP_SIGNING_IDENTITY:-Developer ID Application}" "$DMG" || fail "signing the .dmg"
+        --sign "$TCP_SIGNING_IDENTITY" "$DMG" || fail "signing the .dmg"
 fi
 if [ "$NOTARIZE" = "1" ]; then
     bash macos/notarize.sh "$DMG" || fail "notarization"
 fi
 
 if [ -n "$OUTPUT_DIR" ]; then
-    mkdir -p "$OUTPUT_DIR"
     cp "$DMG" "$OUTPUT_DIR/" || fail "couldn't copy into $OUTPUT_DIR"
 fi
 
