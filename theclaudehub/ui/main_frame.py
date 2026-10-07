@@ -47,7 +47,7 @@ from typing import Dict, List, Optional
 
 import wx
 
-from .. import __version__, announce, bugreport, export, hub, platform_paths
+from .. import __version__, announce, attachments, bugreport, export, hub, platform_paths
 from ..claude_cli import (PERMISSION_MODES, PermissionRequest, ResumeRefused, TurnEvent,
                           TurnRunner, allow_response, answer_questions_response,
                           build_fork_command, build_new_command, build_resume_command,
@@ -124,6 +124,7 @@ class MainFrame(wx.Frame):
         self._show_activity = False
         self._drafts: Dict[str, str] = {}  # unsent reply text, per session
         self._queued: Dict[str, str] = {}  # sent during a turn, goes when it ends
+        self._attachments: Dict[str, List[str]] = {}  # per session, for its next message
         # What Claude is waiting for you to answer, per session, oldest first
         # (#187, #188). The turn is paused until each is answered.
         self._pending: Dict[str, List[PermissionRequest]] = {}
@@ -178,6 +179,7 @@ class MainFrame(wx.Frame):
         self._item(session, "&Export Session...\tCtrl+E", lambda e: self.on_export())
         self._item(session, "Insert Command or S&kill...\tCtrl+/",
                    lambda e: self.on_insert_command())
+        self._item(session, "Attac&h Files...\tCtrl+Shift+F", lambda e: self.on_attach_files())
         session.AppendSeparator()
         self._item(session, "Add to &Group...\tCtrl+G", lambda e: self.on_add_to_group())
         self._item(session, "Remove from Gro&up...", lambda e: self.on_remove_from_group())
@@ -282,9 +284,12 @@ class MainFrame(wx.Frame):
         self.stop_btn = wx.Button(self.own_reply, label="Sto&p")
         # After Stop, so Tab from the reply box is still Send, then Stop (#175).
         self.commands_btn = wx.Button(self.own_reply, label="C&ommands...")
+        # Alt+F: Alt+A is Show tool activity, and S, V, H are the menus'.
+        self.attach_btn = wx.Button(self.own_reply, label="Attach &Files...")
         orow.Add(self.send_btn, 0, wx.RIGHT, 6)
         orow.Add(self.stop_btn, 0, wx.RIGHT, 6)
-        orow.Add(self.commands_btn, 0, wx.RIGHT, 12)
+        orow.Add(self.commands_btn, 0, wx.RIGHT, 6)
+        orow.Add(self.attach_btn, 0, wx.RIGHT, 12)
         self.turn_status = wx.StaticText(self.own_reply, label="")
         orow.Add(self.turn_status, 1, wx.ALIGN_CENTER_VERTICAL)
         osizer.Add(orow, 0, wx.EXPAND | wx.TOP, 6)
@@ -292,6 +297,16 @@ class MainFrame(wx.Frame):
         self.send_btn.Bind(wx.EVT_BUTTON, self.on_send)
         self.stop_btn.Bind(wx.EVT_BUTTON, self.on_stop)
         self.commands_btn.Bind(wx.EVT_BUTTON, lambda e: self.on_insert_command())
+        self.attach_btn.Bind(wx.EVT_BUTTON, lambda e: self.on_attach_files())
+        # What goes with the next message (#22): shown only when there's
+        # something; Delete removes the selected one.
+        self.attach_list = wx.ListBox(self.own_reply, style=wx.LB_SINGLE)
+        set_accessible_name(self.attach_list, "Attachments, Delete removes one")
+        self.attach_list.SetMinSize((-1, 48))
+        osizer.Add(self.attach_list, 0, wx.EXPAND | wx.TOP, 6)
+        self.attach_list.Hide()
+        self.attach_list.Bind(wx.EVT_KEY_DOWN, self._on_attach_key)
+        self.reply_text.Bind(wx.EVT_TEXT_PASTE, self._on_reply_paste)
 
         self.desktop_reply = wx.Panel(root)
         dsizer = wx.BoxSizer(wx.VERTICAL)
@@ -712,6 +727,7 @@ class MainFrame(wx.Frame):
             if self.session_list.GetSelection() != row:
                 self.session_list.SetSelection(row)
         self.SetTitle(f"{info.title} \u2014 {APP_NAME}")
+        self._show_attachments()
         if info.is_own and _folder_key(info.cwd) not in self._commands:
             self._fetch_commands(info.cwd)  # ready by the time you want them
         self.chat_list.SetFocus()
@@ -1401,6 +1417,107 @@ class MainFrame(wx.Frame):
         self.open_session(own.to_info())
         self.refresh_sessions()
 
+    # ------------------------------------------------- attachments (#22)
+
+    def on_attach_files(self):
+        """Attach files or images to the next message (Ctrl+Shift+F)."""
+        info = self._open
+        if info is None or not info.is_own:
+            self._feedback("Attachments are for TheClaudeHub's own sessions: load one first.")
+            return
+        wildcard = ("All files (*.*)|*.*|Images (*.png;*.jpg;*.jpeg;*.gif;*.webp)|"
+                    "*.png;*.jpg;*.jpeg;*.gif;*.webp")
+        dialog = wx.FileDialog(self, "Attach Files", defaultDir=info.cwd or "",
+                               wildcard=wildcard,
+                               style=wx.FD_OPEN | wx.FD_MULTIPLE | wx.FD_FILE_MUST_EXIST)
+        try:
+            if dialog.ShowModal() != wx.ID_OK:
+                self.reply_text.SetFocus()
+                return
+            paths = list(dialog.GetPaths())
+        finally:
+            dialog.Destroy()
+        self._add_attachments(info.cli_session_id, paths)
+
+    def _add_attachments(self, session_id: str, paths: List[str]):
+        current = self._attachments.setdefault(session_id, [])
+        added = [p for p in paths if p not in current]
+        current.extend(added)
+        self._show_attachments()
+        self.reply_text.SetFocus()
+        if added:
+            names = ", ".join(os.path.basename(p) for p in added)
+            self._feedback(f"Attached {names}. {attachments.describe(current)}.")
+
+    def _clear_attachments(self, session_id: str):
+        self._attachments.pop(session_id, None)
+        self._show_attachments()
+
+    def _show_attachments(self):
+        """The loaded session's attachments, under the reply box."""
+        info = self._open
+        paths = self._attachments.get(info.cli_session_id, []) if info and info.is_own else []
+        if paths:
+            self.attach_list.Set([os.path.basename(p) for p in paths])
+            self.attach_list.SetSelection(0)
+            set_accessible_name(self.attach_list,
+                                f"{attachments.describe(paths)}. Delete removes one")
+        if self.attach_list.IsShown() != bool(paths):
+            self.attach_list.Show(bool(paths))
+            self.own_reply.Layout()
+            self.session_view.Layout()
+
+    def _on_attach_key(self, event):
+        if event.GetKeyCode() not in (wx.WXK_DELETE, wx.WXK_BACK) or self._open is None:
+            event.Skip()
+            return
+        paths = self._attachments.get(self._open.cli_session_id, [])
+        index = self.attach_list.GetSelection()
+        if not (0 <= index < len(paths)):
+            return
+        gone = paths.pop(index)
+        self._show_attachments()
+        self._feedback(f"Removed {os.path.basename(gone)}. {attachments.describe(paths)}.")
+        if paths:
+            self.attach_list.SetSelection(min(index, len(paths) - 1))
+            self.attach_list.SetFocus()
+        else:
+            self.reply_text.SetFocus()
+
+    def _on_reply_paste(self, event):
+        """Ctrl+V with a picture on the clipboard (a screenshot from
+        Win+Shift+S, say) attaches it; text pastes as usual."""
+        info = self._open
+        bitmap = self._clipboard_image() if info is not None and info.is_own else None
+        if bitmap is None:
+            event.Skip()
+            return
+        path = attachments.pasted_image_path()
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if not bitmap.SaveFile(str(path), wx.BITMAP_TYPE_PNG):
+                raise OSError("the picture couldn't be saved")
+        except OSError as exc:
+            self._feedback(f"Couldn't attach the pasted picture: {exc}")
+            return
+        self._add_attachments(info.cli_session_id, [str(path)])
+
+    def _clipboard_image(self):
+        """The clipboard's picture, when it holds a picture and no text."""
+        if not wx.TheClipboard.Open():
+            return None
+        try:
+            if wx.TheClipboard.IsSupported(wx.DataFormat(wx.DF_UNICODETEXT)) or \
+                    not wx.TheClipboard.IsSupported(wx.DataFormat(wx.DF_BITMAP)):
+                return None
+            data = wx.BitmapDataObject()
+            if not wx.TheClipboard.GetData(data):
+                return None
+            bitmap = data.GetBitmap()
+            return bitmap if bitmap.IsOk() else None
+        finally:
+            wx.TheClipboard.Close()
+
     def on_continue_here(self, _event=None):
         """Carry on a desktop app session in TheClaudeHub, as a copy (#189)."""
         info = self._selected_session()
@@ -1455,11 +1572,12 @@ class MainFrame(wx.Frame):
         if info is None or not info.is_own:
             return
         message = self.reply_text.GetValue().strip()
-        if not message:
+        session_id = info.cli_session_id
+        attached = list(self._attachments.get(session_id, []))
+        if not message and not attached:
             self._feedback("Type a message first.")
             self.reply_text.SetFocus()
             return
-        session_id = info.cli_session_id
         runner = self._runners.get(session_id)
         if runner is not None and runner.cancelled:
             # Queuing behind a stopped turn would only bounce back when the
@@ -1471,7 +1589,11 @@ class MainFrame(wx.Frame):
             # Queue it rather than refuse: the turn's reply comes first, then
             # this goes. More while one waits joins it as one message.
             waiting = self._queued.get(session_id)
-            self._queued[session_id] = f"{waiting}\n\n{message}" if waiting else message
+            # Queued text carries attachments as @"path": images included.
+            queued_text, _images = attachments.build(message, attached, images_inline=False)
+            self._queued[session_id] = (f"{waiting}\n\n{queued_text}" if waiting
+                                        else queued_text)
+            self._clear_attachments(session_id)
             self.reply_text.SetValue("")
             self._drafts.pop(session_id, None)
             self._update_send_state()
@@ -1481,16 +1603,20 @@ class MainFrame(wx.Frame):
                                                 added=bool(waiting)))
             self.reply_text.SetFocus()
             return
-        problem = self._send_now(session_id, message)
+        prompt, images = attachments.build(message, attached)
+        problem = self._send_now(session_id, prompt, images=images, spoken=message)
         if problem:
             wx.MessageBox(problem, APP_NAME, wx.OK | wx.ICON_WARNING, self)
             return
+        self._clear_attachments(session_id)
         self.reply_text.SetValue("")
         self._drafts.pop(session_id, None)
         # Stay in the reply box; new messages arrive at the end of the list.
         self.reply_text.SetFocus()
 
-    def _send_now(self, session_id: str, message: str, queued: bool = False) -> Optional[str]:
+    def _send_now(self, session_id: str, message: str, queued: bool = False,
+                  images: Optional[List[dict]] = None,
+                  spoken: Optional[str] = None) -> Optional[str]:
         """Start a turn with ``message``. Returns why it can't, or None once
         sent; the caller decides how to say it (a dialog when Kelly pressed
         Send, speech for a queued message going out on its own)."""
@@ -1532,7 +1658,7 @@ class MainFrame(wx.Frame):
         except (ResumeRefused, ValueError) as exc:
             return str(exc)
         self._start_turn(own.cli_session_id, command, own.cwd, message, own.title,
-                         queued=queued)
+                         queued=queued, images=images, spoken=spoken)
         return None
 
     def _session_exists(self, own: OwnSession) -> bool:
@@ -1541,19 +1667,26 @@ class MainFrame(wx.Frame):
         return platform_paths.transcript_path(own.cwd, own.cli_session_id) is not None
 
     def _start_turn(self, session_id: str, command, cwd: str, prompt: str, title: str,
-                    queued: bool = False):
+                    queued: bool = False, images: Optional[List[dict]] = None,
+                    spoken: Optional[str] = None):
+        """``spoken`` is what's read back (what you typed, without the
+        attachment lines added to ``prompt``)."""
         holder = {"id": session_id}
 
         def on_event(event: TurnEvent):
             wx.CallAfter(self._on_turn_event, holder, title, event)
 
-        runner = TurnRunner(command, cwd, prompt, on_event)
+        runner = TurnRunner(command, cwd, prompt, on_event, images=images)
         self._runners[session_id] = runner
         self._denials[session_id] = []
         runner.start()
         self._update_send_state()
-        self._feedback(announce.sent_text(title, prompt, self.speech.announce,
-                                          self.speech.announce_own, queued=queued))
+        said = announce.sent_text(title, spoken if spoken is not None else prompt,
+                                  self.speech.announce, self.speech.announce_own,
+                                  queued=queued)
+        if images:
+            said += f" With {len(images)} image{'s' if len(images) != 1 else ''}."
+        self._feedback(said)
         self._store_write(self.store.update, session_id, state=IDLE, detail="",
                           last_activity_ms=int(time.time() * 1000))
 

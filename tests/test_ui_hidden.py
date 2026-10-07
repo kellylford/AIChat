@@ -143,8 +143,9 @@ def select(frame, title):
 class FakeRunner:
     instances = []
 
-    def __init__(self, command, cwd, prompt, on_event):
+    def __init__(self, command, cwd, prompt, on_event, images=None):
         self.command, self.cwd, self.prompt, self.on_event = command, cwd, prompt, on_event
+        self.images = images or []
         self.session_started = False
         self.cancelled = False
         self.last_activity = "starting"
@@ -275,8 +276,8 @@ def test_tab_order_own_session(frame):
     frame.on_open_session()
     order = tab_order(frame)
     assert order == [frame.session_list, frame.chat_list, frame.reply_text, frame.send_btn,
-                     frame.stop_btn, frame.commands_btn, frame.activity_check, frame.new_btn,
-                     frame.refresh_btn]
+                     frame.stop_btn, frame.commands_btn, frame.attach_btn, frame.activity_check,
+                     frame.new_btn, frame.refresh_btn]
     frame._runners["own-1"] = FakeRunner([], "", "", None)
     frame._update_send_state()
     # Issue #175: a running turn doesn't move anything. Tab, Enter from the
@@ -2339,3 +2340,109 @@ def test_ctrl_slash_is_on_the_session_menu(frame):
     items = frame.GetMenuBar().GetMenu(0).GetMenuItems()
     item = [i for i in items if i.GetItemLabelText().startswith("Insert Command")][0]
     assert item.GetAccel() is not None and item.GetAccel().GetKeyCode() == ord("/")
+
+
+# -- attachments (#22) -----------------------------------------------------------------------
+
+TINY_PNG = ("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8"
+            "AAAAASUVORK5CYII=")
+
+
+def _files(env):
+    import base64
+    image = env["tmp"] / "screen shot.png"
+    image.write_bytes(base64.b64decode(TINY_PNG))
+    note = env["tmp"] / "log.txt"
+    note.write_text("error 42", encoding="utf-8")
+    return image, note
+
+
+def test_attach_then_send_puts_images_inline_and_files_as_mentions(frame, env, fake_runner):
+    image, note = _files(env)
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    assert not frame.attach_list.IsShown()
+    frame._add_attachments("own-1", [str(image), str(note)])
+    assert frame.attach_list.IsShown()
+    assert list(frame.attach_list.GetStrings()) == ["screen shot.png", "log.txt"]
+    assert frame.attach_list.GetName() == ("2 attachments: screen shot.png, log.txt. "
+                                           "Delete removes one")
+    assert env["feedback"][-1].startswith("Attached screen shot.png, log.txt.")
+    frame.reply_text.SetValue("What went wrong?")
+    frame.on_send()
+    runner = fake_runner.instances[-1]
+    assert runner.prompt == f'What went wrong?\n\nAttached: @"{note}"'
+    assert [b["type"] for b in runner.images] == ["image"]
+    assert env["feedback"][-1].endswith("With 1 image.")
+    assert "Attached:" not in env["feedback"][-1]  # read back as typed
+    assert not frame.attach_list.IsShown() and frame._attachments == {}
+
+
+def test_an_attachment_alone_can_be_sent(frame, env, fake_runner):
+    image, _note = _files(env)
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame._add_attachments("own-1", [str(image)])
+    frame.on_send()
+    assert fake_runner.instances[-1].images and fake_runner.instances[-1].prompt == ""
+
+
+def test_queued_message_takes_attachments_as_mentions(frame, env):
+    image, _note = _files(env)
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame._runners["own-1"] = FakeRunner([], "", "", None)
+    frame._add_attachments("own-1", [str(image)])
+    frame.reply_text.SetValue("And this")
+    frame.on_send()
+    assert frame._queued["own-1"] == f'And this\n\nAttached: @"{image}"'
+    assert frame._attachments == {}
+
+
+def test_delete_removes_an_attachment(frame, env):
+    image, note = _files(env)
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame._add_attachments("own-1", [str(image), str(note)])
+    frame.attach_list.SetSelection(0)
+    event = wx.KeyEvent(wx.wxEVT_KEY_DOWN)
+    event.SetKeyCode(wx.WXK_DELETE)
+    frame._on_attach_key(event)
+    assert frame._attachments["own-1"] == [str(note)]
+    assert env["feedback"][-1] == "Removed screen shot.png. 1 attachment: log.txt."
+
+
+def test_pasting_a_picture_attaches_it(frame, env, monkeypatch):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    monkeypatch.setattr(frame, "_clipboard_image", lambda: wx.Bitmap(4, 4))
+
+    class Paste:
+        skipped = False
+
+        def Skip(self):
+            Paste.skipped = True
+    frame._on_reply_paste(Paste())
+    paths = frame._attachments["own-1"]
+    assert len(paths) == 1 and paths[0].endswith(".png") and not Paste.skipped
+    assert "pasted images" in paths[0]
+    monkeypatch.setattr(frame, "_clipboard_image", lambda: None)
+    frame._on_reply_paste(Paste())
+    assert Paste.skipped  # text pastes as usual
+
+
+def test_attachments_are_for_own_sessions_and_follow_the_session(frame, env):
+    image, _note = _files(env)
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    frame.on_attach_files()
+    assert env["feedback"][-1].startswith("Attachments are for TheClaudeHub")
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame._add_attachments("own-1", [str(image)])
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    assert not frame.attach_list.IsShown()
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    assert frame.attach_list.IsShown()  # still waiting for this session's next message

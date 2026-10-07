@@ -59,6 +59,10 @@ SHORTCUTS = [
         ("Ctrl+Period", "Stop the running turn; a queued message goes back in the reply box"),
         ("Ctrl+/", "Insert a slash command or one of your skills (type to search); it goes at "
                    "the start of the reply box"),
+        ("Ctrl+Shift+F", "Attach files or images to your next message (Attach Files button, "
+                         "Alt+F); Delete in the attachments list removes one"),
+        ("Ctrl+V with a picture copied", "Attach the picture (a screenshot from Win+Shift+S, "
+                                         "say)"),
         ("Ctrl+Shift+T", "Turn status: how long Claude has been working, on what, "
                          "and whether a message is queued"),
     ]),
