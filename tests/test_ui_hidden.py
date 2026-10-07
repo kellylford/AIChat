@@ -791,6 +791,71 @@ def test_delete_permanently_refuses_while_a_turn_runs(frame, env):
     assert frame.store.get("own-1") is not None and path.exists()
 
 
+def test_delete_permanently_refuses_an_own_session_with_a_desktop_id(frame, env):
+    # Desktop sessions are read-only: an own session claiming a desktop id
+    # (found in any project folder) must never take the desktop transcript with it.
+    desktop = add_transcript(env, "C:\\G\\Repo", "cli-b", [user_text("theirs")])
+    frame.store.add(OwnSession("cli-b", "Collider", "C:\\G\\Elsewhere", last_activity_ms=1))
+    frame.refresh_sessions(force=True)
+    assert pump(lambda: frame.session_list.GetCount() == 4)
+    select(frame, "Collider")
+    frame.on_delete_permanently()
+    assert desktop.exists() and frame.store.get("cli-b") is not None
+    assert "shares its id with a desktop app session" in env["feedback"][-1]
+
+
+def test_delete_permanently_refuses_a_session_working_elsewhere(frame, env):
+    from thechatplace.sessions import WORKING
+    path = add_transcript(env, "C:\\G\\Scratch", "own-1", [user_text("hi")])
+    select(frame, "Hub probe")
+    next(s for s in frame._snapshot.sessions if s.key == "own:own-1").state = WORKING
+    frame.on_delete_permanently()
+    assert env["feedback"][-1] == ("Hub probe is working outside The Chat Place. "
+                                   "Let it finish first.")
+    assert path.exists() and frame.store.get("own-1") is not None
+
+
+def test_delete_permanently_says_so_when_the_files_stay(frame, env, monkeypatch):
+    from thechatplace.ui import main_frame
+
+    def refuse(path, tries=5):
+        raise PermissionError("in use")
+
+    monkeypatch.setattr(main_frame, "_delete_transcript", refuse)
+    select(frame, "Hub probe")
+    frame.on_delete_permanently()
+    assert "couldn't all be deleted" in env["boxes"][-1]
+    assert env["feedback"][-1] == ("Removed Hub probe from The Chat Place; its files are "
+                                   "still on this computer.")
+    assert frame.store.get("own-1") is None
+
+
+def test_delete_permanently_forgets_its_draft(frame, env):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame._drafts["own-1"] = "half a reply"
+    frame._queued["own-1"] = ["later"]
+    select(frame, "Hub probe")
+    frame.on_delete_permanently()
+    assert not frame._unsent_text()
+    assert "own-1" not in frame._drafts and "own-1" not in frame._queued
+
+
+def test_deleting_the_loaded_session_focuses_the_list_after_its_row_goes(frame, env,
+                                                                        monkeypatch):
+    # A screen reader reads the row that has focus: it should be the
+    # neighbour, never the session just deleted.
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    rows_at_focus = []
+    monkeypatch.setattr(frame.session_list, "SetFocus",
+                        lambda: rows_at_focus.append(list(frame.session_list.GetStrings())))
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.chat_list))
+    frame.on_delete_permanently()  # from the messages: it means the loaded one
+    assert rows_at_focus
+    assert not any(row.startswith("Hub probe") for row in rows_at_focus[0])
+
+
 def test_delete_transcript_retries_while_windows_holds_it(tmp_path, monkeypatch):
     from pathlib import Path
     from thechatplace.ui import main_frame

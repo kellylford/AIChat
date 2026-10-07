@@ -838,12 +838,25 @@ class MainFrame(wx.Frame):
             self._feedback(f"{info.title} is a desktop app session: delete it in the desktop "
                            "app. Here it can only be hidden.")
             return
+        # Desktop sessions are read-only, and this deletes files: an own
+        # session whose id is one the desktop app knows (a fork that kept its
+        # source's id, say) would take the desktop app's transcript with it.
+        if (info.cli_session_id in self._snapshot.desktop_cli_ids
+                or info.cli_session_id.startswith("local_")):
+            self._feedback(f"{info.title} shares its id with a desktop app session, so "
+                           "its files aren't deleted here. It can be hidden.")
+            return
         if info.cli_session_id in self._runners:
             self._feedback("A turn is running in that session. Stop it first.")
             return
+        if info.state == WORKING:
+            # Resumed in a terminal: that claude is still writing it.
+            self._feedback(f"{info.title} is working outside The Chat Place. Let it "
+                           "finish first.")
+            return
         answer = wx.MessageBox(
             f"Delete \"{info.title}\" permanently? Its conversation (Claude Code's "
-            "transcript) is deleted from this PC and can't be brought back.",
+            "transcript) is deleted from this computer and can't be brought back.",
             "Delete Session Permanently", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING, self)
         if answer != wx.YES:
             return
@@ -851,17 +864,16 @@ class MainFrame(wx.Frame):
         # Out of The Chat Place first: if that can't be saved, nothing is lost.
         if not self._store_write(self.store.remove, info.cli_session_id):
             return
-        if self._open is not None and self._open.key == info.key:
+        was_loaded = self._open is not None and self._open.key == info.key
+        if was_loaded:
             # Stop reading it before deleting it: Windows won't delete a file
             # a background read has open.
             self.unload_session()
-            self.session_list.SetFocus()
+        failed = None
         try:
             _delete_transcript(path)
         except OSError as exc:
-            wx.MessageBox(f"{info.title} is gone from The Chat Place, but its files "
-                          f"couldn't all be deleted ({path}): {exc}", APP_NAME,
-                          wx.OK | wx.ICON_WARNING, self)
+            failed = exc
         # A deleted session left in a group or the hidden list is harmless.
         try:
             self.groups.forget(info.key)
@@ -872,23 +884,37 @@ class MainFrame(wx.Frame):
                 self.hidden.show(info.key)
             except OSError:
                 pass
-        self._attachments.pop(info.cli_session_id, None)
-        self._leave_list(info)
-        self._feedback(f"Deleted {info.title} permanently.")
+        # Nothing of it may linger: an unsent draft would hold back updates
+        # (_unsent_text) for a reply box that no longer exists.
+        for per_session in (self._attachments, self._drafts, self._queued,
+                            self._pending, self._denials):
+            per_session.pop(info.cli_session_id, None)
+        self._leave_list(info, refocus=was_loaded)
+        if failed is not None:
+            wx.MessageBox(f"{info.title} is gone from The Chat Place, but its files "
+                          f"couldn't all be deleted ({path}): {failed}", APP_NAME,
+                          wx.OK | wx.ICON_WARNING, self)
+            self._feedback(f"Removed {info.title} from The Chat Place; its files are "
+                           "still on this computer.")
+        else:
+            self._feedback(f"Deleted {info.title} permanently.")
 
-    def _leave_list(self, info: SessionInfo):
+    def _leave_list(self, info: SessionInfo, refocus: bool = False):
         """``info`` leaves the list: the neighbour moves into its row, and if
-        it was loaded, nothing is."""
+        it was loaded, nothing is. Focus comes to the list only once the row
+        is gone, so a screen reader reads the neighbour, not the departed one."""
         if self._open is not None and self._open.key == info.key:
             self.unload_session()
-            # Its messages and reply box are gone: don't leave focus on them.
-            self.session_list.SetFocus()
+            refocus = True
         index = self._list_keys.index(info.key) if info.key in self._list_keys else -1
         if index >= 0:
             self.session_list.Delete(index)
             del self._list_keys[index]
             if self._list_keys:
                 self.session_list.SetSelection(min(index, len(self._list_keys) - 1))
+        if refocus:
+            # Its messages and reply box are gone: don't leave focus on them.
+            self.session_list.SetFocus()
         self.refresh_sessions()
 
     # ----------------------------------------------------------- session view

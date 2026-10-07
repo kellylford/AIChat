@@ -59,8 +59,9 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   the list without changing it; View, Show Sessions, Hidden lists hidden sessions, and File, Bring
   Back Session returns one. **Shift+Delete** (File, Delete Session Permanently) deletes one of The
   Chat Place's own sessions for good, from any view, hidden or not: after you confirm (No is the
-  default), its Claude Code transcript is deleted from the PC and it leaves the list, its groups
-  and the hidden list. Desktop app sessions can only be hidden; delete those in the desktop app.
+  default), its Claude Code transcript is deleted from the computer and it leaves the list, its
+  groups and the hidden list. It waits while the session is working, here or in a terminal.
+  Desktop app sessions can only be hidden; delete those in the desktop app.
   On a Mac laptop these are Fn+Delete and Fn+Shift+Delete (the forward-delete key).
 - **Find** (Ctrl+F, View, Find). In the session list it asks for some text and shows only
   sessions whose title, folder or "needs you" note contains it, within the current view; the
