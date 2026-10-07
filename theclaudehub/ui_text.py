@@ -57,6 +57,8 @@ SHORTCUTS = [
         ("Ctrl+Enter", "Send (TheClaudeHub sessions only); you stay in the reply box. "
                        "During a turn it queues the message and sends it when the turn ends"),
         ("Ctrl+Period", "Stop the running turn; a queued message goes back in the reply box"),
+        ("Ctrl+/", "Insert a slash command or one of your skills (type to search); it goes at "
+                   "the start of the reply box"),
         ("Ctrl+Shift+T", "Turn status: how long Claude has been working, on what, "
                          "and whether a message is queued"),
     ]),

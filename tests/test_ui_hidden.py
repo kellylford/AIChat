@@ -19,6 +19,14 @@ from theclaudehub.sessions import NEEDS_YOU  # noqa: E402
 from records import assistant_block, lines, text_block, tool_use_block, user_text  # noqa: E402
 
 
+FAKE_COMMANDS = [
+    {"name": "blog-publish", "description": "Publish a post to the blog", "argumentHint": ""},
+    {"name": "compact", "description": "Clear history but keep a summary", "builtin": True,
+     "argumentHint": "<optional instructions>"},
+    {"name": "context", "description": "Show what's using the context", "builtin": True},
+]
+
+
 def now_ms():
     return int(time.time() * 1000)
 
@@ -49,6 +57,8 @@ def env(tmp_path, monkeypatch, app):
     copied = []
     monkeypatch.setattr(main_frame.MainFrame, "_copy_text",
                         lambda self, text: copied.append(text) or True)
+    # Nor the real claude for a folder's slash commands (#23).
+    monkeypatch.setattr(main_frame, "fetch_commands", lambda exe, cwd: list(FAKE_COMMANDS))
     spoken = []
     feedback = []
 
@@ -265,7 +275,8 @@ def test_tab_order_own_session(frame):
     frame.on_open_session()
     order = tab_order(frame)
     assert order == [frame.session_list, frame.chat_list, frame.reply_text, frame.send_btn,
-                     frame.stop_btn, frame.activity_check, frame.new_btn, frame.refresh_btn]
+                     frame.stop_btn, frame.commands_btn, frame.activity_check, frame.new_btn,
+                     frame.refresh_btn]
     frame._runners["own-1"] = FakeRunner([], "", "", None)
     frame._update_send_state()
     # Issue #175: a running turn doesn't move anything. Tab, Enter from the
@@ -2223,3 +2234,108 @@ def test_bug_report_never_names_a_group(frame, env, monkeypatch):
     frame.on_report_bug()
     assert "Acme" not in "\n".join(fills.seen) and "Acme" not in env["copied"][-1]
     assert "Session list: showing a group, sorted status" in fills.seen
+
+
+# -- inserting a command or skill (#23) -------------------------------------------------------
+
+
+def test_insert_command_is_for_own_sessions(frame, env):
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    frame.on_insert_command()
+    assert env["feedback"][-1].startswith("Commands and skills are for TheClaudeHub")
+
+
+def test_commands_are_fetched_when_an_own_session_loads_and_inserted(frame, env, monkeypatch):
+    # A claude to find, as on Kelly's PC; the fetch itself is faked by the fixture.
+    monkeypatch.setattr(platform_paths, "find_claude",
+                        lambda: platform_paths.ClaudeLookup("claude.exe"))
+    from theclaudehub.ui import dialogs
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    assert pump(lambda: _folder_key("C:\\G\\Scratch") in frame._commands)
+    seen = {}
+
+    class Picks(dialogs.CommandPickerDialog):
+        def ShowModal(self):
+            seen["rows"] = list(self.list.GetStrings())
+            self.search.SetValue("summary")  # filters by description too
+            seen["filtered"] = list(self.list.GetStrings())
+            self.chosen = self._shown[0]
+            return wx.ID_OK
+    monkeypatch.setattr("theclaudehub.ui.main_frame.CommandPickerDialog", Picks)
+    frame.reply_text.SetValue("/context please keep the tests")
+    frame.on_insert_command()
+    assert seen["rows"][0] == "/blog-publish: Publish a post to the blog"
+    assert seen["rows"][1].startswith("/compact <optional instructions>, Claude Code: ")
+    assert seen["filtered"] == [Picks.row(FAKE_COMMANDS[1])]
+    assert frame.reply_text.GetValue() == "/compact please keep the tests"  # replaced, kept rest
+    assert env["feedback"][-1] == "Inserted /compact."
+
+
+def test_a_turn_keeps_the_folder_commands_current(frame, env):
+    from theclaudehub.claude_cli import StreamParser
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    runner = FakeRunner([], "C:\\G\\Scratch", "", None)
+    runner.parser = StreamParser()
+    runner.parser.commands = [{"name": "fresh-skill"}]
+    frame._runners["own-1"] = runner
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("finished", text="ok"))
+    assert [c["name"] for c in frame._commands[_folder_key("c:\\g\\scratch\\")]] == \
+        ["fresh-skill"]  # one key per folder, whatever the case or a trailing slash
+
+
+def _folder_key(cwd):
+    from theclaudehub.ui.main_frame import _folder_key as key
+    return key(cwd)
+
+
+def test_commands_never_open_by_themselves(frame, env, monkeypatch):
+    # A claude to find, as on Kelly's PC; the fetch itself is faked by the fixture.
+    monkeypatch.setattr(platform_paths, "find_claude",
+                        lambda: platform_paths.ClaudeLookup("claude.exe"))
+    from theclaudehub.ui import main_frame
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    assert pump(lambda: frame._commands)
+    frame._commands.clear()
+    monkeypatch.setattr("theclaudehub.ui.main_frame.CommandPickerDialog",
+                        lambda *a: pytest.fail("opened by itself"))
+    frame.on_insert_command()
+    assert env["feedback"][-1] == "Getting the commands for this folder."
+    assert pump(lambda: env["feedback"][-1] == "Commands are ready: press Ctrl+/ or Commands.")
+    frame._commands.clear()
+    monkeypatch.setattr(main_frame, "fetch_commands", lambda exe, cwd: [])
+    frame.on_insert_command()
+    assert pump(lambda: env["feedback"][-1] == "Couldn't get the commands from Claude Code.")
+
+
+def test_inserting_keeps_line_breaks_and_leaves_paths_alone(frame):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame.reply_text.SetValue("/context\n\nSecond paragraph.")
+    frame._insert_command("compact", FAKE_COMMANDS)
+    assert frame.reply_text.GetValue() == "/compact \n\nSecond paragraph."
+    frame.reply_text.SetValue("/path/x is broken")
+    frame._insert_command("compact", FAKE_COMMANDS)
+    assert frame.reply_text.GetValue() == "/compact /path/x is broken"
+
+
+def test_picker_with_nothing_matching_chooses_nothing(frame):
+    from theclaudehub.ui.dialogs import CommandPickerDialog
+    dialog = CommandPickerDialog(frame, FAKE_COMMANDS)
+    try:
+        dialog.search.SetValue("zzz")
+        assert list(dialog.list.GetStrings()) == ["Nothing matches."]
+        assert dialog.list.GetName() == "Commands and skills, 0 of 3"
+        dialog._choose()
+        assert dialog.chosen is None
+    finally:
+        dialog.Destroy()
+
+
+def test_ctrl_slash_is_on_the_session_menu(frame):
+    items = frame.GetMenuBar().GetMenu(0).GetMenuItems()
+    item = [i for i in items if i.GetItemLabelText().startswith("Insert Command")][0]
+    assert item.GetAccel() is not None and item.GetAccel().GetKeyCode() == ord("/")
