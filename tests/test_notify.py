@@ -116,3 +116,12 @@ def test_a_failing_mac_notification_is_not_an_error(app):
         raise RuntimeError("not allowed")
     assert notify.Notifier(lambda key: None, "x", message_factory=broken, mac=True) \
         .show("t", "m", "k") is False
+
+
+def test_the_apps_own_icon_is_shipped_and_used(app):
+    from thechatplace import platform_paths
+    path = platform_paths.app_icon_path()
+    assert path.is_file()
+    bundle = wx.IconBundle(str(path))
+    assert bundle.GetIconCount() >= 5
+    assert notify.app_icon(16).GetWidth() == 16

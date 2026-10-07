@@ -175,6 +175,9 @@ class MainFrame(wx.Frame):
         self._build_menu()
         self._build_ui()
         self._build_status_bar()
+        icon = platform_paths.app_icon_path()
+        if icon.is_file():
+            self.SetIcons(wx.IconBundle(str(icon)))  # title bar and Alt+Tab (#64)
         self._status("Loading sessions…")
         self.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
         self.Bind(wx.EVT_CLOSE, self._on_close)
