@@ -131,6 +131,9 @@ class SpeechSettings:
     #: The screen reader reads each message in the messages list whole, not
     #: just the first line the row shows (#11).
     full_messages_in_list: bool = True
+    #: Which sessions the list shows (View, Show Sessions, #32): a value from
+    #: ``sessions.VIEWS`` or "group:<name>".
+    session_view: str = "all"
 
     @property
     def enabled(self) -> bool:
@@ -163,6 +166,11 @@ class SpeechSettings:
         order = str(raw.get("session_order", SORT_STATUS))
         settings.session_order = order if order in SORT_VALUES else SORT_STATUS
         settings.full_messages_in_list = bool(raw.get("full_messages_in_list", True))
+        from .sessions import GROUP_VIEW_PREFIX, VIEWS
+        view = str(raw.get("session_view", "all"))
+        known = view in [v for v, _label in VIEWS] or (
+            view.startswith(GROUP_VIEW_PREFIX) and len(view) > len(GROUP_VIEW_PREFIX))
+        settings.session_view = view if known else "all"
         return settings
 
     def save(self, path: Optional[Path] = None) -> None:

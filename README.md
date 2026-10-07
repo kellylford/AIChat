@@ -31,8 +31,19 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   seconds. While you're in the list, rows don't move: a changed session is updated where it is
   and a new one is added at the end. F5, or a refresh while you're elsewhere, puts it back in
   order, keeping you on the same session.
+  **View, Show Sessions** (Alt+V, H) chooses which sessions are listed: all, needs you or
+  working, needs you, desktop app sessions, TheClaudeHub's own, Remote Control sessions (ones
+  the desktop app has linked for Remote Control), archived (the desktop app's archived
+  sessions, otherwise hidden), or one of your groups. The list's name says what it shows and how
+  many ("Session list, needs you, 2 of 139"), and the choice is remembered.
   Arrowing doesn't load anything; **Enter loads that session** into the messages list, moves you
   there, and says "Loaded Quiet one, 12 messages."
+- **Groups**, like groups in Claude on the web: **Ctrl+G** (Session, Add to Group) puts the
+  selected session in a group, or a new one; Session, Remove from Group takes it out; Session,
+  Manage Groups lists your groups with how many sessions each has, to make, rename or delete
+  them (deleting a group never touches its sessions). A session can be in several groups, and
+  its row says which ("…, group Work"). Groups are TheClaudeHub's own, kept in
+  `%APPDATA%\TheClaudeHub\groups.json`; the desktop app's files are never changed.
 - **What "needs you" means.** For a Claude desktop app session: it isn't working right now (it can
   still be open in the desktop app), and the desktop
   app's summary of its latest turn says it's waiting on you, either with a "needs action" note
@@ -234,6 +245,8 @@ shows it as plain text instead.
 | Session list | Enter | Load that session and move to its messages |
 | Session list | Ctrl+O | Open the selected session in the Claude desktop app |
 | Session list | Ctrl+N | New TheClaudeHub session |
+| Session list | Ctrl+G | Add the selected session to a group |
+| Anywhere | Alt+V, H | Show Sessions: choose which sessions are listed |
 | Anywhere | Ctrl+Shift+N | Continue the selected (or loaded) desktop app session here, as a copy |
 | Session list | F5 | Refresh the list now and put it in order |
 | Session list | Delete | Forget the selected TheClaudeHub session (asks first; its transcript is kept) |
