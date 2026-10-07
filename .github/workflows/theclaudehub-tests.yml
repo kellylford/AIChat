@@ -3,19 +3,11 @@ name: TheClaudeHub tests
 # Runs TheClaudeHub's pytest suite on Windows, the platform it targets: the
 # process-tree, pipe and path handling it tests are Windows-specific. The UI
 # tests build the window hidden, which works on a runner without a desktop.
-#
-# Scoped by path so changes elsewhere in this repo don't trigger it.
 
 on:
   push:
     branches: [main]
-    paths:
-      - 'TheClaudeHub/**'
-      - '.github/workflows/theclaudehub-tests.yml'
   pull_request:
-    paths:
-      - 'TheClaudeHub/**'
-      - '.github/workflows/theclaudehub-tests.yml'
   workflow_dispatch:
 
 permissions:
@@ -30,9 +22,6 @@ jobs:
     name: pytest (Windows)
     runs-on: windows-latest
     timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: TheClaudeHub
     steps:
       # Pinned to release commits (v4.4.0, v5.6.0).
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -40,7 +29,7 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: TheClaudeHub/requirements*.txt
+          cache-dependency-path: requirements*.txt
       - name: Install
         run: python -m pip install -r requirements-dev.txt
       - name: Test

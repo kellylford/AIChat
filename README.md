@@ -104,8 +104,8 @@ session list is always there.
 You need Windows 10 or 11 and **Claude Code installed with its native installer and signed in**
 to a Claude subscription (the `claude` command, the same login the desktop app uses).
 
-Download `TheClaudeHub-theclaudehub-Setup.exe` from the newest **TheClaudeHub** release on
-[TheWorkBench's releases page](https://github.com/kellylford/TheWorkBench/releases) and run it.
+Download `TheClaudeHub-theclaudehub-Setup.exe` from the newest release on
+[the releases page](https://github.com/kellylford/AIChat/releases) and run it.
 It installs for you only, with no administrator rights, adds TheClaudeHub to the Start menu, and
 starts it. The portable zip from the same release runs without installing, but doesn't update
 itself.
@@ -131,18 +131,22 @@ data is in `%APPDATA%\TheClaudeHub`, a different folder that neither goes near, 
 refuses to run if that were ever not so. What the updater did is logged in
 `%APPDATA%\TheClaudeHub\update.log`.
 
-The version is in Help, About. Releases come from tags named `theclaudehub-v<version>` in
-TheWorkBench, which holds several apps, so TheClaudeHub publishes its update feed on its own
-Velopack channel (`releases.theclaudehub.json`). The updater finds the newest
-`theclaudehub-v*` release itself and reads the feed from that release only, so however many
-other apps' releases come after it, an update is never missed.
+The version is in Help, About. Releases come from tags named `theclaudehub-v<version>`, and
+TheClaudeHub publishes its update feed on its own Velopack channel (`releases.theclaudehub.json`).
+The updater finds the newest `theclaudehub-v*` release itself and reads the feed from that
+release only.
+
+**The updater still looks in TheWorkBench**, where TheClaudeHub lived until October 2026
+(`REPO_URL`, `RELEASES_API` and `TAG_PREFIX` in `theclaudehub/updater.py`). Pointing it at this
+repository, with a hand-off release for copies already installed, is still to do; until then,
+installed copies find no updates.
 
 ## Run from source (development)
 
 You need Python 3.11 or later.
 
 ```
-cd TheWorkBench\TheClaudeHub
+cd AIChat
 pip install -r requirements-dev.txt
 pythonw TheClaudeHub.pyw
 python -m pytest tests
