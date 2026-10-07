@@ -178,7 +178,7 @@ def test_images_and_odd_blocks_do_not_crash():
         assistant_block({"type": "redacted_thinking"}, "m"),
         assistant_block("not a dict", "m"),
     ))
-    assert tr.visible()[0].text == "[image]"
+    assert tr.visible()[0].text == "(image attached)"
     assert tr.unreadable_lines == 0
 
 

@@ -224,7 +224,7 @@ class TranscriptParser:
             if btype == "text":
                 texts.append(str(block.get("text") or ""))
             elif btype == "image":
-                texts.append("[image]")
+                texts.append("(image attached)")
             elif btype == "tool_result":
                 added.append(self._tool_result(block, record))
         if texts:
@@ -339,7 +339,7 @@ def _plain_text(content) -> str:
                 if block.get("type") == "text":
                     parts.append(str(block.get("text") or ""))
                 elif block.get("type") == "image":
-                    parts.append("[image]")
+                    parts.append("(image attached)")
                 elif block.get("type") == "tool_reference":
                     parts.append(f"[tool {block.get('tool_name', '')}]")
         return "\n".join(p for p in parts if p)
