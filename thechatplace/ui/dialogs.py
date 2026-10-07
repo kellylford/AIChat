@@ -928,7 +928,7 @@ class BugReportDialog(wx.Dialog):
         outer.Add(self.included, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
         outer.Add(wx.StaticText(self, label=(
             "Open on GitHub needs access to the app's repository on GitHub. Without it, "
-            "use Copy Report and send the report to the app's author.")),
+            "use Copy Report and email the report to support@theideaplace.net.")),
             0, wx.LEFT | wx.RIGHT | wx.TOP, 8)
 
         row = wx.BoxSizer(wx.HORIZONTAL)

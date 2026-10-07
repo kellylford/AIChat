@@ -230,7 +230,7 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   engine, the list's view and sort, and how many sessions it lists. Never a session's title,
   folder or messages. **Open on GitHub** copies the whole report and opens GitHub's new-issue
   page with it filled in; **Copy Report** only copies it. Filing on GitHub needs access to the
-  repository; anyone else can Copy Report and send it on.
+  repository; anyone else can Copy Report and email it to support@theideaplace.net.
 
 ## Install
 
