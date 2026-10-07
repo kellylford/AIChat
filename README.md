@@ -92,6 +92,14 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   folder, asked for in the background when the session loads (no turn, no cost) and kept
   current by each turn. If it isn't there yet, you hear "Commands are ready" when it is; the list
   never opens by itself.
+- **Attachments**, in TheClaudeHub's own sessions: **Attach Files** (Alt+F, after Commands;
+  Ctrl+Shift+F) adds files and images to your next message, and **Ctrl+V** in the reply box
+  attaches a picture on the clipboard, such as a screenshot from Win+Shift+S. They're listed
+  under the reply box ("2 attachments: screenshot.png, log.txt"); Delete there removes one.
+  Images go to Claude as images, so it can describe what's on screen; other files are named
+  in the message as `@"path"`, which Claude Code reads in for Claude. A message can be
+  just attachments. Each session keeps its own until they're sent. Pasted pictures are saved
+  in `%APPDATA%\TheClaudeHub\pasted images`.
 - **Export** (Ctrl+E, Session, Export Session) saves the selected session's conversation,
   or the loaded one's, to a file: **Markdown**, a **web page** (formatted like the full-message
   view, nothing fetched from the internet) or **plain text**, chosen by the Save as type list
@@ -274,6 +282,7 @@ shows it as plain text instead.
 | Session list | Ctrl+G | Add the selected session to a group |
 | Anywhere | Ctrl+E | Export the session to a file |
 | Reply box | Ctrl+/ | Insert a slash command or skill |
+| Anywhere | Ctrl+Shift+F | Attach files or images to the next message |
 | Anywhere | Alt+V, H | Show Sessions: choose which sessions are listed |
 | Anywhere | Ctrl+Shift+N | Continue the selected (or loaded) desktop app session here, as a copy |
 | Session list | F5 | Refresh the list now and put it in order |

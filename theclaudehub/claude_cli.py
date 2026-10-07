@@ -276,13 +276,17 @@ def build_resume_command(executable: str, session_id: str, permission_mode: str,
 INIT_REQUEST_ID = "theclaudehub-init"
 
 
-def stdin_lines(prompt: str) -> bytes:
+def stdin_lines(prompt: str, images: Optional[List[dict]] = None) -> bytes:
     """What starts a turn on stdin: the ``initialize`` control request (its
-    answer lists the slash commands and skills) and the user's message."""
+    answer lists the slash commands and skills) and the user's message, with
+    any image blocks after its text (#22)."""
     initialize = {"type": "control_request", "request_id": INIT_REQUEST_ID,
                   "request": {"subtype": "initialize", "hooks": None}}
+    content = prompt
+    if images:
+        content = ([{"type": "text", "text": prompt}] if prompt else []) + list(images)
     message = {"type": "user", "session_id": "", "parent_tool_use_id": None,
-               "message": {"role": "user", "content": prompt}}
+               "message": {"role": "user", "content": content}}
     return (json.dumps(initialize) + "\n" + json.dumps(message, ensure_ascii=False)
             + "\n").encode("utf-8")
 
@@ -654,10 +658,12 @@ class TurnRunner:
                  on_event: Callable[[TurnEvent], None],
                  popen: Callable[..., subprocess.Popen] = subprocess.Popen,
                  env: Optional[Dict[str, str]] = None,
-                 clock: Callable[[], float] = time.monotonic) -> None:
+                 clock: Callable[[], float] = time.monotonic,
+                 images: Optional[List[dict]] = None) -> None:
         self.command = command
         self.cwd = cwd
         self.prompt = prompt
+        self.images = list(images or [])
         self.on_event = on_event
         self._popen = popen
         self._env = env if env is not None else child_environment()
@@ -793,7 +799,7 @@ class TurnRunner:
             err_thread.start()
             with self._lock:
                 try:
-                    process.stdin.write(stdin_lines(self.prompt))
+                    process.stdin.write(stdin_lines(self.prompt, self.images))
                     process.stdin.flush()
                     self._stdin_open = True
                 except (OSError, ValueError):
