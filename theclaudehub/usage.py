@@ -112,6 +112,19 @@ def limit_warning(info: Optional[dict], now: Optional[float] = None) -> Optional
     return None
 
 
+def limit_warning_key(info: Optional[dict]) -> Optional[str]:
+    """Which warning ``limit_warning`` would give, as a key that stays the same
+    while the percentage creeps up: said once per limit window."""
+    if not isinstance(info, dict):
+        return None
+    if info.get("status") not in (None, "allowed", "allowed_warning"):
+        return f"reached:{info.get('resetsAt')}"
+    for name, used, resets in _windows(info):
+        if used >= LIMIT_WARNING:
+            return f"{name}:{int(resets)}"
+    return None
+
+
 def friendly_error(text: str, now: Optional[float] = None) -> str:
     """A turn's error in plain words where it's a usage limit
     ("Claude AI usage limit reached|1791338400")."""

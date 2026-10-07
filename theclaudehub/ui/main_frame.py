@@ -47,7 +47,8 @@ from typing import Dict, List, Optional
 
 import wx
 
-from .. import __version__, announce, attachments, bugreport, export, hub, platform_paths
+from .. import (__version__, announce, attachments, bugreport, export, hub, platform_paths,
+               usage)
 from ..claude_cli import (PERMISSION_MODES, PermissionRequest, ResumeRefused, TurnEvent,
                           TurnRunner, allow_response, answer_questions_response,
                           build_fork_command, build_new_command, build_resume_command,
@@ -125,6 +126,12 @@ class MainFrame(wx.Frame):
         self._drafts: Dict[str, str] = {}  # unsent reply text, per session
         self._queued: Dict[str, str] = {}  # sent during a turn, goes when it ends
         self._attachments: Dict[str, List[str]] = {}  # per session, for its next message
+        # Usage limits and context (#19): the latest limits any turn reported
+        # (they're the account's), each own session's context window, and
+        # what's been warned about already, so it's said once.
+        self._limits: Optional[dict] = None
+        self._windows: Dict[str, int] = {}
+        self._warned: set = set()
         # What Claude is waiting for you to answer, per session, oldest first
         # (#187, #188). The turn is paused until each is answered.
         self._pending: Dict[str, List[PermissionRequest]] = {}
@@ -216,6 +223,7 @@ class MainFrame(wx.Frame):
         self.Bind(wx.EVT_MENU, self.on_toggle_activity_menu, self.activity_item)
         self._item(view, "Sto&p Running Turn\tCtrl+.", self.on_stop)
         self._item(view, "T&urn Status\tCtrl+Shift+T", self.on_turn_status)
+        self._item(view, "Usage and &Context\tCtrl+Shift+U", lambda e: self.on_usage())
         self._item(view, "Repeat &Last Announcement\tCtrl+Shift+R",
                    lambda e: self._say(self._last_announcement, force=True))
         bar.Append(view, "&View")
@@ -888,6 +896,7 @@ class MainFrame(wx.Frame):
             return
         before_keys = {m.key for m in self._chat_messages}
         self._chat_messages = messages
+        self._check_context()
         self._rebuild_chat_list(focus_newest=first_load)
         self._chat_loaded = True
         if first_load:
@@ -1262,6 +1271,39 @@ class MainFrame(wx.Frame):
                 label = "Ready."
             if self.turn_status.GetLabel() != label:
                 self.turn_status.SetLabel(label)
+
+    def _context(self, info: Optional[SessionInfo]):
+        """(tokens, window) for a session, from its transcript as read."""
+        if info is None or self._reader is None or self._open is None \
+                or info.key != self._open.key:
+            return 0, 0
+        transcript = self._reader.transcript
+        reported = self._windows.get(info.cli_session_id, 0) if info.is_own else 0
+        window = usage.context_window(transcript.model, transcript.context_tokens, reported)
+        return transcript.context_tokens, window
+
+    def on_usage(self):
+        """View, Usage and Context (Ctrl+Shift+U): how full the loaded
+        session's context is, and how much of the plan's limits are used."""
+        parts = []
+        if self._open is not None:
+            tokens, window = self._context(self._open)
+            parts.append(f"{self._open.title}: {usage.context_text(tokens, window)}")
+        parts.append(usage.limits_text(self._limits))
+        self._feedback(" ".join(parts))
+
+    def _check_context(self):
+        """Say once when the loaded session's context passes 80%."""
+        info = self._open
+        tokens, window = self._context(info)
+        key = ("context", info.cli_session_id if info else "")
+        if info is None or usage.context_share(tokens, window) < usage.CONTEXT_WARNING:
+            return
+        if key in self._warned:
+            return
+        self._warned.add(key)
+        self._say(f"{info.title}: {usage.context_text(tokens, window)} Claude Code will "
+                  "compact the conversation when it's full; /compact does it now.")
 
     def on_turn_status(self, _event=None):
         """How long the running turn has taken, and what it is doing."""
@@ -1739,6 +1781,18 @@ class MainFrame(wx.Frame):
             if is_open_now and self._show_activity:
                 self._queue_activity("text", event.text)
             return
+        if event.kind == "limits" and event.data is not None:
+            self._limits = event.data
+            warning = usage.limit_warning(event.data)
+            key = ("limit", usage.limit_warning_key(event.data))
+            if warning and key not in self._warned:
+                self._warned.add(key)
+                self._say(warning)
+            return
+        if event.kind == "compacted":
+            self._warned.discard(("context", session_id))
+            self._say(f"{title}: Claude Code compacted the conversation to free the context.")
+            return
         if event.kind == "denied":
             self._denials.setdefault(session_id, []).append(event.text)
             self._status(f"{title}: permission denied, {event.text}")
@@ -1760,6 +1814,8 @@ class MainFrame(wx.Frame):
             # Nothing can be waiting once the turn is over.
             self._pending.pop(session_id, None)
             parser = getattr(self._runners.get(session_id), "parser", None)
+            if parser is not None and getattr(parser, "context_window", 0):
+                self._windows[session_id] = parser.context_window
             if parser is not None and parser.commands:
                 self._commands[_folder_key(self._runners[session_id].cwd)] = \
                     usable_commands(parser.commands)
@@ -1803,7 +1859,7 @@ class MainFrame(wx.Frame):
                               unread=not is_open,
                               last_activity_ms=int(time.time() * 1000))
             if event.kind == "failed" or event.is_error:
-                spoken = f"{title}: the turn failed. {event.text}"
+                spoken = f"{title}: the turn failed. {usage.friendly_error(event.text)}"
                 self._say(spoken)
             else:
                 text = announce.reply_text(title, event.text, self.speech.announce)

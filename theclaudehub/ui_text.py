@@ -63,6 +63,8 @@ SHORTCUTS = [
                          "Alt+F); Delete in the attachments list removes one"),
         ("Ctrl+V with a picture copied", "Attach the picture (a screenshot from Win+Shift+S, "
                                          "say)"),
+        ("Ctrl+Shift+U", "Usage and context: how full the loaded session's context is, and "
+                         "how much of your plan's limits are used"),
         ("Ctrl+Shift+T", "Turn status: how long Claude has been working, on what, "
                          "and whether a message is queued"),
     ]),

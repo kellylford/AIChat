@@ -3,8 +3,10 @@
 Why the command line, and how it stays on the subscription
 ---------------------------------------------------------
 ``claude -p`` (print / headless mode) runs a turn under the same login as
-the desktop app and the terminal, so it costs nothing beyond the
-subscription. The things that would change that are all ruled out here:
+the desktop app and the terminal: the subscription, never an API key. (Claude
+plans count ``claude -p`` against a monthly Agent SDK credit; past it, turns
+stop unless extra usage is on. usage.py reports the limits a turn sees.) The
+things that would move a turn off the subscription are all ruled out here:
 
 * **Never ``--bare``.** Bare mode skips the OAuth login and requires an API key.
 * **A host session's variables don't reach the child.** If TheClaudeHub is
@@ -493,6 +495,8 @@ class TurnEvent:
     raw_type: str = ""
     request: Optional[PermissionRequest] = None
     detail: str = ""
+    #: For "limits": the rate_limit_event's rate_limit_info (#19).
+    data: Optional[dict] = None
 
 
 class StreamParser:
@@ -510,6 +514,8 @@ class StreamParser:
         #: Control requests TheClaudeHub can't answer (not ``can_use_tool``);
         #: the runner refuses them so the CLI doesn't wait.
         self.unsupported_requests: List[str] = []
+        #: The model's context window, from the result's modelUsage (#19).
+        self.context_window = 0
 
     def feed(self, line: str) -> List[TurnEvent]:
         line = line.strip()
@@ -564,6 +570,13 @@ class StreamParser:
                     self.commands = [c for c in commands
                                      if isinstance(c, dict) and isinstance(c.get("name"), str)]
             return []
+        if etype == "rate_limit_event":
+            info = event.get("rate_limit_info")
+            if isinstance(info, dict) and info:
+                return [TurnEvent("limits", session_id=self.session_id, data=info)]
+            return []
+        if etype == "system" and subtype == "compact_boundary":
+            return [TurnEvent("compacted", session_id=self.session_id)]
         if etype == "system" and subtype == "init":
             source = event.get("apiKeySource")
             self.api_key_source = source if isinstance(source, str) else None
@@ -598,6 +611,12 @@ class StreamParser:
             return events
         if etype == "result":
             self.finished = True
+            models = event.get("modelUsage")
+            if isinstance(models, dict):
+                windows = [m.get("contextWindow") for m in models.values()
+                           if isinstance(m, dict) and isinstance(m.get("contextWindow"), int)]
+                if windows:
+                    self.context_window = max(windows)
             denials = event.get("permission_denials")
             denial_text = [describe_denial(d) for d in denials] if isinstance(denials, list) else []
             is_error = bool(event.get("is_error")) or (subtype not in ("", "success"))
