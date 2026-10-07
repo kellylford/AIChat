@@ -731,3 +731,31 @@ def test_fetch_commands_gives_nothing_for_a_missing_folder_or_no_answer(tmp_path
                               popen=lambda *a, **k: pytest.fail("must not start")) == []
     assert cli.fetch_commands("claude.exe", str(tmp_path),
                               popen=lambda *a, **k: FakeProcess([])) == []
+
+
+def test_init_reports_the_model_in_use():
+    from theclaudehub.claude_cli import model_matches
+    parser = StreamParser()
+    events = parser.feed(ev(type="system", subtype="init", session_id="s1",
+                            apiKeySource="none", model="claude-sonnet-5-5"))
+    assert events[0].kind == "started" and events[0].data == {"model": "claude-sonnet-5-5"}
+    assert model_matches("sonnet", "claude-sonnet-5-5")
+    assert not model_matches("opus", "claude-sonnet-5-5")
+    assert model_matches("", "claude-fable-5-1") and model_matches("opus", "")
+    assert model_matches("claude-opus-5-5", "claude-opus-5-5")
+    assert model_matches("claude-opus-5-5", "claude-opus-5-5-20261001")
+    assert not model_matches("claude-opus-5", "claude-opus-55")
+    assert model_matches("claude-opus-5-5", "claude-opus-5-5[1m]")
+    # No model, or not a string: nothing to compare.
+    for model in (None, 5):
+        event = StreamParser().feed(ev(type="system", subtype="init", session_id="s1",
+                                       apiKeySource="none", model=model))[0]
+        assert event.data == {"model": ""}
+
+
+def test_model_ids_as_words():
+    from theclaudehub.claude_cli import model_spoken
+    assert model_spoken("claude-sonnet-5-5") == "Sonnet 5.5"
+    assert model_spoken("claude-haiku-4-5-20251001") == "Haiku 4.5"
+    assert model_spoken("claude-opus-5-5[1m]") == "Opus 5.5"
+    assert model_spoken("something-else") == "something-else"
