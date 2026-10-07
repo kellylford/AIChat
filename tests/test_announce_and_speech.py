@@ -200,3 +200,15 @@ def test_activity_text_cuts_long_details():
     from theclaudehub.announce import activity_text
     said = activity_text([("tool", "Bash: " + "word " * 60)], "full")
     assert said.endswith("…") and len(said) < 140
+
+
+@pytest.mark.parametrize("items,level,said", [
+    ([("tool", "Read: a"), ("tool", "Bash: b"), ("tool", "Read: c"), ("tool", "Bash: d")],
+     "full", "Using Read twice and Bash twice."),
+    ([("tool", "Read: a"), ("tool", "Read: b")], "summary", "Using Read twice."),
+    ([("tool", "mcp__github__create_issue: Fix it")], "full", "Using github create issue: Fix it."),
+    ([("tool", "mcp__github__create_issue: Fix it")], "summary", "Using github create issue."),
+])
+def test_activity_text_counts_and_names(items, level, said):
+    from theclaudehub.announce import activity_text
+    assert activity_text(items, level) == said

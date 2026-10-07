@@ -1845,3 +1845,32 @@ def test_desktop_session_tool_calls_are_spoken(frame, env):
     frame._activity_timer.Stop()
     frame._flush_activity()
     assert env["feedback"][-1] == "Using Bash: make."
+
+
+def test_last_note_waits_for_a_tool_call_so_a_slow_finish_says_the_reply_once(frame, env):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame._runners["own-1"] = FakeRunner([], "", "", None)
+    frame._set_activity(True)
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("tool", text="Bash", detail="Bash: make"))
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("text", text="All built."))
+    frame._activity_timer.Stop()
+    frame._flush_activity()
+    assert env["feedback"][-1] == "Using Bash: make."  # the note is held back
+    assert frame._activity == [("text", "All built.")]
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("finished", text="All built."))
+    assert frame._activity == []
+    assert sum("All built" in said for said in env["feedback"] + env["spoken"]) == 1
+
+
+def test_a_desktop_reply_drops_tool_calls_still_waiting(frame, env):
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    frame._set_activity(True)
+    frame._queue_activity("tool", "Bash: npm test")
+    from theclaudehub.transcript import ASSISTANT, ChatMessage
+    frame._chat_loaded = True
+    frame._apply_chat(frame._open_generation, True,
+                      [ChatMessage(ASSISTANT, "Tests pass.", "", "r1")], 0, None)
+    assert frame._activity == [] and frame._activity_timer is None
+    assert env["spoken"][-1].startswith("Quiet one replied. Tests pass")

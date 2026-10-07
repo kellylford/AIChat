@@ -176,7 +176,7 @@ def status_text(text: str, limit: int = 150) -> str:
 
 
 __all__ = ["first_sentence", "reply_text", "turn_end_text", "status_text",
-           "sent_text", "queued_text",
+           "sent_text", "queued_text", "activity_text",
            "ANNOUNCE_FULL", "ANNOUNCE_SUMMARY", "ANNOUNCE_SILENT"]
 
 
@@ -209,7 +209,8 @@ def activity_text(items, level: str) -> Optional[str]:
             return
         if level == ANNOUNCE_FULL and len(run) <= ACTIVITY_LIST_MAX:
             def short(detail):
-                detail = " ".join(detail.split())
+                name, sep, rest = detail.partition(":")
+                detail = " ".join((tool_name_spoken(name) + sep + rest).split())
                 return detail if len(detail) <= ACTIVITY_DETAIL_LIMIT \
                     else _cut_at_word(detail, ACTIVITY_DETAIL_LIMIT) + "…"
             listed = "; ".join(short(d) for d in run)
@@ -217,13 +218,21 @@ def activity_text(items, level: str) -> Optional[str]:
         else:
             names = []  # (name, count), consecutive repeats merged
             for detail in run:
-                name = detail.split(":", 1)[0].strip() or "a tool"
+                name = tool_name_spoken(detail.split(":", 1)[0])
                 if names and names[-1][0] == name:
                     names[-1] = (name, names[-1][1] + 1)
                 else:
                     names.append((name, 1))
-            said = [f"{n} {c} times" if c > 1 else n for n, c in names]
-            parts.append(_end_sentence("Using " + ", then ".join(said)))
+            if len(names) > ACTIVITY_LIST_MAX:
+                # Back and forth (Read, Bash, Read, Bash): count each tool once.
+                totals = {}
+                for name, count in names:
+                    totals[name] = totals.get(name, 0) + count
+                said = [_times(n, c) for n, c in totals.items()]
+                parts.append(_end_sentence("Using " + _and_list(said)))
+            else:
+                said = [_times(n, c) for n, c in names]
+                parts.append(_end_sentence("Using " + ", then ".join(said)))
         run.clear()
 
     for kind, text in items:
@@ -243,3 +252,23 @@ def activity_text(items, level: str) -> Optional[str]:
             parts.append(_cut_at_word(words, OWN_LIMIT) + "…")
     end_run()
     return " ".join(parts) or None
+
+
+def tool_name_spoken(name: str) -> str:
+    """A tool's name as it reads aloud: an MCP tool's "mcp__github__create_issue"
+    is "github create issue"."""
+    name = (name or "").strip() or "a tool"
+    if name.startswith("mcp__"):
+        name = " ".join(part.replace("_", " ") for part in name[5:].split("__") if part)
+    return name or "a tool"
+
+
+def _times(name: str, count: int) -> str:
+    if count == 1:
+        return name
+    return f"{name} twice" if count == 2 else f"{name} {count} times"
+
+
+def _and_list(items) -> str:
+    items = list(items)
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]

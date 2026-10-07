@@ -832,6 +832,8 @@ class MainFrame(wx.Frame):
                     self._queue_activity("tool", message.text)
         fresh = [m for m in messages if m.key not in before_keys and m.kind in _REPLY_KINDS]
         if fresh:
+            # The reply is the news now; tool calls before it are old.
+            self._clear_activity()
             text = announce.reply_text(self._open.title, fresh[-1].text, self.speech.announce)
             if text:
                 self._say(text)
@@ -850,9 +852,17 @@ class MainFrame(wx.Frame):
             self._activity_timer = wx.CallLater(ACTIVITY_DELAY_MS, self._flush_activity)
 
     def _flush_activity(self):
+        if not self:
+            return
         self._activity_timer = None
         items, self._activity = self._activity, []
-        if not self or self._open is None or not self._show_activity:
+        # What Claude wrote last waits for a tool call after it: if none comes,
+        # it was the reply, which the end of the turn announces (and drops).
+        held = []
+        while items and items[-1][0] == "text":
+            held.insert(0, items.pop())
+        self._activity = held
+        if self._open is None or not self._show_activity:
             return
         text = announce.activity_text(items, self.speech.announce)
         if text:
