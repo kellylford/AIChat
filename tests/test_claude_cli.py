@@ -696,3 +696,38 @@ def test_tool_events_say_what_the_tool_acts_on():
         {"type": "tool_use", "name": "Task", "input": {}}]}))
     assert [(e.text, e.detail) for e in events] == [("Bash", "Bash: git status"),
                                                     ("Task", "Task")]
+
+
+# -- slash commands and skills (#23) --------------------------------------------------------
+
+
+def test_usable_commands_puts_yours_first_and_hides_internal_ones():
+    commands = [{"name": "compact", "builtin": True}, {"name": "zeta"}, {"name": "__remote"},
+                {"name": "Alpha"}, {"description": "no name"}, "junk", {"name": ""}]
+    assert [c["name"] for c in cli.usable_commands(commands)] == ["Alpha", "zeta", "compact"]
+
+
+def test_fetch_commands_asks_only_for_initialize_and_closes(tmp_path):
+    answer = ev(type="control_response", response={
+        "subtype": "success", "request_id": cli.INIT_REQUEST_ID,
+        "response": {"commands": [{"name": "context", "builtin": True}, {"name": "mine"}]}})
+    process = FakeProcess([answer])
+    seen = {}
+
+    def popen(command, **kwargs):
+        seen["command"] = command
+        seen.update(kwargs)
+        return process
+    commands = cli.fetch_commands("claude.exe", str(tmp_path), popen=popen)
+    assert [c["name"] for c in commands] == ["mine", "context"]
+    assert "--resume" not in seen["command"] and "--session-id" not in seen["command"]
+    sent = [json.loads(line) for line in process.written.decode("utf-8").splitlines()]
+    assert [m["type"] for m in sent] == ["control_request"]  # no user message: no turn
+    assert seen["cwd"] == str(tmp_path)
+
+
+def test_fetch_commands_gives_nothing_for_a_missing_folder_or_no_answer(tmp_path):
+    assert cli.fetch_commands("claude.exe", str(tmp_path / "gone"),
+                              popen=lambda *a, **k: pytest.fail("must not start")) == []
+    assert cli.fetch_commands("claude.exe", str(tmp_path),
+                              popen=lambda *a, **k: FakeProcess([])) == []

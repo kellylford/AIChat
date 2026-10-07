@@ -82,6 +82,14 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
 - **Escape** in the messages or the reply box (or Backspace in the messages) goes back to the
   session list, on the same session. Enter there on the session that's already loaded takes you
   back to its messages where you left them, without reloading.
+- **Commands and skills** (Ctrl+/, Session, Insert Command or Skill), in TheClaudeHub's own
+  sessions: a searchable list of your skills and custom commands, then Claude Code's own
+  (/compact, /context, /code-review and the rest), each with its description and what it
+  takes. Type to filter by name or description, Down to the list, Enter to choose: it goes
+  at the start of the reply box ("/compact "), replacing a command already there and keeping
+  what you typed, ready to finish and send. The list is Claude Code's own for the session's
+  folder, asked for in the background when the session loads (no turn, no cost) and kept
+  current by each turn.
 - **Export** (Ctrl+E, Session, Export Session) saves the selected session's conversation,
   or the loaded one's, to a file: **Markdown**, a **web page** (formatted like the full-message
   view, nothing fetched from the internet) or **plain text**, chosen by the Save as type list
@@ -263,6 +271,7 @@ shows it as plain text instead.
 | Session list | Ctrl+N | New TheClaudeHub session |
 | Session list | Ctrl+G | Add the selected session to a group |
 | Anywhere | Ctrl+E | Export the session to a file |
+| Reply box | Ctrl+/ | Insert a slash command or skill |
 | Anywhere | Alt+V, H | Show Sessions: choose which sessions are listed |
 | Anywhere | Ctrl+Shift+N | Continue the selected (or loaded) desktop app session here, as a copy |
 | Session list | F5 | Refresh the list now and put it in order |

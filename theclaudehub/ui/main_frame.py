@@ -50,7 +50,7 @@ from .. import __version__, announce, bugreport, export, hub, platform_paths
 from ..claude_cli import (PERMISSION_MODES, PermissionRequest, ResumeRefused, TurnEvent,
                           TurnRunner, allow_response, answer_questions_response,
                           build_fork_command, build_new_command, build_resume_command,
-                          deny_response,
+                          deny_response, fetch_commands, usable_commands,
                           describe_elapsed, model_label, new_session_id)
 from ..hub import Snapshot, collect, finished_turns, last_reply_from_tail
 from ..own_store import OwnSession, OwnSessionStore
@@ -65,7 +65,7 @@ from .a11y import set_accessible_name, set_list_items_accessible
 from ..rendering import html_page, message_page
 from ..ui_text import shortcuts_html
 from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, FormattedMessageDialog,
-                      BugReportDialog, MessageDialog, NewSessionDialog, PermissionDialog, PlanDialog,
+                      BugReportDialog, CommandPickerDialog, MessageDialog, NewSessionDialog, PermissionDialog, PlanDialog,
                       ManageGroupsDialog, QuestionDialog, SettingsDialog, ShortcutsDialog,
                       formatted_view_available)
 
@@ -107,6 +107,9 @@ class MainFrame(wx.Frame):
         self._denials: Dict[str, List[str]] = {}
         self._pending_refresh: Optional[bool] = None
         self._claude_version = ""  # for bug reports; found in the background
+        # Slash commands and skills per folder (#23), fetched in the background.
+        self._commands: Dict[str, List[dict]] = {}
+        self._commands_fetching: set = set()
         self._last_announcement = ""
 
         # Session view state.
@@ -171,6 +174,8 @@ class MainFrame(wx.Frame):
                    lambda e: self.refresh_sessions(force=True, resort=True))
         self._item(session, "&Forget TheClaudeHub Session...", self.on_forget)
         self._item(session, "&Export Session...\tCtrl+E", lambda e: self.on_export())
+        self._item(session, "Insert Command or S&kill...\tCtrl+/",
+                   lambda e: self.on_insert_command())
         session.AppendSeparator()
         self._item(session, "Add to &Group...\tCtrl+G", lambda e: self.on_add_to_group())
         self._item(session, "Remove from Gro&up...", lambda e: self.on_remove_from_group())
@@ -701,6 +706,8 @@ class MainFrame(wx.Frame):
             if self.session_list.GetSelection() != row:
                 self.session_list.SetSelection(row)
         self.SetTitle(f"{info.title} \u2014 {APP_NAME}")
+        if info.is_own:
+            self._fetch_commands(info.cwd)  # ready by the time you want them
         self.chat_list.SetFocus()
         self._refresh_chat()
         self._chat_timer.Start(CHAT_REFRESH_MS)
@@ -1607,6 +1614,9 @@ class MainFrame(wx.Frame):
         if event.kind in ("finished", "failed"):
             # Nothing can be waiting once the turn is over.
             self._pending.pop(session_id, None)
+            parser = getattr(self._runners.get(session_id), "parser", None)
+            if parser is not None and parser.commands:
+                self._commands[self._runners[session_id].cwd] = usable_commands(parser.commands)
             if is_open_now:
                 # The reply is announced next; activity not yet spoken is
                 # older news, and its last text is that same reply.
@@ -2035,6 +2045,78 @@ class MainFrame(wx.Frame):
             self._restart_timers()
             self._say("Couldn't install the update. It will be tried again the next time "
                       "TheClaudeHub starts.", force=True)
+
+    # ------------------------------------------- slash commands and skills (#23)
+
+    def _fetch_commands(self, cwd: str, then=None):
+        """Get the folder's commands in the background (no turn, no cost)."""
+        if not cwd or cwd in self._commands_fetching:
+            return
+        lookup = platform_paths.find_claude()
+        if not lookup.path:
+            return
+        self._commands_fetching.add(cwd)
+
+        def work():
+            commands = fetch_commands(lookup.path, cwd)
+            wx.CallAfter(self._commands_fetched, cwd, commands, then)
+        self._pool.submit(work)
+
+    def _commands_fetched(self, cwd: str, commands: List[dict], then):
+        self._commands_fetching.discard(cwd)
+        if not self:
+            return
+        if commands:
+            self._commands[cwd] = commands
+        if then is not None:
+            then()
+
+    def on_insert_command(self):
+        """Session, Insert Command or Skill (Ctrl+/): choose one of Claude
+        Code's slash commands or your skills; it goes at the start of the
+        reply box, ready to finish and send."""
+        info = self._open
+        if info is None or not info.is_own:
+            self._feedback("Commands and skills are for TheClaudeHub's own sessions: load one "
+                           "first.")
+            return
+        commands = self._commands.get(info.cwd)
+        if commands is None:
+            if info.cwd in self._commands_fetching:
+                self._feedback("Still getting the commands for this folder.")
+                return
+            self._feedback("Getting the commands for this folder.")
+            key = info.key
+
+            def when_ready():
+                if self._open is not None and self._open.key == key and info.cwd in self._commands:
+                    self.on_insert_command()
+                elif info.cwd not in self._commands:
+                    self._feedback("Couldn't get the commands from Claude Code.")
+            self._fetch_commands(info.cwd, then=when_ready)
+            return
+        dialog = CommandPickerDialog(self, commands)
+        try:
+            if dialog.ShowModal() != wx.ID_OK or dialog.chosen is None:
+                self.reply_text.SetFocus()
+                return
+            chosen = dialog.chosen
+        finally:
+            dialog.Destroy()
+        self._insert_command(chosen["name"])
+
+    def _insert_command(self, name: str):
+        """Put ``/name `` at the start of the reply, replacing a command
+        that's already there, keeping the rest of what you typed."""
+        text = self.reply_text.GetValue()
+        rest = text.lstrip()
+        if rest.startswith("/"):
+            rest = rest.split(None, 1)[1] if len(rest.split(None, 1)) > 1 else ""
+        command = f"/{name} "
+        self.reply_text.SetValue(command + rest)
+        self.reply_text.SetFocus()
+        self.reply_text.SetInsertionPoint(len(command))
+        self._feedback(f"Inserted /{name}.")
 
     def on_report_bug(self):
         """Help, Report a Bug (#28): what happened, plus non-sensitive facts
