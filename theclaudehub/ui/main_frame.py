@@ -54,8 +54,10 @@ from ..claude_cli import (PERMISSION_MODES, PermissionRequest, ResumeRefused, Tu
                           describe_elapsed, model_label, new_session_id)
 from ..hub import Snapshot, collect, finished_turns, last_reply_from_tail
 from ..own_store import OwnSession, OwnSessionStore
-from ..sessions import (IDLE, NEEDS_YOU, SORT_ORDERS, SORT_SPOKEN, WORKING,
-                        SessionInfo)
+from ..groups import GroupStore
+from ..sessions import (GROUP_VIEW_PREFIX, IDLE, NEEDS_YOU, SORT_ORDERS, SORT_SPOKEN,
+                        VIEW_ALL, VIEWS, WORKING,
+                        SessionInfo, group_view, in_view, view_spoken)
 from ..speech import SpeechSettings, default_options, list_speech_options, speaker
 from ..transcript import ASSISTANT, ERROR, PLAN, QUESTION, TOOL, ChatMessage, TranscriptReader
 from ..updater import AVAILABLE, FAILED, CheckResult, UpdateService
@@ -64,7 +66,7 @@ from ..rendering import html_page, message_page
 from ..ui_text import shortcuts_html
 from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, FormattedMessageDialog,
                       MessageDialog, NewSessionDialog, PermissionDialog, PlanDialog,
-                      QuestionDialog, SettingsDialog, ShortcutsDialog,
+                      ManageGroupsDialog, QuestionDialog, SettingsDialog, ShortcutsDialog,
                       formatted_view_available)
 
 APP_NAME = "TheClaudeHub"
@@ -88,6 +90,7 @@ class MainFrame(wx.Frame):
                  check_updates_at_start: bool = True):
         super().__init__(None, title=APP_NAME, size=_fitting_size(1000, 720))
         self.store = store or OwnSessionStore()
+        self.groups = GroupStore()
         self.updates = updates or UpdateService(__version__)
         self._update_busy = False
         self.speech = SpeechSettings.load()
@@ -140,6 +143,9 @@ class MainFrame(wx.Frame):
         if self.store.load_error:
             wx.CallAfter(wx.MessageBox, self.store.load_error, APP_NAME,
                          wx.OK | wx.ICON_WARNING, self)
+        if self.groups.load_error:
+            wx.CallAfter(wx.MessageBox, self.groups.load_error, APP_NAME,
+                         wx.OK | wx.ICON_WARNING, self)
         self.refresh_sessions()
         self.session_list.SetFocus()
         if check_updates_at_start:
@@ -163,6 +169,10 @@ class MainFrame(wx.Frame):
                    lambda e: self.refresh_sessions(force=True, resort=True))
         self._item(session, "&Forget TheClaudeHub Session...", self.on_forget)
         session.AppendSeparator()
+        self._item(session, "Add to &Group...\tCtrl+G", lambda e: self.on_add_to_group())
+        self._item(session, "Remove from Gro&up...", lambda e: self.on_remove_from_group())
+        self._item(session, "&Manage Groups...", lambda e: self.on_manage_groups())
+        session.AppendSeparator()
         self._item(session, "&Settings...\tCtrl+,", self.on_settings, wx.ID_PREFERENCES)
         session.AppendSeparator()
         self._item(session, "E&xit", lambda e: self.Close(), wx.ID_EXIT)
@@ -182,6 +192,11 @@ class MainFrame(wx.Frame):
             self.Bind(wx.EVT_MENU, lambda e, o=order: self.on_sort(o), item)
             self.sort_items[order] = item
         view.AppendSubMenu(sort_menu, "S&ort Sessions")
+        # Which sessions to list (#32): radio items, groups at the end (#31).
+        self.show_menu = wx.Menu()
+        self.view_items = {}
+        view.AppendSubMenu(self.show_menu, "S&how Sessions")
+        self._build_show_menu()
         view.AppendSeparator()
         self._item(view, "Read &Full Message", lambda e: self.on_read_message())
         self.activity_item = view.AppendCheckItem(wx.ID_ANY, "Show &Tool Activity\tCtrl+T")
@@ -214,7 +229,8 @@ class MainFrame(wx.Frame):
         outer = wx.BoxSizer(wx.HORIZONTAL)
 
         left = wx.BoxSizer(wx.VERTICAL)
-        left.Add(wx.StaticText(root, label="Session &list:"), 0, wx.LEFT | wx.TOP, 8)
+        self.sessions_label = wx.StaticText(root, label="Session &list:")
+        left.Add(self.sessions_label, 0, wx.LEFT | wx.TOP, 8)
         self.session_list = wx.ListBox(root, style=wx.LB_SINGLE, name="Session list")
         set_accessible_name(self.session_list, "Session list")
         left.Add(self.session_list, 1, wx.EXPAND | wx.ALL, 8)
@@ -480,7 +496,18 @@ class MainFrame(wx.Frame):
         self._first_snapshot = False
         keep_order = (not resort and not first
                       and wx.Window.FindFocus() is self.session_list)
-        self._update_session_list(snap.sessions, keep_order=keep_order)
+        shown = self._in_current_view(snap.sessions)
+        if keep_order:
+            # A session leaving the view (it stopped needing you) stays while
+            # you're on it, so the row under you doesn't change; F5 or leaving
+            # the list puts the view right.
+            index = self.session_list.GetSelection()
+            if 0 <= index < len(self._list_keys):
+                selected = self._list_keys[index]
+                if selected not in {s.key for s in shown}:
+                    shown += [s for s in snap.sessions if s.key == selected]
+        self._update_session_list(shown, keep_order=keep_order)
+        self._update_list_label(len(shown))
 
         if not first and self.speech.announce_all_sessions:
             for info in ended:
@@ -501,10 +528,13 @@ class MainFrame(wx.Frame):
                 self._open = current
                 self._update_heading()
         if first or force:
-            waiting = sum(1 for s in snap.sessions if s.state == NEEDS_YOU)
-            working = sum(1 for s in snap.sessions if s.state == WORKING)
-            text = (f"{len(snap.sessions)} sessions: {waiting} need you, "
+            current = [s for s in snap.sessions if not s.archived]
+            waiting = sum(1 for s in current if s.state == NEEDS_YOU)
+            working = sum(1 for s in current if s.state == WORKING)
+            text = (f"{len(current)} sessions: {waiting} need you, "
                     f"{working} working.")
+            if self.speech.session_view != VIEW_ALL:
+                text += f" Showing {view_spoken(self.speech.session_view)}: {len(shown)}."
             if snap.unreadable_files:
                 text += f" Couldn't read {snap.unreadable_files} session files."
             if force and not first:
@@ -601,6 +631,10 @@ class MainFrame(wx.Frame):
             return
         if not self._store_write(self.store.remove, info.cli_session_id):
             return
+        try:
+            self.groups.forget(info.key)
+        except OSError:
+            pass  # a gone session in a group is harmless; it isn't listed
         if self._open is not None and self._open.key == info.key:
             self.unload_session()
             # Its messages and reply box are gone: don't leave focus on them.
@@ -1428,6 +1462,10 @@ class MainFrame(wx.Frame):
             if reported and reported != session_id and session_id in self._runners:
                 # Claude chose a different id than the one we asked for.
                 self._store_write(self.store.rename_id, session_id, reported)
+                try:
+                    self.groups.rename_key(f"own:{session_id}", f"own:{reported}")
+                except OSError:
+                    pass  # its groups lose it; nothing else does
                 self._runners[reported] = self._runners.pop(session_id)
                 self._denials[reported] = self._denials.pop(session_id, [])
                 for per_session in (self._drafts, self._queued, self._pending):
@@ -1574,6 +1612,171 @@ class MainFrame(wx.Frame):
         self._feedback("Stopping.")
 
     # ------------------------------------------------------- settings, about
+
+    # ------------------------------------------------- views and groups (#31, #32)
+
+    def _build_show_menu(self):
+        """View, Show Sessions: the fixed views, then one item per group."""
+        for item in list(self.show_menu.GetMenuItems()):
+            self.Unbind(wx.EVT_MENU, id=item.GetId())
+            self.show_menu.Delete(item)
+        self.view_items = {}
+        choices = list(VIEWS)
+        names = self.groups.names()
+        for name in names:
+            choices.append((group_view(name), "Group: " + name.replace("&", "&&")))
+        if self.speech.session_view not in [v for v, _label in choices]:
+            self.speech.session_view = VIEW_ALL  # its group is gone
+            try:
+                self.speech.save()
+            except OSError:
+                pass
+        for index, (view, label) in enumerate(choices):
+            if index == len(VIEWS) and names:
+                self.show_menu.AppendSeparator()
+            item = self.show_menu.AppendRadioItem(wx.ID_ANY, label)
+            self.Bind(wx.EVT_MENU, lambda e, v=view: self.on_view(v), item)
+            self.view_items[view] = item
+        for view, item in self.view_items.items():
+            item.Check(view == self.speech.session_view)
+
+    def _in_current_view(self, sessions: List[SessionInfo]) -> List[SessionInfo]:
+        """The sessions the list shows now, each told its groups for its row."""
+        for info in sessions:
+            info.groups = tuple(self.groups.groups_of(info.key))
+        return [s for s in sessions if in_view(s, self.speech.session_view)]
+
+    def _update_list_label(self, shown: int):
+        """The list's label, and so its name, says what it's showing."""
+        view = self.speech.session_view
+        rest = ""
+        if view != VIEW_ALL:
+            total = sum(1 for s in self._snapshot.sessions if not s.archived)
+            rest = f", {view_spoken(view)}, {shown} of {total}"
+        label = "Session list" + rest
+        # Alt+L stays on "list" whatever follows it.
+        shown_label = "Session &list" + rest.replace("&", "&&") + ":"
+        if self.sessions_label.GetLabel() != shown_label:
+            self.sessions_label.SetLabel(shown_label)
+            set_accessible_name(self.session_list, label)
+
+    def on_view(self, view: str):
+        """View, Show Sessions: list only these, and remember it."""
+        self.speech.session_view = view
+        if view in self.view_items:
+            self.view_items[view].Check(True)
+        try:
+            self.speech.save()
+        except OSError as exc:
+            self._status(f"Couldn't save which sessions to show: {exc}")
+        shown = self._in_current_view(list(self._snapshot.sessions))
+        self._update_session_list(shown)
+        self._update_list_label(len(shown))
+        count = "no sessions" if not shown else (
+            "1 session" if len(shown) == 1 else f"{len(shown)} sessions")
+        self._feedback(f"Showing {view_spoken(view)}: {count}.")
+
+    def _group_target(self) -> Optional[SessionInfo]:
+        info = self._selected_session()
+        if info is None:
+            self._feedback("No session selected.")
+        return info
+
+    def _choose(self, title: str, prompt: str, choices: List[str]) -> Optional[int]:
+        """A standard single-choice list (wx's own dialog, which screen
+        readers handle well). The chosen index, or None."""
+        dialog = wx.SingleChoiceDialog(self, prompt, title, choices)
+        try:
+            if dialog.ShowModal() != wx.ID_OK:
+                return None
+            return dialog.GetSelection()
+        finally:
+            dialog.Destroy()
+
+    def _ask_group_name(self, title: str, value: str = "") -> Optional[str]:
+        dialog = wx.TextEntryDialog(self, "Group name:", title, value)
+        try:
+            if dialog.ShowModal() != wx.ID_OK:
+                return None
+            return dialog.GetValue()
+        finally:
+            dialog.Destroy()
+
+    def on_add_to_group(self):
+        info = self._group_target()
+        if info is None:
+            return
+        names = self.groups.names()
+        current = set(self.groups.groups_of(info.key))
+        choices = [f"{n} (already in it)" if n in current else n for n in names]
+        choices.append("New group...")
+        index = self._choose("Add to Group", f"Add {info.title} to:", choices)
+        if index is None:
+            return
+        try:
+            if index == len(names):
+                name = self._ask_group_name("New Group")
+                if name is None:
+                    return
+                name = self.groups.create(name)
+                self._build_show_menu()
+            else:
+                name = names[index]
+            added = self.groups.add(name, info.key)
+        except (ValueError, OSError) as exc:
+            wx.MessageBox(str(exc), APP_NAME, wx.OK | wx.ICON_WARNING, self)
+            return
+        self._feedback(f"Added {info.title} to {name}." if added
+                       else f"{info.title} is already in {name}.")
+        self._refresh_list_in_place()
+
+    def on_remove_from_group(self):
+        info = self._group_target()
+        if info is None:
+            return
+        names = self.groups.groups_of(info.key)
+        if not names:
+            self._feedback(f"{info.title} is not in any group.")
+            return
+        index = self._choose("Remove from Group", f"Remove {info.title} from:", names)
+        if index is None:
+            return
+        try:
+            self.groups.remove(names[index], info.key)
+        except OSError as exc:
+            wx.MessageBox(f"Couldn't save your groups: {exc}", APP_NAME,
+                          wx.OK | wx.ICON_WARNING, self)
+            return
+        self._feedback(f"Removed {info.title} from {names[index]}.")
+        self._refresh_list_in_place()
+
+    def on_manage_groups(self):
+        present = {s.key for s in self._snapshot.sessions}
+        counts = {name: sum(1 for k in self.groups.members(name) if k in present)
+                  for name in self.groups.names()}
+        dialog = ManageGroupsDialog(self, self.groups, counts)
+        try:
+            dialog.ShowModal()
+            renamed = dict(dialog.renamed)
+        finally:
+            dialog.Destroy()
+        view = self.speech.session_view
+        if view.startswith(GROUP_VIEW_PREFIX) and view[len(GROUP_VIEW_PREFIX):] in renamed:
+            self.speech.session_view = group_view(renamed[view[len(GROUP_VIEW_PREFIX):]])
+            try:
+                self.speech.save()
+            except OSError:
+                pass
+        self._build_show_menu()
+        self._refresh_list_in_place()
+
+    def _refresh_list_in_place(self):
+        """The rows and the view again, from the sessions already read: their
+        groups changed, not the sessions."""
+        shown = self._in_current_view(list(self._snapshot.sessions))
+        self._update_session_list(shown,
+                                  keep_order=wx.Window.FindFocus() is self.session_list)
+        self._update_list_label(len(shown))
 
     def on_sort(self, order: str):
         """View, Sort Sessions: put the list in ``order`` now, keeping you on
