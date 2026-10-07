@@ -1036,9 +1036,12 @@ class TurnRunner:
                     if event.kind == "remote_control":
                         self._emit(event)  # never a reason to send the message
                         continue
-                    # The answer, or anything else first (an older Claude
-                    # Code): the message goes now.
-                    if send_message():
+                    # The answer, or anything else of the conversation first
+                    # (an older Claude Code): the message goes now. A state
+                    # change isn't the conversation: "running" can come
+                    # before initialize's answer, and must not skip the
+                    # model check.
+                    if event.kind != "state" and send_message():
                         unanswered.cancel()
                     if event.kind == "initialized":
                         continue

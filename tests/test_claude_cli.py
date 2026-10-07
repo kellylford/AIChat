@@ -952,3 +952,16 @@ def test_remote_control_is_asked_for_after_initialize_and_answered(tmp_path):
     written = process.written.decode("utf-8").splitlines()
     assert json.loads(written[1])["request"]["subtype"] == "remote_control"
     assert json.loads(written[2])["type"] == "user"  # the message after both
+
+
+def test_a_state_change_before_initialize_answers_doesnt_send_the_message(tmp_path):
+    from thechatplace.claude_cli import INIT_REQUEST_ID
+    answer = ev(type="control_response", response={
+        "subtype": "success", "request_id": INIT_REQUEST_ID,
+        "response": {"commands": [], "models": [
+            {"value": "default", "resolvedModel": "claude-fable-5-1"}]}})
+    process = FakeProcess([ev(type="system", subtype="session_state_changed", state="running"),
+                           answer])
+    runner, events, _ = run_turn(process, tmp_path)
+    assert runner.stopped_before_answer
+    assert b'"type": "user"' not in process.written
