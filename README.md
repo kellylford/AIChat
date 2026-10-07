@@ -82,6 +82,15 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
 - **Escape** in the messages or the reply box (or Backspace in the messages) goes back to the
   session list, on the same session. Enter there on the session that's already loaded takes you
   back to its messages where you left them, without reloading.
+- **Export** (Ctrl+E, Session, Export Session) saves the selected session's conversation,
+  or the loaded one's, to a file: **Markdown**, a **web page** (formatted like the full-message
+  view, nothing fetched from the internet) or **plain text**, chosen by the Save as type list
+  or the file name's extension. Each message is a heading ("Claude, 10:43") and its text as
+  written, with the message's own headings moved down two levels so the file's outline stays
+  session, message, section. Tool activity is included when Show Tool Activity is on. It
+  starts in Documents, named after the session and the date, works in the background (a long
+  session never freezes the window), and says where it saved; the status bar keeps that to read
+  back. Headings carry the time, and the date whenever the day changes.
 - **Open in Claude** (Ctrl+O) switches the desktop app to the session, for approving a permission
   prompt or answering a question card in a desktop app session.
 - **Continue Here** (Ctrl+Shift+N, or the button beside Open in Claude) carries a desktop app
@@ -246,6 +255,7 @@ shows it as plain text instead.
 | Session list | Ctrl+O | Open the selected session in the Claude desktop app |
 | Session list | Ctrl+N | New TheClaudeHub session |
 | Session list | Ctrl+G | Add the selected session to a group |
+| Anywhere | Ctrl+E | Export the session to a file |
 | Anywhere | Alt+V, H | Show Sessions: choose which sessions are listed |
 | Anywhere | Ctrl+Shift+N | Continue the selected (or loaded) desktop app session here, as a copy |
 | Session list | F5 | Refresh the list now and put it in order |
