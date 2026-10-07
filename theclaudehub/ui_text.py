@@ -38,6 +38,8 @@ SHORTCUTS = [
                      "by folder; the choice is remembered"),
         ("Alt+V, H", "Show Sessions: all, needs you or working, needs you, desktop app, "
                      "TheClaudeHub, Remote Control, archived, or one of your groups"),
+        ("Ctrl+E", "Export the selected (or loaded) session as Markdown, a web page or "
+                   "plain text"),
         ("Ctrl+G", "Add the selected session to a group (or a new one); Session, Remove "
                    "from Group and Manage Groups are on the Session menu"),
         ("Delete", "Forget the selected TheClaudeHub session (asks first)"),

@@ -46,7 +46,7 @@ from typing import Dict, List, Optional
 
 import wx
 
-from .. import __version__, announce, hub, platform_paths
+from .. import __version__, announce, export, hub, platform_paths
 from ..claude_cli import (PERMISSION_MODES, PermissionRequest, ResumeRefused, TurnEvent,
                           TurnRunner, allow_response, answer_questions_response,
                           build_fork_command, build_new_command, build_resume_command,
@@ -168,6 +168,7 @@ class MainFrame(wx.Frame):
         self._item(session, "&Refresh\tF5",
                    lambda e: self.refresh_sessions(force=True, resort=True))
         self._item(session, "&Forget TheClaudeHub Session...", self.on_forget)
+        self._item(session, "&Export Session...\tCtrl+E", lambda e: self.on_export())
         session.AppendSeparator()
         self._item(session, "Add to &Group...\tCtrl+G", lambda e: self.on_add_to_group())
         self._item(session, "Remove from Gro&up...", lambda e: self.on_remove_from_group())
@@ -1098,6 +1099,93 @@ class MainFrame(wx.Frame):
         self._feedback("Tool activity shown." if show else "Tool activity hidden.")
 
     # ------------------------------------------------------- open in Claude
+
+    # --------------------------------------------------------- export (#33)
+
+    def _export_source(self, info: SessionInfo):
+        """What to export: the loaded session's messages as the list shows
+        them, or the path of another session's transcript (read later, off
+        the window's thread). (messages, None), (None, path), or (None, None)
+        when there's nothing on disk."""
+        if self._open is not None and info.key == self._open.key and self._chat_loaded:
+            return list(self._visible_messages()), None
+        path = platform_paths.transcript_path(info.cwd, info.cli_session_id) \
+            if info.cli_session_id else None
+        return None, path
+
+    def on_export(self):
+        """Session, Export Session (Ctrl+E): save the conversation as
+        Markdown, a web page or plain text. Reading a long transcript and
+        rendering it happen in the background, so the window never stops
+        answering the screen reader."""
+        info = self._selected_session()
+        if info is None:
+            self._feedback("No session selected.")
+            return
+        messages, transcript = self._export_source(info)
+        if not messages and transcript is None:
+            wx.MessageBox(f"{info.title} has no messages to export (its transcript isn't on "
+                          "disk).", APP_NAME, wx.OK | wx.ICON_INFORMATION, self)
+            return
+        documents = os.path.join(os.path.expanduser("~"), "Documents")
+        dialog = wx.FileDialog(
+            self, f"Export {info.title}", defaultDir=documents if os.path.isdir(documents) else "",
+            defaultFile=export.default_filename(info.title),
+            wildcard="|".join(part for _fmt, part in export.FORMATS),
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT)
+        try:
+            if dialog.ShowModal() != wx.ID_OK:
+                return
+            path = dialog.GetPath()
+            fmt = export.FORMATS[max(0, dialog.GetFilterIndex())][0]
+        finally:
+            dialog.Destroy()
+        # The file name's extension wins over the list's choice if they differ.
+        extension = os.path.splitext(path)[1].lower().lstrip(".")
+        if extension in (export.MARKDOWN, export.HTML, export.TEXT):
+            fmt = extension
+        elif extension == "htm":
+            fmt = export.HTML
+        else:
+            path += "." + fmt
+            # The dialog asked about overwriting the name as typed, not this one.
+            if os.path.exists(path) and wx.MessageBox(
+                    f"{os.path.basename(path)} already exists. Replace it?", "Export Session",
+                    wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION, self) != wx.YES:
+                return
+        self._feedback(f"Exporting {info.title}.")
+        show_activity = self._show_activity
+        title, folder = info.title, info.cwd
+
+        def work():
+            try:
+                items = messages
+                if items is None:
+                    reader = TranscriptReader(transcript)
+                    reader.refresh()
+                    items = [m for m in reader.transcript.messages
+                             if show_activity or not m.is_activity]
+                if not items:
+                    raise OSError("the transcript has no messages")
+                text = export.render(fmt, title, items, folder=folder)
+                with open(path, "w", encoding="utf-8", newline="\n") as handle:
+                    handle.write(text)
+                wx.CallAfter(self._export_done, title, path, len(items), None)
+            except Exception as exc:  # noqa: BLE001 - said, not raised
+                wx.CallAfter(self._export_done, title, path, 0, exc)
+
+        self._pool.submit(work)
+
+    def _export_done(self, title: str, path: str, count: int, error):
+        if not self:
+            return
+        if error is not None:
+            wx.MessageBox(f"Couldn't export {title} to {path}: {error}", APP_NAME,
+                          wx.OK | wx.ICON_ERROR, self)
+            return
+        # Said, not a dialog: where it went is in the status bar to read back.
+        self._feedback(f"Exported {title}, {count} message{'s' if count != 1 else ''}, to "
+                       f"{os.path.basename(path)} in {os.path.dirname(path)}.")
 
     def on_open_in_claude(self, _event=None):
         info = self._selected_session()
