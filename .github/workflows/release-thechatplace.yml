@@ -114,6 +114,8 @@ jobs:
           python tools/make_version_info.py
           python -m PyInstaller --noconfirm --clean --noconsole --onedir --name TheChatPlace `
             --version-file build/version_info.txt --hidden-import velopack --collect-binaries wx `
+            --icon thechatplace/assets/app.ico `
+            --add-data "thechatplace/assets;thechatplace/assets" `
             --add-data "thechatplace/speech;thechatplace/speech" TheChatPlace.pyw
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
@@ -187,6 +189,7 @@ jobs:
           vpk pack --packId TheChatPlace --packVersion $env:VERSION `
             --packDir dist/TheChatPlace --mainExe TheChatPlace.exe `
             --packTitle "The Chat Place" --packAuthors "Kelly Ford" `
+            --icon thechatplace/assets/app.ico `
             --channel $env:CHANNEL --outputDir releases `
             --instLocation PerUser --shortcuts StartMenuRoot `
             --releaseNotes $env:NOTES @sign

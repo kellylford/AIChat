@@ -78,7 +78,7 @@ if errorlevel 1 goto :failed
 REM --onedir because Velopack swaps an app folder in place; velopack is imported
 REM lazily, so it's named; --collect-binaries wx brings WebView2Loader.dll, which
 REM the formatted message view needs; the speech scripts are data files.
-"%PY%" -m PyInstaller --noconfirm --clean --noconsole --onedir --name TheChatPlace --version-file build\version_info.txt --hidden-import velopack --collect-binaries wx --add-data "thechatplace\speech;thechatplace\speech" TheChatPlace.pyw
+"%PY%" -m PyInstaller --noconfirm --clean --noconsole --onedir --name TheChatPlace --version-file build\version_info.txt --hidden-import velopack --collect-binaries wx --icon thechatplace\assets\app.ico --add-data "thechatplace\assets;thechatplace\assets" --add-data "thechatplace\speech;thechatplace\speech" TheChatPlace.pyw
 if errorlevel 1 goto :failed
 if not exist "dist\TheChatPlace\TheChatPlace.exe" goto :failed
 
@@ -115,7 +115,7 @@ echo Packing the installer and portable zip (Velopack)...
 if exist releases rmdir /s /q releases
 set "NOTES="
 if exist "release-notes\v%VERSION%.md" set "NOTES=--releaseNotes release-notes\v%VERSION%.md"
-"%VPK%" pack --packId TheChatPlace --packVersion %VERSION% --packDir dist\TheChatPlace --mainExe TheChatPlace.exe --packTitle "The Chat Place" --packAuthors "Kelly Ford" --channel %CHANNEL% --outputDir releases --instLocation PerUser --shortcuts StartMenuRoot %NOTES%
+"%VPK%" pack --packId TheChatPlace --packVersion %VERSION% --packDir dist\TheChatPlace --mainExe TheChatPlace.exe --packTitle "The Chat Place" --packAuthors "Kelly Ford" --icon thechatplace\assets\app.ico --channel %CHANNEL% --outputDir releases --instLocation PerUser --shortcuts StartMenuRoot %NOTES%
 if errorlevel 1 goto :failed
 if not exist "releases\TheChatPlace-%CHANNEL%-Setup.exe" goto :failed
 

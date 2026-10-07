@@ -84,6 +84,11 @@ def desktop_sessions_dirs() -> List[Path]:
     return [path for path in candidates if path.is_dir()]
 
 
+def app_icon_path() -> Path:
+    """The app's icon (#64), shipped with the package (``assets``)."""
+    return Path(__file__).resolve().parent / "assets" / "app.ico"
+
+
 def app_data_dir() -> Path:
     """The Chat Place's own settings and session store."""
     return _roaming_dir() / APP_DIR_NAME

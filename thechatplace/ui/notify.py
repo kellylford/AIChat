@@ -25,6 +25,18 @@ from typing import Callable, List, Optional
 import wx
 import wx.adv
 
+from .. import platform_paths
+
+def app_icon(size: int) -> "wx.Icon":
+    """The app's own icon at ``size`` pixels, or a stock one if it's missing."""
+    path = platform_paths.app_icon_path()
+    if path.is_file():
+        icon = wx.IconBundle(str(path)).GetIcon((size, size))
+        if icon.IsOk():
+            return icon
+    return wx.ArtProvider.GetIcon(wx.ART_INFORMATION, wx.ART_OTHER, (size, size))
+
+
 #: Windows' own limits for a balloon's title and text.
 TITLE_LIMIT = 63
 TEXT_LIMIT = 255
@@ -105,7 +117,7 @@ class Notifier:
     def _ensure_icon(self):
         if self._icon is None:
             icon = self._factory()
-            image = wx.ArtProvider.GetIcon(wx.ART_INFORMATION, wx.ART_OTHER, (16, 16))
+            image = app_icon(16)
             icon.SetIcon(image, self._tooltip)
             icon.Bind(wx.adv.EVT_TASKBAR_BALLOON_CLICK, self._balloon_clicked)
             icon.Bind(wx.adv.EVT_TASKBAR_LEFT_UP, lambda event: self._on_click(None))
