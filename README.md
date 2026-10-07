@@ -5,7 +5,8 @@ A home for your Claude Code chats.
 > **Status: version 0.1.0, ready for its first release.** Used with JAWS on Kelly's PC; the
 > installer, uninstaller and update check have been tested in the vmtest VM. Downloading and
 > installing an update needs two published releases, so it is first tried with 0.1.1. It has not
-> yet had a pass with NVDA.
+> yet had a pass with NVDA. The Mac build is new: built, smoke-tested and Developer ID signed on
+> Kelly's Mac, but not yet notarized in CI or used with VoiceOver.
 
 A keyboard and screen reader friendly reader for Claude Code sessions. It lists every session the
 Claude desktop app has open, shows each one as a conversation you can arrow through, tells you
@@ -234,10 +235,11 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
 
 ## Install
 
-You need Windows 10 or 11 and **Claude Code installed with its native installer and signed in**
-to a Claude subscription (the `claude` command, the same login the desktop app uses).
+You need Windows 10 or 11, or a Mac with Apple silicon, and **Claude Code installed with its
+native installer and signed in** to a Claude subscription (the `claude` command, the same login
+the desktop app uses).
 
-Download `TheChatPlace-windows-Setup.exe` from the newest release on
+**Windows.** Download `TheChatPlace-windows-Setup.exe` from the newest release on
 [the releases page](https://github.com/kellylford/AIChat/releases) and run it.
 It installs for you only, with no administrator rights, adds The Chat Place to the Start menu, and
 starts it. The portable zip from the same release runs without installing, but doesn't update
@@ -245,12 +247,23 @@ itself.
 
 The app is built for x64; Arm PCs run it under Windows's x64 emulation.
 
+**Mac.** Download `TheChatPlace-macos-arm64.dmg` from the same release, open it, and drag
+TheChatPlace.app onto Applications. The disk image is signed and notarized, so it opens without
+a warning. The first time speech goes through VoiceOver, macOS asks whether The Chat Place may
+control VoiceOver; allow it, and turn on "Allow VoiceOver to be controlled with AppleScript" in
+VoiceOver Utility, General. Your sessions and settings are in
+`~/Library/Application Support/TheChatPlace`.
+
 ## Updates
 
 The installed app checks for a new version a few seconds after it starts, and whenever you choose
 Help, Check for Updates. At start it only speaks up when there is a new version, and then only
 says so: it never opens a dialog you didn't ask for. From Help it always says what it found ("up to
 date", "no release has been published yet", or an error), even with announcements set to silent.
+
+On a Mac, a new version is offered the same way, but as a link: Yes opens its release page,
+where you download the new disk image and drag the app over the old one. The rest of this section
+is about Windows.
 
 From Help, a new version is offered in a Yes/No dialog where No is the default. If you choose Yes,
 it downloads the update, closes, and starts the new version. It won't install while Claude is
@@ -272,24 +285,22 @@ in `thechatplace/updater.py`).
 
 ## Run from source (development)
 
-You need Python 3.11 or later. The repo's virtual environment is `.venv` (ignored by git);
-`build.cmd` makes it the first time, or make it yourself:
+You need Python 3.11 to 3.13 (wxPython has wheels for those). The repo's virtual environment is
+`.venv` (ignored by git). The setup scripts make it, install everything the app, the tests and
+the build need (`requirements-build.txt`), and check it all imports, as Image Description
+Toolkit's do. Each replaces an existing `.venv`.
 
-```
-cd AIChat
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements-dev.txt
-pythonw TheChatPlace.pyw
-python -m pytest tests
-```
+| | Set up | Run | Test |
+|---|---|---|---|
+| Windows | `winsetup.bat` | `.venv\Scripts\pythonw TheChatPlace.pyw` | `.venv\Scripts\python -m pytest tests` |
+| Mac | `./macsetup.sh`, or double-click `macsetup.command` | `.venv/bin/python -m thechatplace` | `.venv/bin/python -m pytest tests` |
 
-`python -m thechatplace` also works. A copy run from source doesn't update itself; Help, Check
+`python -m thechatplace` works on Windows too. A copy run from source doesn't update itself; Help, Check
 for Updates says so, and names the newest release.
 
 ### Build it yourself
 
-Run `build.cmd` from a command prompt (`.\build.cmd` in PowerShell), or double-click it, in
+**Windows.** Run `build.cmd` from a command prompt (`.\build.cmd` in PowerShell), or double-click it, in
 which case the window stays open at the end so you can read the result. It does what the release workflow
 does, unsigned: makes `.venv` if it isn't there, installs what the build needs into it, runs the
 tests, builds the app, smoke-tests it, and makes the installer and portable zip.
@@ -306,6 +317,22 @@ Velopack tool, `vpk`; `build.cmd` installs or updates it to the version the work
 relative output folder is taken relative to where you ran `build.cmd`. The build is unsigned, so SmartScreen may warn when you run Setup: More
 info, then Run anyway.
 
+**Mac.** Run `./build_macos.sh`, or double-click `build_macos.command`. It does what the
+release workflow's macOS job does: makes `.venv` with `macsetup.sh` if it isn't there, runs the
+tests, builds `dist/TheChatPlace.app` with PyInstaller, smoke-tests it, and makes
+`releases/TheChatPlace-macos-arm64.dmg`. It builds for Apple silicon only.
+
+```
+./build_macos.sh                       build into dist/ and releases/
+./build_macos.sh ~/Desktop/builds      and copy the .dmg there
+TCP_SIGN_CODE=1 ./build_macos.sh       signed with your Developer ID Application certificate
+TCP_NOTARIZE=1 ./build_macos.sh        signed and notarized (credentials: macos/notarize.sh)
+```
+
+Unsigned, macOS won't open it until you choose Open Anyway in System Settings, Privacy &
+Security; the README.txt in the disk image says so. The signing, notarizing and disk image steps
+are in `macos/`, adapted from Image Description Toolkit's.
+
 ### Releasing
 
 The version lives in one place, `__version__` in `thechatplace/__init__.py`. To release:
@@ -314,12 +341,22 @@ The version lives in one place, `__version__` in `thechatplace/__init__.py`. To 
    requirements), in one commit on main.
 2. Tag it `v<version>` and push the tag.
 
-`.github/workflows/release-thechatplace.yml` then runs the tests, fails if the tag and
-`__version__` disagree, builds the app with PyInstaller, smoke-tests the built exe, signs it with
-Azure Artifact Signing, packs the Velopack installer, portable zip and update feed (signing
-Setup, the updater and the launcher too), checks every signature, and publishes a GitHub release
-(a pre-release before 1.0). Run by hand or for a pull request, it does everything but publish,
-and keeps the files as a workflow artifact; tick "sign" on a hand run to sign and check them too.
+`.github/workflows/release-thechatplace.yml` then builds both platforms side by side, and
+publishes one GitHub release (a pre-release before 1.0) only if both succeed:
+
+- **Windows:** runs the tests, fails if the tag and `__version__` disagree, builds the app with
+  PyInstaller, smoke-tests the built exe, signs it with Azure Artifact Signing, packs the Velopack
+  installer, portable zip and update feed (signing Setup, the updater and the launcher too), and
+  checks every signature.
+- **Mac:** runs `build_macos.sh` with the Developer ID certificate in a throwaway keychain, so the
+  app is signed, the disk image notarized and stapled, and Gatekeeper's verdict checked. It needs
+  the repository secrets `MACOS_CERTIFICATE_P12`, `MACOS_CERTIFICATE_PASSWORD`, `NOTARY_KEY_P8`,
+  `NOTARY_KEY_ID` and `NOTARY_ISSUER_ID` (the same ones Image Description Toolkit uses); a tag
+  fails without them rather than publish an unsigned app.
+
+Run by hand or for a pull request, it does everything but publish, and keeps the files as
+workflow artifacts; tick "sign" on a hand run, or label a pull request `sign-build`, to sign (and
+notarize) and check them too.
 
 ## Keyboard shortcuts
 
@@ -470,8 +507,11 @@ Checked with Claude Code 2.1.286 (issues #187 and #188):
 
 ## Limitations
 
-- Windows only for now. The OS-specific parts are in `thechatplace/platform_paths.py` and the
-  speech scripts, so a Mac version mostly means changing those.
+- The Mac version is new and hasn't had a full pass with VoiceOver. The Windows screen reader
+  names the app gives some controls (whole messages in the messages list, for one) use MSAA,
+  which wxPython has only on Windows, so VoiceOver reads those controls' own text instead.
+  The OS-specific parts are in `thechatplace/platform_paths.py`, `thechatplace/ui/a11y.py` and
+  the speech scripts.
 - "Needs you" for desktop sessions depends on the desktop app's turn summary, which it doesn't
   always write. A session without one shows as idle once it stops working.
 - A desktop session's transcript can be gone if it's older than Claude Code's retention period
@@ -502,4 +542,8 @@ Checked with Claude Code 2.1.286 (issues #187 and #188):
 | `thechatplace/updater.py` | Velopack updates, adapted from GHManage's updater |
 | `tools/check_version.py` | Prints the version; checks a release tag against it |
 | `tools/make_version_info.py` | The Windows version resource for the built exe |
+| `winsetup.bat`, `macsetup.sh` (`.command`) | Set up `.venv` on Windows or a Mac |
+| `build.cmd`, `build_macos.sh` (`.command`) | Build on Windows or a Mac |
+| `macos/` | Mac signing, notarizing, entitlements and the disk image |
+| `requirements-build.txt` | Everything a build needs; pins PyInstaller |
 | `release-notes/` | One file per release, used as the GitHub release's notes and the update's notes |

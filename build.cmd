@@ -22,10 +22,10 @@ set "OUTPUT_DIR="
 if not "%~1"=="" set "OUTPUT_DIR=%~f1"
 cd /d "%~dp0"
 
-REM Pinned to what the release workflow uses, so a local build matches a CI one.
-REM Differences: the workflow uses Python 3.12 and needs release notes for the
+REM vpk is pinned to what the release workflow uses, and PyInstaller is pinned in
+REM requirements-build.txt, so a local build matches a CI one. Differences:
+REM the workflow uses Python 3.12 and needs release notes for the
 REM version; here any Python 3.11+ works and release notes are optional.
-set "PYINSTALLER_VERSION=6.22.3"
 set "VPK_VERSION=1.2.161"
 set "CHANNEL=windows"
 set "PY=%~dp0.venv\Scripts\python.exe"
@@ -52,7 +52,7 @@ echo.
 echo Installing what the build needs into .venv...
 "%PY%" -m pip install --quiet --upgrade pip
 if errorlevel 1 goto :failed
-"%PY%" -m pip install --quiet -r requirements-dev.txt pyinstaller==%PYINSTALLER_VERSION%
+"%PY%" -m pip install --quiet -r requirements-build.txt
 if errorlevel 1 goto :failed
 
 REM ---------------------------------------------------------------- tests ----

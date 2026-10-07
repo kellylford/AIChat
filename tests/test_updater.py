@@ -235,3 +235,41 @@ def test_tag_check_script(tag, ok):
     tag = tag.replace("0.1.0", version) if ok else tag
     result = subprocess.run([sys.executable, str(script), tag], capture_output=True, text=True)
     assert (result.returncode == 0) is ok, result.stdout + result.stderr
+
+
+# -- the Mac app, which updates by downloading the new disk image ------------------------
+
+
+@pytest.fixture
+def mac_app(monkeypatch):
+    monkeypatch.setattr(updater, "SELF_UPDATES", False)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+
+
+def test_mac_app_offers_the_release_page_for_a_newer_version(mac_app):
+    result = UpdateService("0.1.0", latest=lambda: "0.2.0").check()
+    assert result.status == updater.DOWNLOAD and result.version == "0.2.0"
+    assert "0.2.0 is available" in result.describe() and "release page" in result.describe()
+    assert updater.release_page_url("0.2.0") == \
+        "https://github.com/kellylford/AIChat/releases/tag/v0.2.0"
+
+
+def test_mac_app_up_to_date_and_no_releases(mac_app):
+    assert UpdateService("0.2.0", latest=lambda: "0.2.0").check().status == updater.CURRENT
+    assert UpdateService("0.2.0", latest=lambda: None).check().status == updater.NO_RELEASES
+
+
+def test_mac_app_checks_quietly_at_start_too(mac_app):
+    asked = []
+    svc = UpdateService("0.1.0", latest=lambda: asked.append(1) or "0.2.0")
+    assert svc.can_update is False  # never Velopack
+    assert svc.check(manual=False).status == updater.DOWNLOAD and asked
+
+
+def test_mac_app_never_runs_velopack_hooks(mac_app, monkeypatch):
+    import types
+    ran = []
+    fake = types.SimpleNamespace(App=lambda: ran.append(1))
+    monkeypatch.setitem(sys.modules, "velopack", fake)
+    updater.bootstrap()
+    assert ran == []

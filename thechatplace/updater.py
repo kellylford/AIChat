@@ -17,6 +17,11 @@ source (which reads only the repo's 10 newest releases), and points Velopack
 at that one release's files. Each release carries every package its feed names (the workflow
 uploads the previous full package with the new one).
 
+On macOS there is no Velopack install: the app ships as a disk image, as
+Image Description Toolkit's does, and updates by downloading the new one.
+``check()`` still asks GitHub, and says ``DOWNLOAD`` when a Mac app is behind,
+which the UI offers to open in the browser. ``SELF_UPDATES`` is the switch.
+
 Updating never touches The Chat Place's data. Velopack installs and replaces
 the app under ``%LOCALAPPDATA%\\TheChatPlace``; sessions, settings and logs live
 in ``%APPDATA%\\TheChatPlace`` (roaming), which neither an update nor an
@@ -44,18 +49,32 @@ RELEASES_API = "https://api.github.com/repos/kellylford/AIChat/releases?per_page
 TAG_PREFIX = "v"
 CHANNEL = "windows"
 INCLUDE_PRERELEASES = True
+#: Only Windows copies install their own updates (Velopack). A Mac app is
+#: replaced by downloading the new disk image.
+SELF_UPDATES = sys.platform == "win32"
 
 # CheckResult.status values
 AVAILABLE = "available"
 CURRENT = "current"
 NO_RELEASES = "no releases"
 NOT_INSTALLED = "not installed"
+DOWNLOAD = "download"        # newer release; this copy updates by downloading it (macOS)
 FAILED = "failed"
 
 
 def feed_url(version: str) -> str:
     """Where one release's feed and packages are downloaded from."""
     return f"{REPO_URL}/releases/download/{TAG_PREFIX}{version}/"
+
+
+def release_page_url(version: str) -> str:
+    """The GitHub page of one release, where a Mac copy downloads it."""
+    return f"{REPO_URL}/releases/tag/{TAG_PREFIX}{version}"
+
+
+def updates_by_download() -> bool:
+    """A built copy that can't install its own updates: the Mac app."""
+    return bool(getattr(sys, "frozen", False)) and not SELF_UPDATES
 
 
 def configure_logging() -> None:
@@ -75,7 +94,7 @@ def configure_logging() -> None:
 
 def bootstrap() -> None:
     """Run Velopack's install/update/uninstall hooks. Call first in main()."""
-    if not getattr(sys, "frozen", False):
+    if not getattr(sys, "frozen", False) or not SELF_UPDATES:
         return
     try:
         import velopack
@@ -123,6 +142,9 @@ class CheckResult:
         if self.status == NO_RELEASES:
             return (f"No release of The Chat Place has been published yet. You have version "
                     f"{self.current}.")
+        if self.status == DOWNLOAD:
+            return (f"The Chat Place {self.version} is available. You have {self.current}. "
+                    "Download it from its release page.")
         if self.status == NOT_INSTALLED:
             latest = (f" The latest release is {self.version}." if self.version else
                       " No release has been published yet.")
@@ -208,6 +230,8 @@ class UpdateService:
         Making one reads nothing from the network."""
         if not self._installed():
             return None
+        if self._factory is _velopack_manager and not SELF_UPDATES:
+            return None
         try:
             manager = self._factory(url)
         except Exception as exc:  # noqa: BLE001 - not installed, or no velopack
@@ -231,7 +255,7 @@ class UpdateService:
     def check(self, manual: bool = True) -> CheckResult:
         """``manual`` is False for the quiet check at start, which doesn't
         ask GitHub anything on a copy that can't update."""
-        if not manual and not self.can_update:
+        if not manual and not self.can_update and not updates_by_download():
             return CheckResult(NOT_INSTALLED, self.current_version)
         try:
             latest = self._latest()
@@ -240,6 +264,13 @@ class UpdateService:
             return CheckResult(FAILED, self.current_version,
                                detail=_short(f"GitHub couldn't be reached ({exc})"))
         manager = self._make_manager(feed_url(latest or self.current_version))
+        if manager is None and updates_by_download():
+            if latest is None:
+                return CheckResult(NO_RELEASES, self.current_version)
+            if _version_key(latest) <= _version_key(self.current_version):
+                return CheckResult(CURRENT, self.current_version, latest)
+            logger.info("update %s available to download", latest)
+            return CheckResult(DOWNLOAD, self.current_version, latest)
         if manager is None:
             return CheckResult(NOT_INSTALLED, self.current_version, latest or "")
         if latest is None:

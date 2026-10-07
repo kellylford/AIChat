@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    Hardened runtime entitlements for TheChatPlace.app (PyInstaller, onedir).
+
+    Notarization requires the hardened runtime, which breaks CPython unless
+    some exceptions are granted. The first four are Image Description
+    Toolkit's proven set (BuildAndRelease/MacBuilds/entitlements.plist there);
+    don't trim them without testing a notarized build on a Mac that has never
+    run the app.
+
+    allow-unsigned-executable-memory, allow-jit
+        CPython and C extensions map writable-executable pages.
+    disable-library-validation
+        wxPython's and Python's libraries were built by others; they're
+        re-signed here, but this keeps one that slips through loadable.
+    allow-dyld-environment-variables
+        The PyInstaller bootloader sets DYLD_* paths.
+    automation.apple-events
+        Speech through VoiceOver: speak-engine.sh asks VoiceOver to speak with
+        osascript, an Apple Event that the hardened runtime blocks without
+        this. macOS asks the user once (NSAppleEventsUsageDescription in
+        Info.plist says why).
+
+    Not sandboxed, so files, the network and running claude need nothing here.
+-->
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
+</dict>
+</plist>
