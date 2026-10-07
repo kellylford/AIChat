@@ -144,13 +144,10 @@ class MainFrame(wx.Frame):
         # transcript has been read (#18). Its file changes and turn count,
         # copied with its messages, and how many changes have been said.
         self._changes_due = False
-<<<<<<< HEAD
         self._chat_edits: list = []
         self._chat_turns = 0
         self._edits_said = 0
-=======
         self._notifier = Notifier(self, self._go_to_session)
->>>>>>> 16ea4ae (WIP: Windows notifications (#20))
         # What Claude is waiting for you to answer, per session, oldest first
         # (#187, #188). The turn is paused until each is answered.
         self._pending: Dict[str, List[PermissionRequest]] = {}
