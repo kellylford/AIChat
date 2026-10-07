@@ -1953,13 +1953,26 @@ def test_export_the_loaded_session_as_markdown(frame, env, monkeypatch):
     target = env["tmp"] / "out.md"
     dialog = _fake_save_dialog(monkeypatch, target)
     frame.on_export()
+    assert env["feedback"][-1] == "Exporting Quiet one."  # done in the background
+    assert pump(lambda: env["feedback"][-1].startswith("Exported"))
     assert dialog.default_file.startswith("Quiet one ") and dialog.default_file.endswith(".md")
     assert "Web page (*.html)" in dialog.wildcard
     text = target.read_text(encoding="utf-8")
     assert text.startswith("# Quiet one\n")
     assert "## Claude, " in text and "\n#### Result\nIt passes." in text  # its ## moved down two
-    assert env["feedback"][-1] == "Exported Quiet one, 2 messages, to out.md."
-    assert "Open the folder?" in env["boxes"][-1]
+    assert env["feedback"][-1] == f"Exported Quiet one, 2 messages, to out.md in {env['tmp']}."
+    assert env["boxes"] == []  # no box to dismiss afterwards
+
+
+def test_export_asks_before_replacing_a_file_whose_extension_it_added(frame, env, monkeypatch):
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [user_text("Hello")])
+    select(frame, "Quiet one")
+    (env["tmp"] / "notes.v2.md").write_text("keep me", encoding="utf-8")
+    _fake_save_dialog(monkeypatch, env["tmp"] / "notes.v2", filter_index=0)
+    monkeypatch.setattr(wx, "MessageBox", lambda *a, **k: env["boxes"].append(a[0]) or wx.NO)
+    frame.on_export()
+    assert "notes.v2.md already exists" in env["boxes"][-1]
+    assert (env["tmp"] / "notes.v2.md").read_text(encoding="utf-8") == "keep me"
 
 
 def test_export_an_unloaded_session_reads_its_transcript_and_the_extension_wins(frame, env,
@@ -1969,6 +1982,7 @@ def test_export_an_unloaded_session_reads_its_transcript_and_the_extension_wins(
     target = env["tmp"] / "page.html"
     _fake_save_dialog(monkeypatch, target, filter_index=0)  # Markdown chosen, .html typed
     frame.on_export()
+    assert pump(lambda: env["feedback"][-1].startswith("Exported"))
     assert target.read_text(encoding="utf-8").startswith("<!DOCTYPE html>")
 
 

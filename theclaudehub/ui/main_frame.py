@@ -1102,31 +1102,28 @@ class MainFrame(wx.Frame):
 
     # --------------------------------------------------------- export (#33)
 
-    def _messages_for_export(self, info: SessionInfo) -> Optional[List[ChatMessage]]:
-        """The session's messages as the list shows them (tool activity only
-        if it's on). The loaded session's are already read; another's are
-        read now. None if there's no transcript."""
+    def _export_source(self, info: SessionInfo):
+        """What to export: the loaded session's messages as the list shows
+        them, or the path of another session's transcript (read later, off
+        the window's thread). (messages, None), (None, path), or (None, None)
+        when there's nothing on disk."""
         if self._open is not None and info.key == self._open.key and self._chat_loaded:
-            return self._visible_messages()
+            return list(self._visible_messages()), None
         path = platform_paths.transcript_path(info.cwd, info.cli_session_id) \
             if info.cli_session_id else None
-        if path is None:
-            return None
-        reader = TranscriptReader(path)
-        reader.refresh()
-        messages = reader.transcript.messages
-        return list(messages) if self._show_activity else \
-            [m for m in messages if not m.is_activity]
+        return None, path
 
     def on_export(self):
         """Session, Export Session (Ctrl+E): save the conversation as
-        Markdown, a web page or plain text."""
+        Markdown, a web page or plain text. Reading a long transcript and
+        rendering it happen in the background, so the window never stops
+        answering the screen reader."""
         info = self._selected_session()
         if info is None:
             self._feedback("No session selected.")
             return
-        messages = self._messages_for_export(info)
-        if not messages:
+        messages, transcript = self._export_source(info)
+        if not messages and transcript is None:
             wx.MessageBox(f"{info.title} has no messages to export (its transcript isn't on "
                           "disk).", APP_NAME, wx.OK | wx.ICON_INFORMATION, self)
             return
@@ -1151,22 +1148,44 @@ class MainFrame(wx.Frame):
             fmt = export.HTML
         else:
             path += "." + fmt
-        try:
-            text = export.render(fmt, info.title, messages, folder=info.cwd)
-            with open(path, "w", encoding="utf-8", newline="\n") as handle:
-                handle.write(text)
-        except OSError as exc:
-            wx.MessageBox(f"Couldn't save {path}: {exc}", APP_NAME, wx.OK | wx.ICON_ERROR, self)
-            return
-        count = len(messages)
-        self._feedback(f"Exported {info.title}, {count} message{'s' if count != 1 else ''}, "
-                       f"to {os.path.basename(path)}.")
-        if wx.MessageBox(f"Saved to {path}.\n\nOpen the folder?", "Export Session",
-                         wx.YES_NO | wx.NO_DEFAULT | wx.ICON_INFORMATION, self) == wx.YES:
+            # The dialog asked about overwriting the name as typed, not this one.
+            if os.path.exists(path) and wx.MessageBox(
+                    f"{os.path.basename(path)} already exists. Replace it?", "Export Session",
+                    wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION, self) != wx.YES:
+                return
+        self._feedback(f"Exporting {info.title}.")
+        show_activity = self._show_activity
+        title, folder = info.title, info.cwd
+
+        def work():
             try:
-                platform_paths.open_url(os.path.dirname(path))
-            except OSError:
-                pass
+                items = messages
+                if items is None:
+                    reader = TranscriptReader(transcript)
+                    reader.refresh()
+                    items = [m for m in reader.transcript.messages
+                             if show_activity or not m.is_activity]
+                if not items:
+                    raise OSError("the transcript has no messages")
+                text = export.render(fmt, title, items, folder=folder)
+                with open(path, "w", encoding="utf-8", newline="\n") as handle:
+                    handle.write(text)
+                wx.CallAfter(self._export_done, title, path, len(items), None)
+            except Exception as exc:  # noqa: BLE001 - said, not raised
+                wx.CallAfter(self._export_done, title, path, 0, exc)
+
+        self._pool.submit(work)
+
+    def _export_done(self, title: str, path: str, count: int, error):
+        if not self:
+            return
+        if error is not None:
+            wx.MessageBox(f"Couldn't export {title} to {path}: {error}", APP_NAME,
+                          wx.OK | wx.ICON_ERROR, self)
+            return
+        # Said, not a dialog: where it went is in the status bar to read back.
+        self._feedback(f"Exported {title}, {count} message{'s' if count != 1 else ''}, to "
+                       f"{os.path.basename(path)} in {os.path.dirname(path)}.")
 
     def on_open_in_claude(self, _event=None):
         info = self._selected_session()

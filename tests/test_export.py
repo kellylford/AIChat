@@ -49,3 +49,25 @@ def test_render_picks_the_format():
     assert export.render(export.TEXT, "T", MESSAGES, when=WHEN).startswith("T\n=")
     assert export.render(export.HTML, "T", MESSAGES, when=WHEN).startswith("<!DOCTYPE html>")
     assert export.render(export.MARKDOWN, "T", MESSAGES, when=WHEN).startswith("# T")
+
+
+def test_fences_are_matched_by_marker_and_length():
+    assert export.shift_headings("````md\n```\n# in\n````\n# out") == \
+        "````md\n```\n# in\n````\n### out"
+    assert export.shift_headings("```\n~~~\n# code\n```\n# real") == "```\n~~~\n# code\n```\n### real"
+    assert export.shift_headings("   ## indented\n#") == "   #### indented\n###"
+
+
+def test_the_date_is_said_when_the_day_changes():
+    messages = [ChatMessage(USER, "a", "2026-10-06T15:00:00", "1"),
+                ChatMessage(ASSISTANT, "b", "2026-10-06T15:05:00", "2"),
+                ChatMessage(USER, "c", "2026-10-07T09:15:00", "3")]
+    text = export.to_markdown("T", messages, when=WHEN)
+    assert "## You, 6 October 2026, 15:00" in text
+    assert "## Claude, 15:05" in text
+    assert "## You, 7 October 2026, 09:15" in text
+
+
+def test_a_cut_file_name_has_no_double_space():
+    name = export.default_filename("x" * 79 + " y", WHEN)
+    assert "  " not in name and name.endswith(" 2026-10-07.md")

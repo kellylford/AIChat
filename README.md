@@ -88,7 +88,9 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   or the file name's extension. Each message is a heading ("Claude, 10:43") and its text as
   written, with the message's own headings moved down two levels so the file's outline stays
   session, message, section. Tool activity is included when Show Tool Activity is on. It
-  starts in Documents, named after the session and the date, and offers to open the folder.
+  starts in Documents, named after the session and the date, works in the background (a long
+  session never freezes the window), and says where it saved; the status bar keeps that to read
+  back. Headings carry the time, and the date whenever the day changes.
 - **Open in Claude** (Ctrl+O) switches the desktop app to the session, for approving a permission
   prompt or answering a question card in a desktop app session.
 - **Continue Here** (Ctrl+Shift+N, or the button beside Open in Claude) carries a desktop app
