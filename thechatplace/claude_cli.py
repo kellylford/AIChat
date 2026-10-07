@@ -312,6 +312,23 @@ def initialize_line() -> bytes:
             + "\n").encode("utf-8")
 
 
+#: The request id of a turn's Remote Control request.
+RC_REQUEST_ID = "thechatplace-remote-control"
+
+
+def remote_control_line(name: str, reattach: str = "") -> bytes:
+    """Turn on Remote Control for this turn's session, as the desktop app does
+    for its headless sessions: named, kept on claude.ai between turns, and
+    joined again (``reattach``) so it's the same Remote Control session every
+    turn."""
+    request = {"subtype": "remote_control", "enabled": True, "name": name,
+               "keep_session_on_exit": True}
+    if reattach:
+        request["reattach_session_id"] = reattach
+    return (json.dumps({"type": "control_request", "request_id": RC_REQUEST_ID,
+                        "request": request}, ensure_ascii=False) + "\n").encode("utf-8")
+
+
 def message_line(prompt: str, images: Optional[List[dict]] = None) -> bytes:
     """The user's message, with any image blocks after its text (#22)."""
     content = prompt
@@ -612,6 +629,12 @@ class StreamParser:
                         str(m.get("value")): str(m.get("resolvedModel") or "")
                         for m in models if isinstance(m, dict) and m.get("value")}
                 return [TurnEvent("initialized", session_id=self.session_id)]
+            if response.get("request_id") == RC_REQUEST_ID:
+                body = response.get("response") if isinstance(response.get("response"), dict) \
+                    else {}
+                if response.get("subtype") == "error":
+                    body = {"error": str(response.get("error") or "it was refused")}
+                return [TurnEvent("remote_control", session_id=self.session_id, data=body)]
             return []
         if etype == "rate_limit_event":
             info = event.get("rate_limit_info")
@@ -784,11 +807,14 @@ class TurnRunner:
                  popen: Callable[..., subprocess.Popen] = subprocess.Popen,
                  env: Optional[Dict[str, str]] = None,
                  clock: Callable[[], float] = time.monotonic,
-                 images: Optional[List[dict]] = None) -> None:
+                 images: Optional[List[dict]] = None,
+                 remote_control: Optional[Dict[str, str]] = None) -> None:
         self.command = command
         self.cwd = cwd
         self.prompt = prompt
         self.images = list(images or [])
+        #: {"name": …, "reattach": …} to turn on Remote Control, or None.
+        self.remote_control = remote_control
         self.on_event = on_event
         self._popen = popen
         self._env = dict(env if env is not None else child_environment())
@@ -945,6 +971,10 @@ class TurnRunner:
                     # Only initialize: its answer says which model the turn
                     # would use, and the message waits for that (#58).
                     process.stdin.write(initialize_line())
+                    if self.remote_control:
+                        process.stdin.write(remote_control_line(
+                            self.remote_control.get("name", ""),
+                            self.remote_control.get("reattach", "")))
                     process.stdin.flush()
                     self._stdin_open = True
                 except (OSError, ValueError):
@@ -1003,6 +1033,9 @@ class TurnRunner:
                                 final = TurnEvent("failed", text=problem, is_error=True,
                                                   session_id=self.parser.session_id)
                                 break
+                    if event.kind == "remote_control":
+                        self._emit(event)  # never a reason to send the message
+                        continue
                     # The answer, or anything else first (an older Claude
                     # Code): the message goes now.
                     if send_message():

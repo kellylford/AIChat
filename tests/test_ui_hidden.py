@@ -164,9 +164,10 @@ def select(frame, title):
 class FakeRunner:
     instances = []
 
-    def __init__(self, command, cwd, prompt, on_event, images=None):
+    def __init__(self, command, cwd, prompt, on_event, images=None, remote_control=None):
         self.command, self.cwd, self.prompt, self.on_event = command, cwd, prompt, on_event
         self.images = images or []
+        self.remote_control = remote_control
         self.session_started = False
         self.cancelled = False
         self.last_activity = "starting"
@@ -3362,3 +3363,44 @@ def test_settings_reading_messages_options_follow_their_group_box(frame):
         assert all(c.GetParent() is dialog for c in (dialog.formatted, dialog.whole_in_list))
     finally:
         dialog.Destroy()
+
+
+def test_remote_control_follows_the_setting_and_each_session(frame, env, fake_runner, monkeypatch):
+    _start(frame, fake_runner)
+    assert fake_runner.instances[-1].remote_control is None  # off by default
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("finished", text="Done."))
+    frame.speech.remote_control = True
+    frame.reply_text.SetValue("again")
+    frame.on_send()
+    assert fake_runner.instances[-1].remote_control == {"name": "Hub probe", "reattach": ""}
+    # Its answer is remembered, and joined again next turn.
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("remote_control", data={
+        "bridge_session_id": "cse_1", "session_url": "https://claude.ai/code/session_1"}))
+    assert frame.store.get("own-1").bridge_session_id == "cse_1"
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("finished", text="Done."))
+    # This session says off, whatever the setting.
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.chat_list))
+    monkeypatch.setattr(frame, "_choose", lambda title, prompt, choices, selection=None:
+                        choices.index("Off for this session"))
+    frame.on_remote_control()
+    assert frame.store.get("own-1").remote_control == "off"
+    assert env["feedback"][-1] == "Remote Control off for Hub probe, from its next turn."
+    frame.reply_text.SetValue("third")
+    frame.on_send()
+    assert fake_runner.instances[-1].remote_control is None
+    # Turned on for the session: the same Remote Control session is joined.
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("finished", text="Done."))
+    monkeypatch.setattr(frame, "_choose", lambda title, prompt, choices, selection=None:
+                        choices.index("On for this session"))
+    frame.speech.remote_control = False
+    frame.on_remote_control()
+    frame.reply_text.SetValue("fourth")
+    frame.on_send()
+    assert fake_runner.instances[-1].remote_control == {"name": "Hub probe",
+                                                        "reattach": "cse_1"}
+
+
+def test_remote_control_refused_is_said_on_the_status_bar(frame, env):
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent(
+        "remote_control", data={"error": "Remote Control is turned off by your organization"}))
+    assert frame.status_text.GetLabel().startswith("Hub probe: couldn't turn on Remote Control")

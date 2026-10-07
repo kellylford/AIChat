@@ -150,6 +150,13 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   anything is sent and says why. **Session, Change Model** changes a session's model from its
   next turn. If that first message never reaches Claude (Claude Code not signed in, say), it goes
   back into the reply box and Send starts the session again.
+- **Remote Control.** Settings can turn on Remote Control for The Chat Place's sessions, and
+  **Session, Remote Control** turns it on or off for one session (or back to the Settings
+  default). A session on Remote Control can be reached from claude.ai and your other devices,
+  and Claude in it can reach your other Remote Control sessions, while one of its turns is
+  running: each turn is its own Claude Code process, so between turns it shows as offline. The
+  same Remote Control session is joined every turn; the status bar gives its address the first
+  time.
 - **Claude asks, you answer.** In The Chat Place's own sessions, when Claude needs permission
   for something the permission mode doesn't allow, asks you a question, or has a plan for you
   to approve, the turn waits for you. It's announced ("Build needs you. Claude wants to run

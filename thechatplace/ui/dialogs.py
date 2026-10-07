@@ -244,6 +244,13 @@ class SettingsDialog(wx.Dialog):
         notify_row.Add(self.notify_choice, 0)
         outer.Add(notify_row, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 
+        self.remote_control = wx.CheckBox(
+            self, label="Turn on Remote &Control for The Chat Place's sessions, so you can "
+                        "reach them from claude.ai and other devices (Session, Remote "
+                        "Control changes one session)")
+        self.remote_control.SetValue(speech.remote_control)
+        outer.Add(self.remote_control, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+
         buttons = wx.StdDialogButtonSizer()
         ok = wx.Button(self, wx.ID_OK)
         ok.SetDefault()
@@ -299,7 +306,8 @@ class SettingsDialog(wx.Dialog):
                                    formatted_messages=self.formatted.GetValue(),
                                    full_messages_in_list=self.whole_in_list.GetValue(),
                                    notifications=NOTIFY_LEVELS[max(
-                                       self.notify_choice.GetSelection(), 0)])
+                                       self.notify_choice.GetSelection(), 0)],
+                                   remote_control=self.remote_control.GetValue())
 
 
 class MessageDialog(wx.Dialog):

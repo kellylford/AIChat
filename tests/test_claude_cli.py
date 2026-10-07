@@ -288,7 +288,7 @@ class FakeProcess:
         self.killed = True
 
 
-def run_turn(process, tmp_path, command=None, prompt="Hello -p --bare"):
+def run_turn(process, tmp_path, command=None, prompt="Hello -p --bare", remote_control=None):
     captured = {}
     events = []
     done = threading.Event()
@@ -304,7 +304,8 @@ def run_turn(process, tmp_path, command=None, prompt="Hello -p --bare"):
             done.set()
 
     runner = TurnRunner(command or ["claude", "-p"], str(tmp_path), prompt,
-                        on_event, popen=popen, env={"PATH": "x"})
+                        on_event, popen=popen, env={"PATH": "x"},
+                        remote_control=remote_control)
     runner.start()
     assert done.wait(5)
     runner.join(5)
@@ -929,3 +930,25 @@ def test_an_older_claude_code_without_state_events_ends_at_the_result(tmp_path):
     ])
     _runner, events, _ = run_turn(process, tmp_path)
     assert [e.kind for e in events][-1] == "finished"
+
+
+def test_remote_control_is_asked_for_after_initialize_and_answered(tmp_path):
+    from thechatplace.claude_cli import RC_REQUEST_ID, remote_control_line
+    line = json.loads(remote_control_line("Build", "cse_1"))
+    assert line["request"] == {"subtype": "remote_control", "enabled": True, "name": "Build",
+                               "keep_session_on_exit": True, "reattach_session_id": "cse_1"}
+    assert "reattach_session_id" not in json.loads(remote_control_line("Build"))["request"]
+    answer = ev(type="control_response", response={
+        "subtype": "success", "request_id": RC_REQUEST_ID,
+        "response": {"bridge_session_id": "cse_2", "session_url": "https://x"}})
+    process = FakeProcess([answer, ev(type="system", subtype="init", session_id="s1",
+                                      apiKeySource="none", model="claude-opus-5-5"),
+                           ev(type="result", subtype="success", result="ok")])
+    _runner, events, _ = run_turn(process, tmp_path, remote_control={"name": "Build",
+                                                                      "reattach": ""})
+    kinds = [e.kind for e in events]
+    assert kinds[0] == "remote_control" and events[0].data["bridge_session_id"] == "cse_2"
+    assert kinds[-1] == "finished"
+    written = process.written.decode("utf-8").splitlines()
+    assert json.loads(written[1])["request"]["subtype"] == "remote_control"
+    assert json.loads(written[2])["type"] == "user"  # the message after both

@@ -47,6 +47,12 @@ class OwnSession:
     #: for the heading.
     fork_source: str = ""
     forked_from: str = ""
+    #: Remote Control (#72): "on" or "off" for this session, "" for the
+    #: Settings default. The Remote Control session it was given, joined again
+    #: every turn, and its claude.ai address.
+    remote_control: str = ""
+    bridge_session_id: str = ""
+    remote_url: str = ""
 
     def to_info(self) -> SessionInfo:
         return SessionInfo(
