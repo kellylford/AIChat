@@ -709,6 +709,10 @@ def fable_problem(actual: str, chosen: str, sent: bool = False) -> Optional[str]
             "Change Model, then send again.")
 
 
+#: How long a finished turn waits for Claude Code to say it's idle (its SDK's
+#: own ceiling) before ending the turn anyway.
+IDLE_AFTER_RESULT_WAIT = 600.0
+
 #: How long a turn's message waits for Claude Code to answer initialize.
 INIT_ANSWER_WAIT = 10.0
 
@@ -948,6 +952,22 @@ class TurnRunner:
             chosen = chosen_model(self.command)
             message_sent = False
             states_seen = False
+            last_state = ""
+            # After a result, idle should follow; if it never does (a stuck
+            # hook, say), end the turn anyway after a while, as Claude Code's
+            # own SDK does. Paused while Claude waits for an answer.
+            ceiling: List[threading.Timer] = []
+
+            def arm_ceiling() -> None:
+                disarm_ceiling()
+                timer = threading.Timer(IDLE_AFTER_RESULT_WAIT, self._close_stdin)
+                timer.daemon = True
+                ceiling.append(timer)
+                timer.start()
+
+            def disarm_ceiling() -> None:
+                while ceiling:
+                    ceiling.pop().cancel()
             sent_lock = threading.Lock()
 
             def send_message() -> bool:
@@ -1010,23 +1030,37 @@ class TurnRunner:
                         self.last_activity = f"waiting for you: {event.request.summary()}"
                     if event.kind == "state":
                         states_seen = True
+                        last_state = event.text
                         if event.text == "idle" and final is not None:
                             # Really over: closing stdin lets the CLI exit.
+                            disarm_ceiling()
                             self._close_stdin()
+                        elif event.text == "requires_action":
+                            disarm_ceiling()  # waiting for you, however long
+                        elif event.text == "running" and final is not None:
+                            arm_ceiling()
                         continue
                     if event.kind == "finished":
-                        # The latest result is the turn's. With state events,
+                        # The latest result is the turn's, carrying every
+                        # refusal and error of the turn. With state events,
                         # more can follow (a background agent's notification
                         # runs as its own result), so the turn waits for idle;
                         # an older Claude Code without them ends here.
+                        if final is not None:
+                            event.denials = list(final.denials) + [
+                                d for d in event.denials if d not in final.denials]
+                            event.is_error = event.is_error or final.is_error
                         final = event
-                        if not states_seen:
+                        if not states_seen or last_state == "idle":
                             self._close_stdin()
+                        else:
+                            arm_ceiling()
                     else:
                         self._emit(event)
                 self._refuse_unsupported()
                 if self.stopped_before_answer:
                     break
+            disarm_ceiling()
             self._close_stdin()
             process.wait()
             err_thread.join(timeout=2)
