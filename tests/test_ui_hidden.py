@@ -2148,3 +2148,62 @@ def test_renaming_the_group_in_view_follows_it(frame, monkeypatch):
     assert frame.speech.session_view == "group:Jobs"
     assert frame.view_items["group:Jobs"].IsChecked()
     assert speech.SpeechSettings.load().session_view == "group:Jobs"
+
+
+# -- reporting a bug (#28) -------------------------------------------------------------------
+
+
+def _fake_bug_dialog(monkeypatch, action, values):
+    class Fills:
+        seen = None
+
+        def __init__(self, parent, lines):
+            Fills.seen = lines
+            self.action = action
+
+        def ShowModal(self):
+            return wx.ID_OK
+
+        def values(self):
+            return values
+
+        def Destroy(self):
+            pass
+    monkeypatch.setattr("theclaudehub.ui.main_frame.BugReportDialog", Fills)
+    monkeypatch.setattr("theclaudehub.bugreport.claude_code_version", lambda: "2.1.286")
+    return Fills
+
+
+def test_report_a_bug_opens_github_with_the_report(frame, env, monkeypatch):
+    fills = _fake_bug_dialog(monkeypatch, "open",
+                             ("Sort resets", "It went back to status.", "Stay sorted", ""))
+    frame.on_report_bug()
+    assert any(line.startswith("Sessions listed: 2 desktop app, 1 TheClaudeHub")
+               for line in fills.seen)
+    assert env["opened"][-1].startswith("https://github.com/kellylford/AIChat/issues/new?")
+    assert "title=Sort+resets" in env["opened"][-1]
+    assert env["feedback"][-1].startswith("Opened GitHub's new issue page")
+
+
+def test_copy_report_only_copies(frame, env, monkeypatch):
+    _fake_bug_dialog(monkeypatch, "copy", ("Sort resets", "It went back.", "", ""))
+    frame.on_report_bug()
+    assert env["opened"] == []
+    assert env["feedback"][-1] in ("Report copied.", "Couldn't copy the report.")
+
+
+def test_bug_dialog_needs_a_summary_and_what_happened(frame, env):
+    from theclaudehub.ui.dialogs import BugReportDialog
+    dialog = BugReportDialog(frame, ["TheClaudeHub: 0.1.0"])
+    try:
+        assert dialog.included.GetValue() == "TheClaudeHub: 0.1.0"
+        assert dialog.GetDefaultItem() is dialog.open_btn
+        dialog._finish("open")
+        assert "write a summary" in env["boxes"][-1] and dialog.action == ""
+        dialog.summary.SetValue("  Two   words ")
+        dialog._finish("open")
+        assert "write what happened" in env["boxes"][-1]
+        dialog.happened.SetValue("It broke.")
+        assert dialog.values()[0] == "Two words"
+    finally:
+        dialog.Destroy()

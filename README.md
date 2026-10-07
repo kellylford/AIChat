@@ -143,6 +143,13 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
 - **Turn Status** (Ctrl+Shift+T) says how long Claude has been working on the current turn and what
   it last did. There's no time limit on a turn; Stop (Ctrl+Period) ends it, along with anything it
   started, such as a build.
+- **Report a Bug** (Help menu) asks for a summary, what happened, what you expected and the
+  steps, and shows exactly what else the report includes before it goes anywhere: versions
+  (TheClaudeHub, Windows, Python, wxPython, Claude Code), the announcement level and speech
+  engine, the list's view and sort, and how many sessions it lists. Never a session's title,
+  folder or messages. **Open on GitHub** copies the whole report and opens GitHub's new-issue
+  page with it filled in; **Copy Report** only copies it. (QuickMail files reports through a
+  small relay so nobody needs a GitHub account; TheClaudeHub will once it has its final name.)
 
 ## Install
 
