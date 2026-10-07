@@ -288,7 +288,7 @@ class FakeProcess:
         self.killed = True
 
 
-def run_turn(process, tmp_path, command=None, prompt="Hello -p --bare"):
+def run_turn(process, tmp_path, command=None, prompt="Hello -p --bare", remote_control=None):
     captured = {}
     events = []
     done = threading.Event()
@@ -304,7 +304,8 @@ def run_turn(process, tmp_path, command=None, prompt="Hello -p --bare"):
             done.set()
 
     runner = TurnRunner(command or ["claude", "-p"], str(tmp_path), prompt,
-                        on_event, popen=popen, env={"PATH": "x"})
+                        on_event, popen=popen, env={"PATH": "x"},
+                        remote_control=remote_control)
     runner.start()
     assert done.wait(5)
     runner.join(5)
@@ -929,3 +930,52 @@ def test_an_older_claude_code_without_state_events_ends_at_the_result(tmp_path):
     ])
     _runner, events, _ = run_turn(process, tmp_path)
     assert [e.kind for e in events][-1] == "finished"
+
+
+def test_remote_control_is_asked_for_after_initialize_and_answered(tmp_path):
+    from thechatplace.claude_cli import RC_REQUEST_ID, remote_control_line
+    line = json.loads(remote_control_line("Build", "cse_1"))
+    assert line["request"] == {"subtype": "remote_control", "enabled": True, "name": "Build",
+                               "keep_session_on_exit": True, "reattach_session_id": "cse_1"}
+    assert "reattach_session_id" not in json.loads(remote_control_line("Build"))["request"]
+    answer = ev(type="control_response", response={
+        "subtype": "success", "request_id": RC_REQUEST_ID,
+        "response": {"bridge_session_id": "cse_2", "session_url": "https://x"}})
+    process = FakeProcess([answer, ev(type="system", subtype="init", session_id="s1",
+                                      apiKeySource="none", model="claude-opus-5-5"),
+                           ev(type="result", subtype="success", result="ok")])
+    _runner, events, _ = run_turn(process, tmp_path, remote_control={"name": "Build",
+                                                                      "reattach": ""})
+    kinds = [e.kind for e in events]
+    assert kinds[0] == "remote_control" and events[0].data["bridge_session_id"] == "cse_2"
+    assert kinds[-1] == "finished"
+    written = process.written.decode("utf-8").splitlines()
+    assert json.loads(written[1])["request"]["subtype"] == "remote_control"
+    assert json.loads(written[2])["type"] == "user"  # the message after both
+
+
+def test_a_state_change_before_initialize_answers_doesnt_send_the_message(tmp_path):
+    from thechatplace.claude_cli import INIT_REQUEST_ID
+    answer = ev(type="control_response", response={
+        "subtype": "success", "request_id": INIT_REQUEST_ID,
+        "response": {"commands": [], "models": [
+            {"value": "default", "resolvedModel": "claude-fable-5-1"}]}})
+    process = FakeProcess([ev(type="system", subtype="session_state_changed", state="running"),
+                           answer])
+    runner, events, _ = run_turn(process, tmp_path)
+    assert runner.stopped_before_answer
+    assert b'"type": "user"' not in process.written
+
+
+def test_a_permission_answered_elsewhere_is_dropped(tmp_path):
+    process = FakeProcess([
+        ev(type="control_request", request_id="q1", request={
+            "subtype": "can_use_tool", "tool_name": "Bash", "input": {"command": "ls"},
+            "tool_use_id": "t1"}),
+        ev(type="control_cancel_request", request_id="q1"),
+        ev(type="result", subtype="success", result="ok"),
+    ])
+    runner, events, _ = run_turn(process, tmp_path)
+    kinds = [e.kind for e in events]
+    assert kinds.index("permission") < kinds.index("permission_cancelled")
+    assert runner.pending == {}

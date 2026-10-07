@@ -148,6 +148,9 @@ class SpeechSettings:
     #: Windows notifications when The Chat Place isn't the active window: a
     #: value from ``NOTIFY_LEVELS``.
     notifications: str = NOTIFY_ALL
+    #: Remote Control for The Chat Place's sessions unless a session says
+    #: otherwise (#72).
+    remote_control: bool = False
 
     @property
     def enabled(self) -> bool:
@@ -187,6 +190,7 @@ class SpeechSettings:
         settings.session_view = view if known else "all"
         notify = str(raw.get("notifications", NOTIFY_ALL))
         settings.notifications = notify if notify in NOTIFY_LEVELS else NOTIFY_ALL
+        settings.remote_control = raw.get("remote_control") is True
         return settings
 
     def save(self, path: Optional[Path] = None) -> None:

@@ -207,6 +207,7 @@ class MainFrame(wx.Frame):
         self._item(session, "Con&tinue Here...\tCtrl+Shift+N", self.on_continue_here)
         self._item(session, "&New Session...\tCtrl+N", self.on_new_session)
         self._item(session, "Change Mo&del...", lambda e: self.on_change_model())
+        self._item(session, "Rem&ote Control...", lambda e: self.on_remote_control())
         self._item(session, "&Refresh\tF5",
                    lambda e: self.refresh_sessions(force=True, resort=True))
         self._item(session, "&Forget Chat Place Session...", self.on_forget)
@@ -1587,6 +1588,75 @@ class MainFrame(wx.Frame):
     def _own_key(session_id: str) -> str:
         return f"own:{session_id}"
 
+    def _remote_control_on(self, own) -> bool:
+        """This session's Remote Control: its own choice, or the default."""
+        if own.remote_control in ("on", "off"):
+            return own.remote_control == "on"
+        return self.speech.remote_control
+
+    def on_remote_control(self):
+        """Session, Remote Control (#72): on, off, or as Settings says, for
+        the selected session from its next turn. While a turn runs, the
+        session can be reached from claude.ai and your other devices."""
+        info = self._selected_session()
+        if info is None:
+            self._feedback("No session selected.")
+            return
+        if not info.is_own:
+            self._feedback(f"{info.title} is a desktop app session: turn on its Remote "
+                           "Control in the desktop app.")
+            return
+        own = self.store.get(info.cli_session_id)
+        if own is None:
+            self._feedback(f"Couldn't find {info.title} in The Chat Place's sessions.")
+            return
+        default = "on" if self.speech.remote_control else "off"
+        values = ["", "on", "off"]
+        labels = [f"As in Settings (now {default})", "On for this session",
+                  "Off for this session"]
+        now = values.index(own.remote_control) if own.remote_control in values else 0
+        labels[now] += " (now)"
+        if own.remote_url:
+            values.append("copy")
+            labels.append(f"Copy its claude.ai address ({own.remote_url})")
+        index = self._choose("Remote Control",
+                             f"Remote Control for {info.title}. When it's on, the "
+                             "conversation is copied to claude.ai and kept there:",
+                             labels, selection=now)
+        if index is None or values[index] == own.remote_control:
+            return
+        if values[index] == "copy":
+            if self._copy_text(own.remote_url):
+                self._feedback(f"Copied {info.title}'s claude.ai address.")
+            return
+        if not self._store_write(self.store.update, info.cli_session_id,
+                                 remote_control=values[index]):
+            return
+        own = self.store.get(info.cli_session_id)
+        state = "on" if self._remote_control_on(own) else "off"
+        self._feedback(f"Remote Control {state} for {info.title}, from its next turn.")
+
+    def _on_remote_control(self, session_id: str, title: str, data: dict):
+        """A turn's Remote Control answer: remembered, so the next turn joins
+        the same Remote Control session; said the first time, or if it failed."""
+        if data.get("error"):
+            key = ("remote control", session_id, data["error"])
+            if key not in self._warned:  # once, not every turn
+                self._warned.add(key)
+                self._say(f"{title}: couldn't turn on Remote Control: {data['error']}")
+            return
+        bridge = str(data.get("bridge_session_id") or "")
+        url = str(data.get("session_url") or "")
+        own = self.store.get(session_id)
+        if own is None or not bridge:
+            return
+        first = own.bridge_session_id != bridge
+        self._store_write(self.store.update, session_id, bridge_session_id=bridge,
+                          remote_url=url)
+        if first:
+            self._say(f"{title} is on Remote Control. Session, Remote Control copies its "
+                      "claude.ai address." if url else f"{title} is on Remote Control.")
+
     @staticmethod
     def _queued_words(count: int) -> str:
         return "1 message queued." if count == 1 else f"{count} messages queued."
@@ -2070,7 +2140,11 @@ class MainFrame(wx.Frame):
         def on_event(event: TurnEvent):
             wx.CallAfter(self._on_turn_event, holder, title, event)
 
-        runner = TurnRunner(command, cwd, prompt, on_event, images=images)
+        own = self.store.get(session_id)
+        remote = ({"name": title, "reattach": own.bridge_session_id}
+                  if own is not None and self._remote_control_on(own) else None)
+        runner = TurnRunner(command, cwd, prompt, on_event, images=images,
+                            remote_control=remote)
         # What you typed and attached, to give back if the turn never starts.
         runner.typed = spoken if spoken is not None else prompt
         runner.attached = list(attached or [])
@@ -2139,12 +2213,27 @@ class MainFrame(wx.Frame):
                 self._warned.add(key)
                 self._say(warning)
             return
+        if event.kind == "remote_control":
+            self._on_remote_control(session_id, title, event.data or {})
+            return
         if event.kind == "compacted":
             self._say(f"{title}: Claude Code compacted the conversation to free the context.")
             return
         if event.kind == "denied":
             self._denials.setdefault(session_id, []).append(event.text)
             self._status(f"{title}: permission denied, {event.text}")
+            return
+        if event.kind == "permission_cancelled":
+            queue = self._pending.get(session_id, [])
+            kept = [r for r in queue if r.request_id != event.text]
+            if len(kept) != len(queue):
+                if kept:
+                    self._pending[session_id] = kept
+                else:
+                    self._pending.pop(session_id, None)
+                self._status(f"{title}: answered elsewhere.")
+                self._update_send_state()
+                self.refresh_sessions()
             return
         if event.kind == "permission" and event.request is not None:
             if session_id not in self._runners:
