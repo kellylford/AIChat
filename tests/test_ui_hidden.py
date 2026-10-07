@@ -16,7 +16,8 @@ from theclaudehub.claude_cli import TurnEvent  # noqa: E402
 from theclaudehub.own_store import OwnSession, OwnSessionStore  # noqa: E402
 from theclaudehub.sessions import NEEDS_YOU  # noqa: E402
 
-from records import assistant_block, lines, text_block, tool_use_block, user_text  # noqa: E402
+from records import (assistant_block, lines, text_block, tool_result, tool_use_block,  # noqa: E402
+                     user_text)
 
 
 FAKE_COMMANDS = [
@@ -2720,3 +2721,57 @@ def test_ctrl_c_copies_the_message_and_ctrl_shift_c_its_code(frame, env, monkeyp
         event.SetShiftDown(shift)
         frame._on_char_hook(event)
         assert env["copied"][-1].startswith(expected)
+
+
+def test_changed_files_view_and_turn_end_summary(frame, env, monkeypatch):
+    patch = [{"oldStart": 3, "oldLines": 1, "newStart": 3, "newLines": 2,
+              "lines": ["-old", "+new", "+more"]}]
+    path = add_transcript(env, "C:\\G\\Repo", "cli-a", [
+        user_text("Fix it"),
+        assistant_block(tool_use_block("Edit", {"file_path": "C:\\G\\Repo\\src\\a.py"}, "t1"),
+                        "m1"),
+        tool_result("t1", "Updated.", toolUseResult={"filePath": "C:\\G\\Repo\\src\\a.py",
+                                                     "structuredPatch": patch}),
+        assistant_block(text_block("Fixed."), "m2")])
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    assert pump(lambda: frame._chat_loaded)
+    shown = []
+
+    def modal(dialog):
+        shown.append((dialog.scope.GetSelection(),
+                      [dialog.list.GetString(i) for i in range(dialog.list.GetCount())],
+                      dialog.text.GetValue()))
+        dialog.Destroy()
+    monkeypatch.setattr(frame, "_modal", modal)
+    frame.on_changes()
+    assert shown[0][0] == 0  # your latest message
+    assert shown[0][1] == ["a.py, 2 lines added, 1 removed, in src"]
+    assert "Removed: old\nAdded: new\nAdded: more" in shown[0][2]
+    # The turn ends: the reply, then what it changed.
+    frame._changes_due = True
+    with open(path, "a", encoding="utf-8") as handle:
+        handle.write(json.dumps(assistant_block(text_block("All done."), "m3")) + "\n")
+    frame._refresh_chat()
+    assert pump(lambda: any("Changed 1 file" in s for s in env["spoken"]))
+    assert env["spoken"][-2] == "Quiet one replied. All done."
+    assert env["spoken"][-1] == ("Quiet one: Changed 1 file: a.py, 2 lines added, 1 removed. "
+                                 "Ctrl+Shift+D shows the changes.")
+    assert not frame._changes_due
+    # A new message with no changes yet: the view starts on the whole session.
+    with open(path, "a", encoding="utf-8") as handle:
+        handle.write(json.dumps(user_text("Thanks")) + "\n")
+    frame._refresh_chat()
+    assert pump(lambda: frame.chat_list.GetCount() == 4)
+    frame.on_changes()
+    assert shown[-1][0] == 1 and shown[-1][1] == ["a.py, 2 lines added, 1 removed, in src"]
+
+
+def test_changed_files_with_nothing_changed(frame, env):
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [user_text("Hi"),
+                                                 assistant_block(text_block("Hello."), "m1")])
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    assert pump(lambda: frame._chat_loaded)
+    frame.on_changes()
+    assert env["feedback"][-1] == "Quiet one: Claude hasn't changed any files in this session."

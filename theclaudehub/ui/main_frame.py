@@ -47,6 +47,7 @@ from typing import Dict, List, Optional
 
 import wx
 
+from ..changes import by_file, summary_text
 from ..codeblocks import find_code_blocks
 from .. import (__version__, announce, attachments, bugreport, export, hub, platform_paths,
                usage)
@@ -61,13 +62,13 @@ from ..groups import GroupStore
 from ..sessions import (GROUP_VIEW_PREFIX, IDLE, NEEDS_YOU, SORT_ORDERS, SORT_SPOKEN,
                         VIEW_ALL, VIEWS, WORKING,
                         SessionInfo, group_view, in_view, view_spoken)
-from ..speech import SpeechSettings, default_options, list_speech_options, speaker
+from ..speech import ANNOUNCE_FULL, SpeechSettings, default_options, list_speech_options, speaker
 from ..transcript import ASSISTANT, ERROR, PLAN, QUESTION, TOOL, ChatMessage, TranscriptReader
 from ..updater import AVAILABLE, FAILED, CheckResult, UpdateService
 from .a11y import set_accessible_name, set_list_items_accessible
 from ..rendering import html_page, message_page
 from ..ui_text import shortcuts_html
-from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, CodeBlocksDialog, FormattedMessageDialog,
+from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, ChangesDialog, CodeBlocksDialog, FormattedMessageDialog,
                       BugReportDialog, CommandPickerDialog, MessageDialog, NewSessionDialog, PermissionDialog, PlanDialog,
                       ManageGroupsDialog, QuestionDialog, SettingsDialog, ShortcutsDialog,
                       formatted_view_available)
@@ -138,6 +139,9 @@ class MainFrame(wx.Frame):
         self._windows: Dict[str, int] = {}  # by session id
         self._model_windows: Dict[str, int] = {}  # by model, from any turn of ours
         self._warned: set = set()
+        # The loaded session's turn ended: say what it changed once its
+        # transcript has been read (#18).
+        self._changes_due = False
         # What Claude is waiting for you to answer, per session, oldest first
         # (#187, #188). The turn is paused until each is answered.
         self._pending: Dict[str, List[PermissionRequest]] = {}
@@ -233,6 +237,7 @@ class MainFrame(wx.Frame):
         self._item(view, "Sto&p Running Turn\tCtrl+.", self.on_stop)
         self._item(view, "T&urn Status\tCtrl+Shift+T", self.on_turn_status)
         self._item(view, "Usage and &Context\tCtrl+Shift+U", lambda e: self.on_usage())
+        self._item(view, "Change&d Files...\tCtrl+Shift+D", lambda e: self.on_changes())
         self._item(view, "Repeat &Last Announcement\tCtrl+Shift+R",
                    lambda e: self._say(self._last_announcement, force=True))
         bar.Append(view, "&View")
@@ -562,7 +567,11 @@ class MainFrame(wx.Frame):
                 if info.is_own:
                     continue
                 if self._open is not None and info.key == self._open.key:
-                    continue  # the open session announces its own messages
+                    # The open session announces its own messages, and then
+                    # what the turn changed.
+                    self._changes_due = True
+                    self._refresh_chat()
+                    continue
                 text = announce.turn_end_text(info.title, info.state, info.detail,
                                               replies.get(info.key, ""), self.speech.announce)
                 if text:
@@ -906,12 +915,18 @@ class MainFrame(wx.Frame):
             return
         first_load = not self._chat_loaded
         if not changed and not first_load:
+            if self._changes_due:
+                self._say_changes()
             return
         before_keys = {m.key for m in self._chat_messages}
         self._chat_messages = messages
         self._check_context()
         self._rebuild_chat_list(focus_newest=first_load)
         self._chat_loaded = True
+        if first_load:
+            self._changes_due = False  # old news when a session is loaded
+        elif self._changes_due:
+            wx.CallAfter(self._say_changes)  # after the reply
         if first_load:
             note = f" Couldn't read {unreadable} lines." if unreadable else ""
             count = len(self._visible_messages())
@@ -1346,6 +1361,51 @@ class MainFrame(wx.Frame):
             parts.append(f"{self._open.title}: {usage.context_text(tokens, window)}")
         parts.append(usage.limits_text(self._limits))
         self._feedback(" ".join(parts))
+
+    def on_changes(self):
+        """View, Changed Files (Ctrl+Shift+D): the files Claude changed since
+        your latest message, or in the whole session, and each change to read
+        by line. From the transcript, so desktop sessions work too."""
+        info = self._open
+        if info is None or self._reader is None:
+            self._feedback("Load a session first.")
+            return
+        transcript = self._reader.transcript
+        everything = by_file(list(transcript.edits))
+        if not everything:
+            self._feedback(f"{info.title}: Claude hasn't changed any files in this session.")
+            return
+        latest = by_file(transcript.latest_turn_edits())
+        self._modal(ChangesDialog(self, info.title, latest, everything,
+                                  lambda f: self._describe_changed_file(f, info.cwd)))
+
+    @staticmethod
+    def _describe_changed_file(changed, cwd: str) -> str:
+        """"main_frame.py, 40 lines added, 12 removed, in theclaudehub\\ui"."""
+        name = os.path.basename(changed.path)
+        folder = os.path.dirname(changed.path)
+        try:
+            if cwd:
+                folder = os.path.relpath(folder, cwd)
+        except ValueError:
+            pass  # another drive: the full folder
+        where = "" if folder in ("", ".") else f", in {folder}"
+        return f"{name}, {changed.counts()}{where}"
+
+    def _say_changes(self):
+        """After a turn ends: what it changed, at the full announcement level;
+        on the status bar otherwise."""
+        self._changes_due = False
+        if self._open is None or self._reader is None:
+            return
+        summary = summary_text(self._reader.transcript.latest_turn_edits())
+        if not summary:
+            return
+        text = f"{self._open.title}: {summary} Ctrl+Shift+D shows the changes."
+        if self.speech.announce == ANNOUNCE_FULL:
+            self._say(text)
+        else:
+            self._status(text)
 
     def _check_context(self):
         """Say once when the loaded session's context passes 80%."""
@@ -1931,6 +1991,7 @@ class MainFrame(wx.Frame):
                     reply = announce.first_sentence(event.text) if event.text else ""
                     self._status(f"{title} finished. {reply}".strip())
             if is_open:
+                self._changes_due = True
                 self._refresh_chat()
             if queued:
                 # After a failure the queued message goes back instead: what

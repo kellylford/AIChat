@@ -174,6 +174,13 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   Markdown is read as words: a code block is "Code block omitted", and headings and list items
   are read as separate sentences. Turn it off in Settings with "Read your own messages back when
   they're sent" (Alt+M), and you hear just "Sent. Hub probe is working."
+- **Changed Files** (Ctrl+Shift+D, View menu) lists the files Claude changed since your latest
+  message, or in the whole session, each with its line counts ("main_frame.py, 40 lines added, 12
+  removed, in theclaudehub\ui"). Enter on a file reads its changes in a text box, a line at a
+  time: where each change is, then "Removed:", "Added:" and "Unchanged:" lines. It's built from the
+  transcript, so it works for desktop app sessions too, with no git needed. When the loaded
+  session's turn ends, the announcement (at the full level) is followed by a one-line summary:
+  "Changed 3 files: main_frame.py, 40 lines added, 12 removed; …".
 - **Usage and Context** (Ctrl+Shift+U, View menu) says how full the loaded session's context is
   ("Context 62% full: 124,000 of 200,000 tokens"), from the token counts of Claude's latest
   reply (the percentage only once the window's size is known: Claude Code reports it for a model
@@ -311,6 +318,7 @@ shows it as plain text instead.
 | Anywhere | Ctrl+E | Export the session to a file |
 | Reply box | Ctrl+/ | Insert a slash command or skill |
 | Anywhere | Ctrl+Shift+F | Attach files or images to the next message |
+| Anywhere | Ctrl+Shift+D | Changed files, and each change to read by line |
 | Anywhere | Ctrl+Shift+U | Usage and context: how full the context is, and plan limits |
 | Anywhere | Alt+V, H | Show Sessions: choose which sessions are listed |
 | Anywhere | Ctrl+Shift+N | Continue the selected (or loaded) desktop app session here, as a copy |
