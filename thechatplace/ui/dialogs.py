@@ -248,7 +248,7 @@ class SettingsDialog(wx.Dialog):
         self.remote_control = wx.CheckBox(
             self, label="Turn on Remote &Control for The Chat Place's sessions, so you can "
                         "reach them from claude.ai and other devices. Their conversations "
-                        "are copied to claude.ai and kept there. (Session, Remote Control "
+                        "are copied to claude.ai and kept there. (File, Remote Control "
                         "changes one session.)")
         self.remote_control.SetValue(speech.remote_control)
         outer.Add(self.remote_control, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
@@ -732,7 +732,7 @@ class PlanDialog(wx.Dialog):
 
 
 class ManageGroupsDialog(wx.Dialog):
-    """Session, Manage Groups (#31): the groups, each with how many sessions
+    """File, Manage Groups (#31): the groups, each with how many sessions
     it has, and New, Rename, Delete. Changes are saved as they're made;
     Close (or Escape) closes. Deleting a group asks first, and never touches
     its sessions."""
@@ -840,7 +840,7 @@ class ManageGroupsDialog(wx.Dialog):
 
 
 class CommandPickerDialog(wx.Dialog):
-    """Session, Insert Command or Skill (#23): Claude Code's slash commands
+    """File, Insert Command or Skill (#23): Claude Code's slash commands
     and your skills for this folder, yours first. Type to filter by name or
     description; Down moves into the list; Enter (or Insert) chooses."""
 

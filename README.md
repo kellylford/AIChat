@@ -52,8 +52,8 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   all again. In the messages it finds the next message containing the text, searching each
   message's whole text, not just the first line you see; F3 and Shift+F3 find the next and
   previous, going round from the other end when they reach one (and saying so).
-- **Groups**, like groups in Claude on the web: **Ctrl+G** (Session, Add to Group) puts the
-  selected session in a group, or a new one; Session, Remove from Group takes it out; Session,
+- **Groups**, like groups in Claude on the web: **Ctrl+G** (File, Add to Group) puts the
+  selected session in a group, or a new one; File, Remove from Group takes it out; Session,
   Manage Groups lists your groups with how many sessions each has, to make, rename or delete
   them (deleting a group never touches its sessions). A session can be in several groups, and
   its row says which ("…, group Work"). The Chat Place's groups are kept in
@@ -105,7 +105,7 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
 - **Escape** in the messages or the reply box (or Backspace in the messages) goes back to the
   session list, on the same session. Enter there on the session that's already loaded takes you
   back to its messages where you left them, without reloading.
-- **Commands and skills** (Ctrl+/, the Commands button after Stop, or Session, Insert Command
+- **Commands and skills** (Ctrl+/, the Commands button after Stop, or File, Insert Command
   or Skill), in The Chat Place's own
   sessions: a searchable list of your skills and custom commands, then Claude Code's own
   (/compact, /context, /code-review and the rest), each with its description and what it
@@ -115,7 +115,7 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   folder, asked for in the background when the session loads (no turn, no cost) and kept
   current by each turn. If it isn't there yet, you hear "Commands are ready" when it is; the list
   never opens by itself.
-- **Attachments**, in The Chat Place's own sessions: **Attach Files** (Alt+F, after Commands;
+- **Attachments**, in The Chat Place's own sessions: **Attach Files** (Alt+T, after Commands;
   Ctrl+Shift+F) adds files and images to your next message, and **Ctrl+V** in the reply box
   attaches a picture on the clipboard, such as a screenshot from Win+Shift+S. They're listed
   under the reply box ("2 attachments: screenshot.png, log.txt"); Delete there removes one.
@@ -123,7 +123,7 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   in the message as `@"path"`, which Claude Code reads in for Claude. A message can be
   just attachments. Each session keeps its own until they're sent. Pasted pictures are saved
   in `%APPDATA%\TheChatPlace\pasted images`.
-- **Export** (Ctrl+E, Session, Export Session) saves the selected session's conversation,
+- **Export** (Ctrl+E, File, Export Session) saves the selected session's conversation,
   or the loaded one's, to a file: **Markdown**, a **web page** (formatted like the full-message
   view, nothing fetched from the internet) or **plain text**, chosen by the Save as type list
   or the file name's extension. Each message is a heading ("Claude, 10:43") and its text as
@@ -147,16 +147,16 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   Opus)"). Fable isn't offered: on some plans it bills to usage credits, and in the headless
   mode The Chat Place uses, Claude Code does that without asking. So if a turn would run on
   Fable anyway (Claude Code's own default, or a fallback), The Chat Place stops it before
-  anything is sent and says why. **Session, Change Model** changes a session's model from its
+  anything is sent and says why. **File, Change Model** changes a session's model from its
   next turn. If that first message never reaches Claude (Claude Code not signed in, say), it goes
   back into the reply box and Send starts the session again.
 - **Remote Control.** Settings can turn on Remote Control for The Chat Place's sessions, and
-  **Session, Remote Control** turns it on or off for one session (or back to the Settings
+  **File, Remote Control** turns it on or off for one session (or back to the Settings
   default). A session on Remote Control can be reached from claude.ai and your other devices
   while one of its turns is running: each turn is its own Claude Code process, so between turns
-  it shows as offline. The same Remote Control session is joined every turn, and Session, Remote
+  it shows as offline. The same Remote Control session is joined every turn, and File, Remote
   Control copies its claude.ai address. Turning it on copies the conversation to claude.ai,
-  where it stays (turning Remote Control off, or forgetting the session, doesn't remove it;
+  where it stays (turning Remote Control off, or deleting the session, doesn't remove it;
   archive it on claude.ai). While a turn runs, anyone signed in to your account on claude.ai
   can type into it or answer its questions; a question answered there is cleared here.
 - **Claude asks, you answer.** In The Chat Place's own sessions, when Claude needs permission
@@ -404,7 +404,7 @@ shows it as plain text instead.
 | Anywhere | Alt+V, H | Show Sessions: choose which sessions are listed |
 | Anywhere | Ctrl+Shift+N | Continue the selected (or loaded) desktop app session here, as a copy |
 | Session list | F5 | Refresh the list now and put it in order |
-| Session list | Delete | Forget the selected Chat Place session (asks first; its transcript is kept) |
+| Session list | Delete | Hide the selected session (View, Show Sessions, Hidden lists it; File, Bring Back Session returns it) |
 | Messages | Enter, or Applications key then Read Full Message | Read the whole message; Escape comes back to it |
 | Messages | Ctrl+C | Copy the whole message |
 | Messages | Ctrl+Shift+C | Copy the message's last code block |
@@ -419,7 +419,7 @@ shows it as plain text instead.
 | Anywhere | Ctrl+Shift+R | Repeat the last announcement |
 | Anywhere | Alt+F4 | Quit |
 
-Menus are Session (Alt+S), View (Alt+V) and Help (Alt+H). Controls have their own Alt letters
+Menus are File (Alt+F), View (Alt+V) and Help (Alt+H). Controls have their own Alt letters
 (Alt+L the session list, Alt+M the messages, Alt+Y the reply box, Alt+D Send), and none of them
 takes a menu's letter.
 
