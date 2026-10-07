@@ -143,10 +143,13 @@ installed copies find no updates.
 
 ## Run from source (development)
 
-You need Python 3.11 or later.
+You need Python 3.11 or later. The repo's virtual environment is `.venv` (ignored by git);
+`build.cmd` makes it the first time, or make it yourself:
 
 ```
 cd AIChat
+python -m venv .venv
+.venv\Scripts\activate
 pip install -r requirements-dev.txt
 pythonw TheClaudeHub.pyw
 python -m pytest tests
@@ -157,20 +160,20 @@ for Updates says so, and names the newest release.
 
 ### Build it yourself
 
-`build.ps1` builds the app on your own PC the same way the release workflow does, unsigned:
+Run `build.cmd` (from a command prompt, or double-click it). It does what the release workflow
+does, unsigned: makes `.venv` if it isn't there, installs what the build needs into it, runs the
+tests, builds the app, smoke-tests it, and makes the installer and portable zip.
 
 ```
-.\build.ps1                                   tests, app, smoke test, installer and zip
-.\build.ps1 -OutputDir C:\Users\kelly\OneDrive\thehub   and copy Setup and the zip there
-.\build.ps1 -SkipTests -AppOnly               just the app folder, quickly
+build.cmd                                     build into releases\ and dist\
+build.cmd C:\Users\kelly\OneDrive\thehub      and copy Setup and the zip there
 ```
 
-It works in its own virtual environment (`.venv-build`), so your Python packages aren't
-touched; the first run takes a few minutes to set that up. The installer needs the `vpk` tool,
-which the script installs with the .NET SDK if it's missing (`-AppOnly` doesn't need it). The
-results are in `releases\` (Setup and the portable zip) and `dist\TheClaudeHub\` (the app
-itself). Unsigned, so SmartScreen may warn when you run Setup: More info, then Run anyway.
-If PowerShell won't run scripts, use `powershell -ExecutionPolicy Bypass -File .\build.ps1`.
+The first run takes a few minutes to set up `.venv`. The results are `releases\` (Setup and the
+portable zip) and `dist\TheClaudeHub\` (the app itself, ready to run). The installer needs the
+Velopack tool, `vpk`; `build.cmd` installs it if the .NET SDK is there, and otherwise builds just
+the app and says why. The build is unsigned, so SmartScreen may warn when you run Setup: More
+info, then Run anyway.
 
 ### Releasing
 
