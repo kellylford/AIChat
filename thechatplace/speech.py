@@ -34,7 +34,9 @@ No wx imports here: the module is used by the wx app but testable without it.
 from __future__ import annotations
 
 import json
+import os
 import re
+import signal
 import subprocess
 import sys
 import tempfile
@@ -480,6 +482,12 @@ class Speaker:
             kwargs = {}
             if sys.platform == "win32":
                 kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+            else:
+                # Its own process group, so stopping it stops what it started
+                # too: speak-engine.sh runs osascript as a child (to fall back
+                # to say when VoiceOver refuses), and killing only the script
+                # left osascript to hand VoiceOver stale text.
+                kwargs["start_new_session"] = True
             try:
                 process = self._popen(command, stdout=subprocess.DEVNULL,
                                       stderr=subprocess.DEVNULL,
@@ -565,6 +573,13 @@ class Speaker:
 def _kill_quietly(process) -> None:
     try:
         if process.poll() is None:
+            if sys.platform != "win32":
+                try:
+                    # The whole group (see start_new_session where it starts).
+                    os.killpg(process.pid, signal.SIGKILL)
+                    return
+                except (OSError, AttributeError, TypeError):
+                    pass
             process.kill()
     except Exception:
         # It may have exited between poll and kill, or the OS may refuse;

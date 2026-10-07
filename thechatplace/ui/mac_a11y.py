@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import ctypes
 import ctypes.util
+import functools
 import sys
 
 IS_MACOS = sys.platform == "darwin"
@@ -52,22 +53,30 @@ def _runtime():
     return _objc or None
 
 
+@functools.lru_cache(maxsize=None)
+def _msg_send(restype, argtypes):
+    """objc_msgSend cast to one method prototype, made once per prototype:
+    the lists' names change on every refresh."""
+    signature = ctypes.CFUNCTYPE(restype, ctypes.c_void_p, ctypes.c_void_p, *argtypes)
+    return signature(ctypes.cast(_runtime().objc_msgSend, ctypes.c_void_p).value)
+
+
+@functools.lru_cache(maxsize=None)
+def _selector(name: str):
+    return _runtime().sel_registerName(name.encode())
+
+
 def _send(obj, selector, *args, restype=ctypes.c_void_p, argtypes=()):
     """``[obj selector:args]``.
 
     objc_msgSend is cast to each method's own prototype: calling it through
     the wrong one is undefined on arm64.
     """
-    objc = _runtime()
-    signature = ctypes.CFUNCTYPE(restype, ctypes.c_void_p, ctypes.c_void_p, *argtypes)
-    call = signature(ctypes.cast(objc.objc_msgSend, ctypes.c_void_p).value)
-    return call(obj, objc.sel_registerName(selector.encode()), *args)
+    return _msg_send(restype, tuple(argtypes))(obj, _selector(selector), *args)
 
 
 def _responds(obj, selector) -> bool:
-    objc = _runtime()
-    return bool(_send(obj, "respondsToSelector:",
-                      ctypes.c_void_p(objc.sel_registerName(selector.encode())),
+    return bool(_send(obj, "respondsToSelector:", ctypes.c_void_p(_selector(selector)),
                       restype=ctypes.c_bool, argtypes=(ctypes.c_void_p,)))
 
 

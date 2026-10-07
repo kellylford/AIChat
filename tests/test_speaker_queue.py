@@ -1,7 +1,10 @@
 """The speaker queues utterances and stops all of them on an interruption."""
 import json
+import sys
 import threading
 import time
+
+import pytest
 
 from thechatplace import speech
 from thechatplace.speech import Speaker, SpeechSettings
@@ -124,3 +127,33 @@ def test_speech_log_drops_its_older_half_when_too_big(tmp_path, monkeypatch):
     assert text.splitlines()[-1].endswith("utterance 59")
     assert text.splitlines()[0][:4].isdigit()  # starts on a whole line
     s.stop()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="process groups are POSIX")
+def test_stopping_speech_also_stops_what_the_script_started(tmp_path):
+    """speak-engine.sh runs osascript as a child, so it can fall back to say
+    when VoiceOver refuses. Killing only the script left osascript running
+    to hand VoiceOver stale text after a newer announcement."""
+    import os
+    import subprocess
+    import time
+    from thechatplace.speech import _kill_quietly
+
+    pid_file = tmp_path / "child.pid"
+    script = f"sleep 30 & echo $! > {pid_file}; wait"
+    process = subprocess.Popen(["/bin/bash", "-c", script], start_new_session=True)
+    for _ in range(100):
+        if pid_file.exists() and pid_file.read_text().strip():
+            break
+        time.sleep(0.02)
+    child = int(pid_file.read_text())
+    _kill_quietly(process)
+    process.wait(timeout=5)
+    for _ in range(100):
+        try:
+            os.kill(child, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.02)
+    else:
+        pytest.fail("the script's child outlived it")
