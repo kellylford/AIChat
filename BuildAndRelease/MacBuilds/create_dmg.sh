@@ -69,7 +69,13 @@ mkdir -p "$MOUNT"
 hdiutil attach "$WORK/rw.dmg" -readwrite -noverify -noautoopen -nobrowse -mountpoint "$MOUNT" >/dev/null
 ln -s /Applications "$MOUNT/Applications"
 sync
-hdiutil detach "$MOUNT" >/dev/null
+# Spotlight or fseventsd can still hold a just-mounted image ("Resource busy",
+# seen on a CI runner), so try a few times, then force it as IDT and GHManage do.
+for attempt in 1 2 3 4 5; do
+    hdiutil detach "$MOUNT" >/dev/null 2>&1 && break
+    if [ "$attempt" = 5 ]; then hdiutil detach "$MOUNT" -force >/dev/null; break; fi
+    sleep 2
+done
 
 rm -f "$DMG"
 hdiutil convert "$WORK/rw.dmg" -format UDZO -imagekey zlib-level=9 -o "$DMG" >/dev/null
