@@ -3002,3 +3002,37 @@ def test_a_different_model_is_said_once(frame, env):
     count = len(env["spoken"])
     frame._check_model("gone", "Gone", "claude-fable-5-1")
     assert len(env["spoken"]) == count
+
+
+def test_enter_presses_a_status_bar_button(frame, monkeypatch):
+    pressed = []
+    monkeypatch.setattr(frame, "check_for_updates", lambda manual=True: pressed.append(manual))
+    frame.status_parts.set("update", "Update available: 0.2.0")
+    button = frame.status_parts.get("update")
+    event = wx.KeyEvent(wx.wxEVT_KEY_DOWN)
+    event.SetKeyCode(wx.WXK_RETURN)
+    button._on_key(event)
+    assert pressed == [True]
+
+
+def test_a_part_you_are_reading_waits_for_you(frame, monkeypatch):
+    frame._status("First.")
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.status_text))
+    frame._status("Second.")
+    assert frame.status_text.GetLabel() == "First."  # not read out under you
+    assert frame.GetStatusBar().GetStatusText(0) == "Second."  # the read key has it
+    frame.status_text._on_focus_change(wx.FocusEvent(wx.wxEVT_KILL_FOCUS))
+    assert frame.status_text.GetLabel() == "Second."  # caught up on leaving
+
+
+def test_empty_parts_and_the_update_button_going_away(frame, env):
+    from theclaudehub.updater import AVAILABLE, CheckResult, CURRENT
+    bar = frame.GetStatusBar()
+    assert bar.GetStatusText(1) == "No session loaded"
+    frame.updates = FakeUpdates(CheckResult(AVAILABLE, "0.1.0", "0.2.0"))
+    run_check(frame, manual=False)
+    assert frame.status_parts.get("update").IsShown()
+    frame.updates = FakeUpdates(CheckResult(CURRENT, "0.2.0", "0.2.0"))
+    run_check(frame, manual=False)
+    assert not frame.status_parts.get("update").IsShown()
+    assert bar.GetFieldsCount() == len(frame.status_parts.shown())

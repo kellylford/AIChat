@@ -463,6 +463,8 @@ class MainFrame(wx.Frame):
             return
         key = next((k for k in self._list_keys if k in {s.key for s in waiting}), None)
         if key is None:
+            if self._session_filter:
+                self._set_session_filter("")
             self.on_view(VIEW_NEEDS_YOU)
             key = next((k for k in self._list_keys if k in {s.key for s in waiting}), None)
         if key is not None:
@@ -2527,6 +2529,7 @@ class MainFrame(wx.Frame):
             return
         text = result.describe()
         if result.status != AVAILABLE:
+            self.status_parts.set("update", "")
             if manual:
                 self._say(text, force=True)
             elif result.status == FAILED:

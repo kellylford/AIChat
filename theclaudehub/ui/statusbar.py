@@ -50,10 +50,14 @@ class StatusText(wx.Control):
     def __init__(self, parent: wx.Window, name: str, empty_text: str = ""):
         super().__init__(parent, style=wx.BORDER_NONE, name=name)
         self.empty_text = empty_text
+        # New words while you're on the part wait until you leave or come
+        # back: a name change on the focus is spoken, and a turn's elapsed
+        # time would otherwise be read out every couple of seconds.
+        self._waiting: Optional[str] = None
         self.SetBackgroundStyle(wx.BG_STYLE_PAINT)
         self.Bind(wx.EVT_PAINT, self._on_paint)
-        self.Bind(wx.EVT_SET_FOCUS, lambda e: (self.Refresh(), e.Skip()))
-        self.Bind(wx.EVT_KILL_FOCUS, lambda e: (self.Refresh(), e.Skip()))
+        self.Bind(wx.EVT_SET_FOCUS, self._on_focus_change)
+        self.Bind(wx.EVT_KILL_FOCUS, self._on_focus_change)
         try:
             self._accessible = _TextAccessible(self)
             self.SetAccessible(self._accessible)
@@ -71,6 +75,26 @@ class StatusText(wx.Control):
             super().SetLabel(label)
             self.Refresh()
 
+    def show_text(self, text: str) -> None:
+        """New words: now, or when you next arrive if you're reading it."""
+        if wx.Window.FindFocus() is self:
+            self._waiting = text if text != self.GetLabel() else None
+        else:
+            self._waiting = None
+            self.SetLabel(text)
+
+    def latest(self) -> str:
+        """The newest words, waiting or shown, or the empty text."""
+        text = self._waiting if self._waiting is not None else self.GetLabel()
+        return text or self.empty_text
+
+    def _on_focus_change(self, event):
+        if self._waiting is not None:
+            text, self._waiting = self._waiting, None
+            self.SetLabel(text)
+        self.Refresh()
+        event.Skip()
+
     def _on_paint(self, _event):
         dc = wx.AutoBufferedPaintDC(self)
         dc.SetBackground(wx.Brush(self.GetParent().GetBackgroundColour()))
@@ -78,7 +102,7 @@ class StatusText(wx.Control):
         dc.SetFont(self.GetParent().GetFont())
         dc.SetTextForeground(wx.SystemSettings.GetColour(wx.SYS_COLOUR_BTNTEXT))
         width, height = self.GetClientSize()
-        text = self.GetLabel()
+        text = self.GetLabel() or self.empty_text
         _w, text_height = dc.GetTextExtent(text or "Ag")
         dc.SetClippingRegion(0, 0, width, height)
         dc.DrawText(text, 3, max((height - text_height) // 2, 0))
@@ -88,6 +112,27 @@ class StatusText(wx.Control):
 
 class StatusButton(wx.Button):
     """A status bar part you can act on: a real button, Enter or Space."""
+
+    def __init__(self, parent, on_hidden_focus: Callable[[], None], **kwargs):
+        super().__init__(parent, **kwargs)
+        self._on_hidden_focus = on_hidden_focus
+        self.Bind(wx.EVT_KEY_DOWN, self._on_key)
+        self.Bind(wx.EVT_SET_FOCUS, self._on_focus)
+
+    def _on_key(self, event):
+        # Outside a dialog or panel nothing turns Enter into a click.
+        if event.GetKeyCode() in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER) \
+                and not event.HasAnyModifiers():
+            self.Command(wx.CommandEvent(wx.wxEVT_BUTTON, self.GetId()))
+            return
+        event.Skip()
+
+    def _on_focus(self, event):
+        # Windows can hand the focus back to a button hidden while you were
+        # in another window: move on to a part that's there.
+        if not self.IsShown():
+            wx.CallAfter(self._on_hidden_focus)
+        event.Skip()
 
     def AcceptsFocusFromKeyboard(self):
         return False  # reached with F6, Ctrl+9 and the arrows, not Tab
@@ -117,7 +162,8 @@ class StatusParts:
 
     def add_button(self, key: str, width: int,
                    on_press: Callable[[], None]) -> "StatusButton":
-        control = StatusButton(self.bar, label="", style=wx.BORDER_NONE | wx.BU_EXACTFIT)
+        control = StatusButton(self.bar, self.focus_first, label="",
+                               style=wx.BORDER_NONE | wx.BU_EXACTFIT)
         control.Bind(wx.EVT_BUTTON, lambda e: on_press())
         control.Hide()
         self._parts.append(_Part(key, control, width, False))
@@ -132,7 +178,9 @@ class StatusParts:
         part = next(p for p in self._parts if p.key == key)
         text = text or ""
         shown_before = part.control.IsShown()
-        if part.control.GetLabel() != text:
+        if isinstance(part.control, StatusText):
+            part.control.show_text(text)
+        elif part.control.GetLabel() != text:
             part.control.SetLabel(text)
         show = part.always or bool(text)
         if show != shown_before:
@@ -184,7 +232,10 @@ class StatusParts:
         shown = [p for p in self._parts if p.always or p.control.IsShown()]
         for index, part in enumerate(shown):
             if index < self.bar.GetFieldsCount():
-                self.bar.SetStatusText(part.control.GetLabel(), index)
+                text = part.control.latest() if isinstance(part.control, StatusText) \
+                    else part.control.GetLabel()
+                if self.bar.GetStatusText(index) != text:
+                    self.bar.SetStatusText(text, index)
 
     def _on_size(self, event):
         self.layout()
