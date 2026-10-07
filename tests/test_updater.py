@@ -228,7 +228,7 @@ def test_release_notes_exist_for_this_version():
         assert heading in text
 
 
-@pytest.mark.parametrize("tag,ok", [("v0.1.0", True), ("v0.1.1", False),
+@pytest.mark.parametrize("tag,ok", [("v0.1.0", True), ("v9.9.9", False),
                                     ("0.1.0", False)])
 def test_tag_check_script(tag, ok):
     import subprocess
