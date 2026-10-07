@@ -53,7 +53,7 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   message's whole text, not just the first line you see; F3 and Shift+F3 find the next and
   previous, going round from the other end when they reach one (and saying so).
 - **Groups**, like groups in Claude on the web: **Ctrl+G** (File, Add to Group) puts the
-  selected session in a group, or a new one; File, Remove from Group takes it out; Session,
+  selected session in a group, or a new one; File, Remove from Group takes it out; File,
   Manage Groups lists your groups with how many sessions each has, to make, rename or delete
   them (deleting a group never touches its sessions). A session can be in several groups, and
   its row says which ("…, group Work"). The Chat Place's groups are kept in

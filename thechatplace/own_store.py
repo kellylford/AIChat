@@ -226,6 +226,6 @@ class OwnSessionStore:
         self.save()
 
     def remove(self, cli_session_id: str) -> None:
-        """Forget a session (its transcript is left alone)."""
+        """Remove a session (File, Delete Session Permanently) (its transcript is left alone)."""
         if self._sessions.pop(cli_session_id, None) is not None:
             self.save()

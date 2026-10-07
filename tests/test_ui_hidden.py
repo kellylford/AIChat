@@ -666,7 +666,7 @@ def test_silent_level_still_puts_the_reply_in_the_status_bar(frame, env):
     assert frame.GetStatusBar().GetStatusText() == "Hub probe finished. All good."
 
 
-# -- forget --------------------------------------------------------------------------------
+# -- hide --------------------------------------------------------------------------------
 
 
 def test_hide_keeps_the_place_and_bring_back_returns_it(frame, env):
@@ -809,7 +809,7 @@ def test_enter_on_the_loaded_session_goes_back_without_reloading(frame, env, mon
     assert env["feedback"][-1] == "Back in Quiet one."
 
 
-def test_forgetting_the_loaded_session_moves_focus_to_the_session_list(frame, env,
+def test_hiding_the_loaded_session_moves_focus_to_the_session_list(frame, env,
                                                                        monkeypatch):
     select(frame, "Hub probe")
     frame.on_open_session()
@@ -3603,3 +3603,18 @@ def test_long_session_titles_leave_the_reply_box_its_width(env):
         window._chat_timer.Stop()
         window._pool.shutdown(wait=True)
         window.Destroy()
+
+
+def test_a_hidden_session_is_not_said_counted_or_notified(frame, env, monkeypatch):
+    import dataclasses
+    settle(frame)
+    blocked = next(s for s in frame._snapshot.sessions if s.title == "Blocked one")
+    select(frame, "Blocked one")
+    frame.on_hide()
+    settle(frame)
+    assert not frame.status_parts.get("needs_you").IsShown()
+    monkeypatch.setattr(frame, "_app_is_active", lambda: False)
+    spoken = len(env["spoken"])
+    again = dataclasses.replace(blocked, state="needs you", detail="Pick a name")
+    frame._apply_snapshot(frame._snapshot, [again], {}, False)
+    assert env["notified"] == [] and len(env["spoken"]) == spoken

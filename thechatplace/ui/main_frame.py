@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 import threading
 import time
@@ -189,6 +190,9 @@ class MainFrame(wx.Frame):
                          wx.OK | wx.ICON_WARNING, self)
         if self.groups.load_error:
             wx.CallAfter(wx.MessageBox, self.groups.load_error, APP_NAME,
+                         wx.OK | wx.ICON_WARNING, self)
+        if self.hidden.load_error:
+            wx.CallAfter(wx.MessageBox, self.hidden.load_error, APP_NAME,
                          wx.OK | wx.ICON_WARNING, self)
         self.refresh_sessions()
         self._check_claude_version()
@@ -479,7 +483,7 @@ class MainFrame(wx.Frame):
 
     def _update_status_needs_you(self):
         count = sum(1 for s in self._snapshot.sessions
-                    if s.state == NEEDS_YOU and not s.archived)
+                    if s.state == NEEDS_YOU and not s.archived and not s.hidden)
         text = "" if not count else (
             "1 session needs you" if count == 1 else f"{count} sessions need you")
         self.status_parts.set("needs_you", text)
@@ -488,7 +492,7 @@ class MainFrame(wx.Frame):
         """The status bar's "needs you" button: the first session that needs
         you, selected in the session list (shown there if the view hid it)."""
         waiting = [s for s in self._snapshot.sessions
-                   if s.state == NEEDS_YOU and not s.archived]
+                   if s.state == NEEDS_YOU and not s.archived and not s.hidden]
         if not waiting:
             self._feedback("No session needs you.")
             return
@@ -610,6 +614,11 @@ class MainFrame(wx.Frame):
         previous_desktop_groups = self._snapshot.desktop_groups
         self._snapshot = snap
         self._previous_states = {s.key: s.state for s in snap.sessions}
+        # Hidden sessions (File, Hide Session) are out of everything here:
+        # counts, announcements and notifications as well as the list.
+        for info in snap.sessions:
+            info.hidden = info.key in self.hidden
+        ended = [info for info in ended if info.key not in self.hidden]
         if not snap.desktop_groups.read_ok:
             snap.desktop_groups = previous_desktop_groups  # keep the last good read
         if self._group_names() != getattr(self, "_menu_group_names", None):
@@ -678,7 +687,7 @@ class MainFrame(wx.Frame):
                 self._open = current
                 self._update_heading()
         if first or force:
-            current = [s for s in snap.sessions if not s.archived]
+            current = [s for s in snap.sessions if not s.archived and not s.hidden]
             waiting = sum(1 for s in current if s.state == NEEDS_YOU)
             working = sum(1 for s in current if s.state == WORKING)
             text = (f"{len(current)} sessions: {waiting} need you, "
@@ -774,8 +783,8 @@ class MainFrame(wx.Frame):
             self._feedback("No session selected.")
             return
         if info.key in self.hidden:
-            self._feedback(f"{info.title} is already hidden. File, Bring Back Session shows "
-                           "it again.")
+            self._feedback(f"{info.title} is already hidden. File, Bring Back Session "
+                           "returns it to the list.")
             return
         if info.is_own and info.cli_session_id in self._runners:
             self._feedback("A turn is running in that session. Stop it first.")
@@ -833,15 +842,19 @@ class MainFrame(wx.Frame):
         if answer != wx.YES:
             return
         path = platform_paths.transcript_path(info.cwd, info.cli_session_id)
+        # Out of The Chat Place first: if that can't be saved, nothing is lost.
+        if not self._store_write(self.store.remove, info.cli_session_id):
+            return
         try:
             if path is not None and path.exists():
                 path.unlink()
+            folder = path.with_suffix("") if path is not None else None
+            if folder is not None and folder.is_dir():
+                shutil.rmtree(folder)  # its subagents' transcripts and tool output
         except OSError as exc:
-            wx.MessageBox(f"Couldn't delete the transcript ({path}): {exc}", APP_NAME,
+            wx.MessageBox(f"{info.title} is gone from The Chat Place, but its files "
+                          f"couldn't all be deleted ({path}): {exc}", APP_NAME,
                           wx.OK | wx.ICON_WARNING, self)
-            return
-        if not self._store_write(self.store.remove, info.cli_session_id):
-            return
         try:
             self.groups.forget(info.key)
             self.hidden.show(info.key)
@@ -2258,9 +2271,12 @@ class MainFrame(wx.Frame):
                 self._store_write(self.store.rename_id, session_id, reported)
                 try:
                     self.groups.rename_key(f"own:{session_id}", f"own:{reported}")
-                    self.hidden.rename_key(f"own:{session_id}", f"own:{reported}")
                 except OSError:
                     pass  # its groups lose it; nothing else does
+                try:
+                    self.hidden.rename_key(f"own:{session_id}", f"own:{reported}")
+                except OSError:
+                    pass  # it shows again; nothing else is lost
                 self._runners[reported] = self._runners.pop(session_id)
                 self._denials[reported] = self._denials.pop(session_id, [])
                 for per_session in (self._drafts, self._queued, self._pending):
@@ -2617,7 +2633,8 @@ class MainFrame(wx.Frame):
         view = self.speech.session_view
         rest = ""
         if view != VIEW_ALL or self._session_filter:
-            total = sum(1 for s in self._snapshot.sessions if not s.archived)
+            total = sum(1 for s in self._snapshot.sessions
+                        if not s.archived and not s.hidden)
             what = view_spoken(view) if view != VIEW_ALL else ""
             if self._session_filter:
                 matching = f'matching "{self._session_filter}"'
