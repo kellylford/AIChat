@@ -75,9 +75,24 @@ def env(tmp_path, monkeypatch, app):
     monkeypatch.setattr(platform_paths, "open_url", lambda url: opened.append(url))
     boxes = []
     monkeypatch.setattr(wx, "MessageBox", lambda *a, **k: boxes.append(a[0]) or wx.YES)
+    # No real Windows notifications (#20): they're recorded. The hidden test
+    # window is never the active one, so every notification would show.
+    notified = []
+
+    class FakeNotifier:
+        def __init__(self, on_click, tooltip):
+            self.on_click = on_click
+
+        def show(self, title, message, key):
+            notified.append((title, message, key))
+            return True
+
+        def close(self):
+            pass
+    monkeypatch.setattr(main_frame, "Notifier", FakeNotifier)
     return {"desktop": desktop, "projects": projects, "spoken": spoken, "copied": copied,
             "feedback": feedback, "opened": opened, "boxes": boxes, "tmp": tmp_path,
-            "live": live}
+            "live": live, "notified": notified}
 
 
 def add_desktop(env, local, cli, title, cwd="C:\\G\\Repo", ago=60_000, **extra):
@@ -2799,3 +2814,113 @@ def test_changed_files_with_nothing_changed(frame, env):
     assert pump(lambda: frame._chat_loaded)
     frame.on_changes()
     assert env["feedback"][-1] == "Quiet one: Claude hasn't changed any files in this session."
+
+
+def test_notifications_when_another_window_is_active(frame, env, monkeypatch):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    monkeypatch.setattr(frame, "_app_is_active", lambda: False)
+    frame._runners["own-1"] = FakeRunner([], "", "", None)
+    frame._denials["own-1"] = []
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("finished", text="All done."))
+    assert env["notified"][-1] == ("Hub probe finished", "All done.", "own:own-1")
+    # Only when it needs you: a finished turn says nothing, a failure does.
+    frame.speech.notifications = speech.NOTIFY_NEEDS_YOU
+    frame._runners["own-1"] = FakeRunner([], "", "", None)
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("finished", text="Again."))
+    assert len(env["notified"]) == 1
+    frame._runners["own-1"] = FakeRunner([], "", "", None)
+    frame._on_turn_event({"id": "own-1"}, "Hub probe",
+                         TurnEvent("failed", text="Stopped.", is_error=True))
+    assert env["notified"][-1][0] == "Hub probe: the turn failed"
+    # Off, or while TheClaudeHub is the active window: nothing.
+    count = len(env["notified"])
+    frame.speech.notifications = speech.NOTIFY_OFF
+    frame._runners["own-1"] = FakeRunner([], "", "", None)
+    frame._on_turn_event({"id": "own-1"}, "Hub probe",
+                         TurnEvent("failed", text="Stopped.", is_error=True))
+    frame.speech.notifications = speech.NOTIFY_ALL
+    monkeypatch.setattr(frame, "_app_is_active", lambda: True)
+    frame._runners["own-1"] = FakeRunner([], "", "", None)
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("finished", text="Here."))
+    assert len(env["notified"]) == count
+
+
+def test_choosing_a_notification_loads_its_session(frame, env):
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    hub_key = next(s.key for s in frame._snapshot.sessions if s.title == "Hub probe")
+    frame._go_to_session(hub_key)
+    assert frame._open is not None and frame._open.key == hub_key
+    frame._go_to_session("gone")  # forgotten since: just comes forward
+    assert frame._open.key == hub_key
+
+
+def test_notification_setting_is_saved_and_checked(tmp_path):
+    path = tmp_path / "speech.json"
+    path.write_text(json.dumps({"notifications": "needs_you"}), encoding="utf-8")
+    assert speech.SpeechSettings.load(path).notifications == speech.NOTIFY_NEEDS_YOU
+    path.write_text(json.dumps({"notifications": "loud"}), encoding="utf-8")
+    assert speech.SpeechSettings.load(path).notifications == speech.NOTIFY_ALL
+
+
+def test_notifications_for_permissions_desktop_sessions_and_stops(frame, env, monkeypatch):
+    import dataclasses
+    monkeypatch.setattr(frame, "_app_is_active", lambda: False)
+    _waiting_turn(frame, _request("r1"), _request("r2"))
+    # One notification for the first request; the second waits behind it.
+    assert env["notified"] == [("Hub probe needs you",
+                                "Claude wants to run git push. Ctrl+Shift+A answers.",
+                                "own:own-1")]
+    # Stopping it yourself isn't news.
+    runner = frame._runners["own-1"]
+    runner.cancelled = True
+    frame._on_turn_event({"id": "own-1"}, "Hub probe",
+                         TurnEvent("failed", text="Stopped.", is_error=True))
+    assert len(env["notified"]) == 1
+    # A desktop session that starts needing you, and the loaded one finishing.
+    quiet = next(s for s in frame._snapshot.sessions if s.title == "Quiet one")
+    needs = dataclasses.replace(quiet, state=NEEDS_YOU, detail="Pick a name")
+    frame._apply_snapshot(frame._snapshot, [needs], {}, False)
+    assert env["notified"][-1] == ("Quiet one needs you", "Pick a name", quiet.key)
+    idle = dataclasses.replace(quiet, state="idle")
+    frame._apply_snapshot(frame._snapshot, [idle], {}, False)
+    assert len(env["notified"]) == 2  # not loaded: its finishing isn't notified
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    frame._apply_snapshot(frame._snapshot, [idle], {quiet.key: "Done it."}, False)
+    assert env["notified"][-1] == ("Quiet one finished", "Done it.", quiet.key)
+
+
+def test_choosing_a_notification_with_a_dialog_open_leaves_the_session(frame, env, monkeypatch):
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    loaded = frame._open.key
+    hub_key = next(s.key for s in frame._snapshot.sessions if s.title == "Hub probe")
+
+    class Modal:
+        raised = False
+
+        def IsModal(self):
+            return True
+
+        def Raise(self):
+            Modal.raised = True
+    monkeypatch.setattr(wx, "GetTopLevelWindows", lambda: [frame, Modal()])
+    monkeypatch.setattr(wx, "Dialog", Modal)
+    frame._go_to_session(hub_key)
+    assert Modal.raised and frame._open.key == loaded
+    frame._go_to_session(None)  # the icon itself: just come forward
+    assert frame._open.key == loaded
+
+
+def test_settings_keep_the_notification_choice(frame, env):
+    from theclaudehub.ui.dialogs import SettingsDialog
+    frame.speech.notifications = speech.NOTIFY_NEEDS_YOU
+    dialog = SettingsDialog(frame, frame.speech, speech.default_options())
+    try:
+        assert dialog.notify_choice.GetSelection() == 1
+        dialog.notify_choice.SetSelection(2)
+        assert dialog.get_settings().notifications == speech.NOTIFY_OFF
+    finally:
+        dialog.Destroy()

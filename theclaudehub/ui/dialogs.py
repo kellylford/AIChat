@@ -8,7 +8,7 @@ import wx
 
 from ..changes import file_text
 from ..claude_cli import DEFAULT_PERMISSION_MODE, MODELS, PERMISSION_MODES
-from ..speech import (ANNOUNCE_LABELS, ANNOUNCE_LEVELS, RATE_PRESET_LABELS,
+from ..speech import (ANNOUNCE_LABELS, ANNOUNCE_LEVELS, NOTIFY_LABELS, NOTIFY_LEVELS, RATE_PRESET_LABELS,
                       SpeechSettings)
 from ..ui_text import shortcuts_text
 from .a11y import set_accessible_name
@@ -231,6 +231,17 @@ class SettingsDialog(wx.Dialog):
         self.rate_note = wx.StaticText(self, label="")
         outer.Add(self.rate_note, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 
+        notify_row = wx.BoxSizer(wx.HORIZONTAL)
+        notify_row.Add(wx.StaticText(self, label="Windows &notifications:"), 0,
+                       wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
+        self.notify_choice = wx.Choice(self, choices=[NOTIFY_LABELS[n] for n in NOTIFY_LEVELS])
+        set_accessible_name(self.notify_choice, "Windows notifications, while TheClaudeHub "
+                                                "isn't the active window")
+        self.notify_choice.SetSelection(NOTIFY_LEVELS.index(speech.notifications)
+                                        if speech.notifications in NOTIFY_LEVELS else 0)
+        notify_row.Add(self.notify_choice, 0)
+        outer.Add(notify_row, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+
         buttons = wx.StdDialogButtonSizer()
         ok = wx.Button(self, wx.ID_OK)
         ok.SetDefault()
@@ -284,7 +295,9 @@ class SettingsDialog(wx.Dialog):
                                    engine=option.engine, voice=option.voice,
                                    rate_preset=preset,
                                    formatted_messages=self.formatted.GetValue(),
-                                   full_messages_in_list=self.whole_in_list.GetValue())
+                                   full_messages_in_list=self.whole_in_list.GetValue(),
+                                   notifications=NOTIFY_LEVELS[max(
+                                       self.notify_choice.GetSelection(), 0)])
 
 
 class MessageDialog(wx.Dialog):

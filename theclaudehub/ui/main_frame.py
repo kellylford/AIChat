@@ -62,10 +62,11 @@ from ..groups import GroupStore
 from ..sessions import (GROUP_VIEW_PREFIX, IDLE, NEEDS_YOU, SORT_ORDERS, SORT_SPOKEN,
                         VIEW_ALL, VIEWS, WORKING,
                         SessionInfo, group_view, in_view, view_spoken)
-from ..speech import ANNOUNCE_FULL, SpeechSettings, default_options, list_speech_options, speaker
+from ..speech import ANNOUNCE_FULL, NOTIFY_ALL, NOTIFY_OFF, SpeechSettings, default_options, list_speech_options, speaker
 from ..transcript import ASSISTANT, ERROR, PLAN, QUESTION, TOOL, ChatMessage, TranscriptReader
 from ..updater import AVAILABLE, FAILED, CheckResult, UpdateService
 from .a11y import set_accessible_name, set_list_items_accessible
+from .notify import Notifier
 from ..rendering import html_page, message_page
 from ..ui_text import shortcuts_html
 from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, ChangesDialog, CodeBlocksDialog, FormattedMessageDialog,
@@ -146,6 +147,7 @@ class MainFrame(wx.Frame):
         self._chat_edits: list = []
         self._chat_turns = 0
         self._edits_said = 0
+        self._notifier = Notifier(self._go_to_session, APP_NAME)
         # What Claude is waiting for you to answer, per session, oldest first
         # (#187, #188). The turn is paused until each is answered.
         self._pending: Dict[str, List[PermissionRequest]] = {}
@@ -550,6 +552,16 @@ class MainFrame(wx.Frame):
         self._snapshot = snap
         self._previous_states = {s.key: s.state for s in snap.sessions}
         first = self._first_snapshot
+        if not first:
+            for info in ended:
+                if info.is_own:
+                    continue  # its own turn says so, with more to say
+                if info.state == NEEDS_YOU:
+                    self._notify(info.key, f"{info.title} needs you",
+                                 info.detail or "Claude is waiting for you.", needs_you=True)
+                elif self._open is not None and info.key == self._open.key:
+                    self._notify(info.key, f"{info.title} finished",
+                                 replies.get(info.key, "") or "Claude finished its turn.")
         self._first_snapshot = False
         keep_order = (not resort and not first
                       and wx.Window.FindFocus() is self.session_list)
@@ -1425,6 +1437,63 @@ class MainFrame(wx.Frame):
         else:
             self._status(text)
 
+    def _notify(self, key: str, title: str, text: str, needs_you: bool = False):
+        """A Windows notification (#20), only while you're in another window:
+        here, the announcement already said it."""
+        level = self.speech.notifications
+        if level == NOTIFY_OFF or (level != NOTIFY_ALL and not needs_you):
+            return
+        if self._app_is_active():
+            return
+        self._notifier.show(title, text, key)
+
+    @staticmethod
+    def _app_is_active() -> bool:
+        """Whether you're in TheClaudeHub: the main window or any of its
+        dialogs (the frame alone says no while a dialog has the focus)."""
+        return wx.GetActiveWindow() is not None
+
+    def _go_to_session(self, key: Optional[str]):
+        """A notification was chosen: TheClaudeHub comes forward with that
+        session loaded. With one of its dialogs open, the dialog comes
+        forward instead, and the session is left as it is."""
+        if not self:
+            return
+        if self.IsIconized():
+            self.Iconize(False)
+        self.Show()
+        modal = next((w for w in wx.GetTopLevelWindows()
+                      if isinstance(w, wx.Dialog) and w.IsModal()), None)
+        (modal or self).Raise()
+        if not self._app_is_active():
+            self.RequestUserAttention()  # Windows wouldn't let it come forward
+        if modal is not None or key is None:
+            return
+        info = self._current_info(key)
+        if info is None:
+            return
+        if self._open is not None and self._open.key == key:
+            self.chat_list.SetFocus()
+        else:
+            self.open_session(info)
+
+    def _notify_turn_end(self, session_id, title, event, denials, detail, stopped=False):
+        key = self._own_key(session_id)
+        if stopped:
+            return  # you stopped it yourself: nothing to tell you
+        if event.kind == "failed" or event.is_error:
+            self._notify(key, f"{title}: the turn failed", usage.friendly_error(event.text),
+                         needs_you=True)
+        elif denials:
+            self._notify(key, f"{title} needs you", f"{detail}: " + "; ".join(denials),
+                         needs_you=True)
+        else:
+            self._notify(key, f"{title} finished", event.text or "Claude finished its turn.")
+
+    @staticmethod
+    def _own_key(session_id: str) -> str:
+        return f"own:{session_id}"
+
     def _check_context(self):
         """Say once when the loaded session's context passes 80%."""
         info = self._open
@@ -1941,6 +2010,9 @@ class MainFrame(wx.Frame):
             if len(queue) == 1:
                 self._say(f"{title} needs you. {event.request.summary()}. "
                           "Ctrl+Shift+A answers.")
+                self._notify(self._own_key(session_id), f"{title} needs you",
+                             f"{event.request.summary()}. Ctrl+Shift+A answers.",
+                             needs_you=True)
             else:
                 self._status(f"{title}: {len(queue)} things are waiting for you.")
             self._update_send_state()
@@ -1996,6 +2068,8 @@ class MainFrame(wx.Frame):
             self._store_write(self.store.update, session_id, state=state, detail=detail,
                               unread=not is_open,
                               last_activity_ms=int(time.time() * 1000))
+            self._notify_turn_end(session_id, title, event, denials, detail,
+                                  stopped=runner is not None and runner.cancelled)
             if event.kind == "failed" or event.is_error:
                 spoken = f"{title}: the turn failed. {usage.friendly_error(event.text)}"
                 self._say(spoken)
@@ -2775,6 +2849,7 @@ class MainFrame(wx.Frame):
         if startup_check is not None:
             startup_check.Stop()
         speaker.stop()
+        self._notifier.close()  # its icon would keep the app running
         self._pool.shutdown(wait=False, cancel_futures=True)
         event.Skip()
 

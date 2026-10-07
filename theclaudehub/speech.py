@@ -91,6 +91,17 @@ RATE_PRESETS = {
 
 RATE_PRESET_LABELS = ["default", "slow", "normal", "fast", "fastest"]
 
+#: Windows notifications while TheClaudeHub isn't the active window (#20).
+NOTIFY_ALL = "all"
+NOTIFY_NEEDS_YOU = "needs_you"
+NOTIFY_OFF = "off"
+NOTIFY_LEVELS = [NOTIFY_ALL, NOTIFY_NEEDS_YOU, NOTIFY_OFF]
+NOTIFY_LABELS = {
+    NOTIFY_ALL: "When your sessions finish a turn, or any session needs you",
+    NOTIFY_NEEDS_YOU: "Only when a session needs you",
+    NOTIFY_OFF: "Off",
+}
+
 _SCREEN_READER_ENGINES = {"auto", "jaws", "nvda", "voiceover"}
 
 
@@ -134,6 +145,9 @@ class SpeechSettings:
     #: Which sessions the list shows (View, Show Sessions, #32): a value from
     #: ``sessions.VIEWS`` or "group:<name>".
     session_view: str = "all"
+    #: Windows notifications when TheClaudeHub isn't the active window: a
+    #: value from ``NOTIFY_LEVELS``.
+    notifications: str = NOTIFY_ALL
 
     @property
     def enabled(self) -> bool:
@@ -171,6 +185,8 @@ class SpeechSettings:
         known = view in [v for v, _label in VIEWS] or (
             view.startswith(GROUP_VIEW_PREFIX) and len(view) > len(GROUP_VIEW_PREFIX))
         settings.session_view = view if known else "all"
+        notify = str(raw.get("notifications", NOTIFY_ALL))
+        settings.notifications = notify if notify in NOTIFY_LEVELS else NOTIFY_ALL
         return settings
 
     def save(self, path: Optional[Path] = None) -> None:
