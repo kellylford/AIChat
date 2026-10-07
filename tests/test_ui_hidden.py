@@ -3277,14 +3277,29 @@ class _Questions:
                 {"header": "Four", "question": "Fourth?", "options": [{"label": "S"}]}]
 
 
-def _boxes_and_their_controls(parent):
-    """Each group box with the controls that follow it, in creation order."""
+def _boxes_and_their_controls(parent, sizer):
+    """Each group box (found through its sizer) with the controls that come
+    after it among the window's children, up to the next box."""
+    boxes = []
+
+    def walk(s):
+        for item in s.GetChildren():
+            inner = item.GetSizer()
+            if isinstance(inner, wx.StaticBoxSizer):
+                boxes.append(inner.GetStaticBox())
+            if inner is not None:
+                walk(inner)
+    walk(sizer)
+    children = list(parent.GetChildren())
+    handles = [c.GetHandle() for c in children]
     groups = []
-    for child in parent.GetChildren():
-        if isinstance(child, wx.StaticBox):
-            groups.append((child, []))
-        elif groups and isinstance(child, (wx.RadioButton, wx.CheckBox, wx.TextCtrl)):
-            groups[-1][1].append(child)
+    for box in boxes:
+        start = handles.index(box.GetHandle())
+        later = [handles.index(b.GetHandle()) for b in boxes if handles.index(b.GetHandle()) > start]
+        end = min(later) if later else len(handles)
+        controls = [c for c in list(parent.GetChildren())[start + 1:end]
+                    if isinstance(c, (wx.RadioButton, wx.CheckBox, wx.TextCtrl))]
+        groups.append((box, controls))
     return groups
 
 
@@ -3294,7 +3309,7 @@ def test_each_question_is_a_group_box_its_options_follow(frame):
     try:
         dialog.Layout()
         panel = dialog.GetChildren()[0]
-        groups = _boxes_and_their_controls(panel)
+        groups = _boxes_and_their_controls(panel, panel.GetSizer())
         assert [box.GetLabel() for box, _ in groups] == [
             "One: First?", "Two: Second?", "Three: Third?", "Four: Fourth?"]
         for box, controls in groups:
@@ -3320,7 +3335,7 @@ def test_settings_reading_messages_options_follow_their_group_box(frame):
     try:
         dialog.Layout()
         groups = dict((box.GetLabel(), controls)
-                      for box, controls in _boxes_and_their_controls(dialog))
+                      for box, controls in _boxes_and_their_controls(dialog, dialog.GetSizer()))
         reading = groups["Reading messages"]
         assert dialog.formatted in reading and dialog.whole_in_list in reading
         assert all(c.GetParent() is dialog for c in (dialog.formatted, dialog.whole_in_list))
