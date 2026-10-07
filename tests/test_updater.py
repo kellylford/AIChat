@@ -123,7 +123,8 @@ def test_github_is_checked_with_the_windows_certificate_store():
     assert isinstance(updater._ssl_context(), truststore.SSLContext)
 
 
-def test_portable_and_source_copies_say_they_cannot_update():
+def test_portable_and_source_copies_say_they_cannot_update(monkeypatch):
+    monkeypatch.setattr(updater, "PORTABLE_COPIES_EXIST", True)  # Windows's zip
     portable = service(FakeManager(Update("9.9.9"), portable=True), latest="0.3.0").check()
     assert portable.status == NOT_INSTALLED and portable.version == "0.3.0"
     assert "can't update itself" in portable.describe() and "0.3.0" in portable.describe()
@@ -135,7 +136,8 @@ def test_portable_and_source_copies_say_they_cannot_update():
     assert "No release has been published yet" in source.describe()
 
 
-def test_quiet_check_on_a_copy_that_cannot_update_asks_github_nothing():
+def test_quiet_check_on_a_copy_that_cannot_update_asks_github_nothing(monkeypatch):
+    monkeypatch.setattr(updater, "PORTABLE_COPIES_EXIST", True)  # Windows's zip
     def latest():
         raise AssertionError("GitHub was asked")
     portable = UpdateService("0.1.0", manager_factory=lambda url: FakeManager(portable=True),
@@ -237,39 +239,35 @@ def test_tag_check_script(tag, ok):
     assert (result.returncode == 0) is ok, result.stdout + result.stderr
 
 
-# -- the Mac app, which updates by downloading the new disk image ------------------------
+# -- the Mac app, which updates itself through Velopack as GHManage's does ---------------
 
 
-@pytest.fixture
-def mac_app(monkeypatch):
-    monkeypatch.setattr(updater, "SELF_UPDATES", False)
+def test_mac_app_updates_although_velopack_calls_it_portable(monkeypatch):
+    # Velopack's macOS locator says IsPortable for every .app; heeding that
+    # would switch updates off for every Mac user.
+    monkeypatch.setattr(updater, "PORTABLE_COPIES_EXIST", False)
+    svc = service(FakeManager(Update("0.2.0"), portable=True))
+    assert svc.can_update
+    assert svc.check().status == AVAILABLE
+
+
+def test_windows_portable_zip_still_never_updates(monkeypatch):
+    monkeypatch.setattr(updater, "PORTABLE_COPIES_EXIST", True)
+    assert service(FakeManager(Update("0.2.0"), portable=True)).check().status == NOT_INSTALLED
+
+
+def test_each_platform_reads_its_own_feed():
+    assert updater.CHANNEL == ("windows" if sys.platform == "win32" else "osx")
+
+
+def test_mac_app_bundle_is_the_install_folder(tmp_path, monkeypatch):
+    app = tmp_path / "Applications" / "TheChatPlace.app"
+    exe = app / "Contents" / "MacOS" / "TheChatPlace"
+    exe.parent.mkdir(parents=True)
+    exe.write_text("")
     monkeypatch.setattr(sys, "frozen", True, raising=False)
-
-
-def test_mac_app_offers_the_release_page_for_a_newer_version(mac_app):
-    result = UpdateService("0.1.0", latest=lambda: "0.2.0").check()
-    assert result.status == updater.DOWNLOAD and result.version == "0.2.0"
-    assert "0.2.0 is available" in result.describe() and "release page" in result.describe()
-    assert updater.release_page_url("0.2.0") == \
-        "https://github.com/kellylford/AIChat/releases/tag/v0.2.0"
-
-
-def test_mac_app_up_to_date_and_no_releases(mac_app):
-    assert UpdateService("0.2.0", latest=lambda: "0.2.0").check().status == updater.CURRENT
-    assert UpdateService("0.2.0", latest=lambda: None).check().status == updater.NO_RELEASES
-
-
-def test_mac_app_checks_quietly_at_start_too(mac_app):
-    asked = []
-    svc = UpdateService("0.1.0", latest=lambda: asked.append(1) or "0.2.0")
-    assert svc.can_update is False  # never Velopack
-    assert svc.check(manual=False).status == updater.DOWNLOAD and asked
-
-
-def test_mac_app_never_runs_velopack_hooks(mac_app, monkeypatch):
-    import types
-    ran = []
-    fake = types.SimpleNamespace(App=lambda: ran.append(1))
-    monkeypatch.setitem(sys.modules, "velopack", fake)
-    updater.bootstrap()
-    assert ran == []
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(sys, "executable", str(exe))
+    support = tmp_path / "Library" / "Application Support" / "TheChatPlace"
+    assert updater.data_is_outside_install_dir(support)
+    assert not updater.data_is_outside_install_dir(app / "Contents" / "Resources" / "data")

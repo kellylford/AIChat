@@ -2,9 +2,10 @@
 # ============================================================================
 # The Chat Place's disk image: TheChatPlace.app, a link to Applications to
 # drag it onto, and a short README.txt. From Image Description Toolkit's
-# create_macos_dmg.sh, without its Finder window styling.
+# create_macos_dmg.sh, without its Finder window styling. The app must be the
+# one vpk packed (build_macos.sh passes it), which carries Velopack's updater.
 # ============================================================================
-#   bash macos/create_dmg.sh dist/TheChatPlace.app releases/TheChatPlace-macos-arm64.dmg <version> [signed]
+#   bash BuildAndRelease/MacBuilds/create_dmg.sh <packed TheChatPlace.app> releases/TheChatPlace-macos-arm64.dmg <version> [signed]
 #
 # With "signed" the README leaves out the unsigned-build note.
 # ============================================================================
@@ -29,7 +30,8 @@ cleanup() {
 trap cleanup EXIT
 
 # ditto keeps signatures and extended attributes, which cp can lose.
-ditto "$APP" "$STAGING/TheChatPlace.app"
+APP_NAME="$(basename "$APP")"
+ditto "$APP" "$STAGING/$APP_NAME"
 
 cat > "$STAGING/README.txt" <<README
 The Chat Place $VERSION
@@ -37,16 +39,15 @@ The Chat Place $VERSION
 
 A keyboard and screen reader friendly home for your Claude Code chats.
 
-To install, drag TheChatPlace.app onto Applications, then open it from
+To install, drag $APP_NAME onto Applications, then open it from
 Applications (or with Spotlight: Cmd+Space, "The Chat Place").
 
 You need Claude Code installed and signed in to a Claude subscription
 (https://claude.com/claude-code). The Chat Place never uses an API key.
 
-To update, download the new disk image (Help, Check for Updates says when
-there is one and opens its page), quit The Chat Place, and drag the new app
-onto Applications, replacing the old one. Your sessions and settings are in
-~/Library/Application Support/TheChatPlace and are kept.
+The Chat Place updates itself, wherever you keep it: it says when a new
+version is out, and Help, Check for Updates installs it. Your sessions and
+settings are in ~/Library/Application Support/TheChatPlace and are kept.
 README
 if [ "$SIGNED" != "signed" ]; then
     cat >> "$STAGING/README.txt" <<'README'

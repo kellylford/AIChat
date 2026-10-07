@@ -1,11 +1,14 @@
 @echo off
 REM ============================================================================
 REM Build The Chat Place on this PC: tests, the app, a smoke test, and the
-REM Velopack installer and portable zip. The same steps as the release workflow
-REM (.github\workflows\release-thechatplace.yml), unsigned.
+REM Velopack installer and portable zip. The same steps as the release workflow's
+REM Windows job (.github\workflows\release-thechatplace.yml), unsigned: Windows
+REM signing is Azure Artifact Signing, which only the workflow does.
+REM BuildAndRelease\MacBuilds\build_macos.sh is the Mac one.
 REM
-REM   build.cmd                                   build into releases\ and dist\
-REM   build.cmd C:\Users\kelly\OneDrive\thehub    and copy Setup and the zip there
+REM   BuildAndRelease\WinBuilds\build_windows.cmd                    into releases\ and dist\
+REM   BuildAndRelease\WinBuilds\build_windows.cmd C:\Users\kelly\OneDrive\thehub
+REM                                                 and copy Setup and the zip there
 REM
 REM Uses the repo's .venv, and makes it the first time (the same .venv you run
 REM the app from source with). The build isn't signed, so SmartScreen may warn
@@ -17,10 +20,10 @@ REM "exit /b" inside a nested block.
 REM ============================================================================
 setlocal
 REM The output folder is read before the cd, so a relative one means relative
-REM to where you ran build.cmd, not this folder.
+REM to where you ran build_windows.cmd, not this folder.
 set "OUTPUT_DIR="
 if not "%~1"=="" set "OUTPUT_DIR=%~f1"
-cd /d "%~dp0"
+cd /d "%~dp0..\.."
 
 REM vpk is pinned to what the release workflow uses, and PyInstaller is pinned in
 REM requirements-build.txt, so a local build matches a CI one. Differences:
@@ -28,7 +31,7 @@ REM the workflow uses Python 3.12 and needs release notes for the
 REM version; here any Python 3.11+ works and release notes are optional.
 set "VPK_VERSION=1.2.161"
 set "CHANNEL=windows"
-set "PY=%~dp0.venv\Scripts\python.exe"
+set "PY=%CD%\.venv\Scripts\python.exe"
 
 echo ========================================================================
 echo Building The Chat Place
@@ -142,7 +145,7 @@ echo.
 echo ========================================================================
 echo The app is built (dist\TheChatPlace\TheChatPlace.exe), but not the
 echo installer: that needs the .NET SDK for the vpk tool. Install it from
-echo https://dotnet.microsoft.com/download and run build.cmd again.
+echo https://dotnet.microsoft.com/download and run build_windows.cmd again.
 echo ========================================================================
 set "RESULT=1"
 goto :end
@@ -150,7 +153,7 @@ goto :end
 :no_python
 echo.
 echo ERROR: Couldn't make .venv. Install Python 3.11 or later from python.org
-echo (with "Add python.exe to PATH" ticked) and run build.cmd again.
+echo (with "Add python.exe to PATH" ticked) and run build_windows.cmd again.
 set "RESULT=1"
 goto :end
 
@@ -163,7 +166,7 @@ goto :failed
 :copy_failed
 echo.
 echo ERROR: Couldn't copy into %OUTPUT_DIR%. If OneDrive is syncing an older
-echo copy, wait a moment and run build.cmd again.
+echo copy, wait a moment and run build_windows.cmd again.
 goto :failed
 
 :failed

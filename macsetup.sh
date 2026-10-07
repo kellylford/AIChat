@@ -8,13 +8,13 @@
 #
 #   ./macsetup.sh          set up (an existing .venv is replaced)
 #   ./macsetup.sh --yes    the same, without the two "press Enter" prompts
-#                          (build_macos.sh uses this when there's no .venv)
+#                          (the Mac build uses this when there's no .venv)
 #
 # Or double-click macsetup.command in Finder.
 #
 # Then:
 #   .venv/bin/python -m thechatplace     run the app from source
-#   ./build_macos.sh                     build TheChatPlace.app and the .dmg
+#   BuildAndRelease/MacBuilds/build_macos.sh   build the app, update feed and .dmg
 # ============================================================================
 
 cd "$(dirname "$0")" || exit 1
@@ -95,6 +95,11 @@ if command -v claude >/dev/null 2>&1 || [ -x "$HOME/.local/bin/claude" ]; then
 else
     echo "  missing  claude: install Claude Code and sign in, or the app can only read sessions"
 fi
+if command -v dotnet >/dev/null 2>&1 || [ -x /opt/homebrew/opt/dotnet/bin/dotnet ]; then
+    echo "  ok       .NET SDK (the build installs vpk, Velopack's packer, with it)"
+else
+    echo "  missing  .NET SDK: brew install dotnet (needed only to build the app)"
+fi
 if xcode-select -p >/dev/null 2>&1; then
     echo "  ok       Xcode command line tools (codesign, notarytool)"
 else
@@ -109,7 +114,7 @@ if [ $PROBLEMS -eq 0 ]; then
     echo "========================================================================"
     echo "  Run from source:  .venv/bin/python -m thechatplace"
     echo "  Run the tests:    .venv/bin/python -m pytest -q tests"
-    echo "  Build the app:    ./build_macos.sh   (or double-click build_macos.command)"
+    echo "  Build the app:    BuildAndRelease/MacBuilds/build_macos.sh (or double-click build_macos.command)"
 else
     echo "SETUP FAILED: $PROBLEMS module(s) won't import (see above)"
     echo "========================================================================"

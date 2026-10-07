@@ -21,23 +21,30 @@ locations and behaviour. Keep it in step with behaviour changes.
 .venv/bin/python -m thechatplace                   # run from source (Windows: .venv\Scripts\pythonw TheChatPlace.pyw)
 .venv/bin/python -m pytest -q tests                # what CI runs, on Windows and macOS
 .venv/bin/python -m pytest tests/test_claude_cli.py -k resume   # one file / one test
-./build_macos.sh                                   # tests, TheChatPlace.app, smoke test, releases/TheChatPlace-macos-arm64.dmg
-build.cmd                                          # Windows: tests, PyInstaller, smoke test, Velopack installer (unsigned)
+BuildAndRelease/MacBuilds/build_macos.sh           # tests, app, Velopack osx feed, .dmg; signed if the keychain has a Developer ID
+BuildAndRelease\WinBuilds\build_windows.cmd         # Windows: tests, app, Velopack installer and feed (always unsigned)
 python tools/check_version.py [vTAG]               # print version / check a tag against it
 ```
 
 - Tests of Windows-only behaviour (made-up `C:\` paths, MSAA via `wx.Accessible`) are marked with
   `windows_paths` / `msaa` from `tests/markers.py` and skip elsewhere. Use them for new tests of that
   kind rather than letting the macOS CI job fail.
-- PyInstaller is pinned in `requirements-build.txt`; the PyInstaller command lines live in three
-  places that must agree: `build.cmd`, `build_macos.sh`, and the Windows job of
+- PyInstaller is pinned in `requirements-build.txt`, and `vpk` must match the `velopack` version in
+  `requirements.txt` (1.2.161) everywhere it's installed. The PyInstaller command lines live in
+  three places that must agree: `build_windows.cmd`, `build_macos.sh`, and the Windows job of
   `release-thechatplace.yml` (the Mac job calls `build_macos.sh`).
 - The built app supports `--smoke-test out.json`. It imports everything and checks the data files
   (each platform's speech scripts; `WebView2Loader.dll` on Windows). A new lazily imported module
   or data file needs adding to those command lines.
-- Mac signing: `TCP_SIGN_CODE=1` / `TCP_NOTARIZE=1` for `build_macos.sh`; the scripts are in
-  `macos/` (inside-out signing, never `codesign --deep`). `macos/entitlements.plist` includes
-  Apple Events, which VoiceOver speech (`osascript`) needs under the hardened runtime.
+- Mac build (follows GHManage): sign inside-out with `sign.sh` (never `codesign --deep`), then
+  `vpk pack --signDisableDeep` adds `Contents/MacOS/UpdateMac` and signs it and the bundle; the
+  `.dmg` is made from the app in `TheChatPlace-osx-Portable.zip` (named "The Chat Place.app"),
+  never from `dist/`, and the build fails unless the packed app's smoke test reports
+  `"updater": "<version>"`. `TCP_SIGN_CODE=0|1` (default: sign if a certificate exists),
+  `TCP_NOTARIZE=1`. `TheChatPlace.entitlements` (vpk insists on the extension) includes Apple
+  Events, which VoiceOver speech (`osascript`) needs under the hardened runtime.
+- Signing secrets come from `~/Documents/GitHub/The-Idea-Place-Projects/signing` (`repos.json`,
+  `sync-secrets.py`), not by hand.
 
 ## Releasing
 
@@ -45,9 +52,10 @@ The version lives in one place: `__version__` in `thechatplace/__init__.py`. To 
 add `release-notes/v<version>.md` in the same commit, then push the tag `v<version>`. The release
 workflow fails if the tag and `__version__` disagree, or if the notes file is missing. It builds
 Windows and macOS in parallel jobs, and a `publish` job makes the release only if both succeed
-(Velopack installer, portable zip and feed, plus the notarized `.dmg`). Velopack channel is
-`windows`; versions below 1.0 publish as pre-releases. Only Windows installs its own updates
-(`updater.SELF_UPDATES`); a Mac app gets `DOWNLOAD`, and the UI offers the release page.
+(the Windows installer, portable zip and `windows` feed; the notarized `.dmg` and `osx` feed).
+Versions below 1.0 publish as pre-releases. Both platforms update through Velopack
+(`updater.CHANNEL`). Velopack calls every Mac app portable, so the portable check is Windows-only
+(`updater.PORTABLE_COPIES_EXIST`); applying it on a Mac silently stops all Mac updates.
 
 ## Architecture
 

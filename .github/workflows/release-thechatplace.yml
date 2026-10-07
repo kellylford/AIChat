@@ -6,9 +6,10 @@ name: Release The Chat Place
 #
 #   windows  PyInstaller, signed with Azure Artifact Signing; the Velopack installer, portable
 #            zip and update feed; every signature checked.
-#   macos    build_macos.sh: TheChatPlace.app and TheChatPlace-macos-arm64.dmg, signed with the
-#            Developer ID certificate and notarized (the MACOS_* and NOTARY_* secrets, the same
-#            ones Image Description Toolkit uses).
+#   macos    BuildAndRelease/MacBuilds/build_macos.sh: the app, signed with the Developer ID
+#            certificate, packed by Velopack (so it updates itself, as GHManage's does) and
+#            notarized; the osx update feed; TheChatPlace-macos-arm64.dmg, notarized. Secrets:
+#            MACOS_* and NOTARY_*, set from The-Idea-Place-Projects/signing (sync-secrets.py).
 #   publish  the release (tags only).
 #
 #   (bump __version__ in thechatplace/__init__.py and add
@@ -23,8 +24,10 @@ name: Release The Chat Place
 #
 # Velopack and signing follow GHManage's ghmanage.yml and The-Idea-Place-Projects/signing
 # (lessons.md): sign the program first, then `vpk pack --azureTrustedSignFile` signs Setup, the
-# updater and the launcher stub, and skips the program it finds already signed. The Chat Place
-# publishes on the Velopack channel "windows" (releases.windows.json), the one the updater reads.
+# updater and the launcher stub, and skips the program it finds already signed. On the Mac,
+# sign inside-out first, then `vpk pack --signDisableDeep` signs only its UpdateMac and the bundle.
+# The Chat Place publishes on two Velopack channels, "windows" and "osx" (releases.<channel>.json),
+# the ones updater.CHANNEL reads on each platform.
 
 on:
   push:
@@ -225,6 +228,7 @@ jobs:
   macos:
     name: macOS
     # Apple Silicon. build_macos.sh refuses anything else.
+    # vpk below must match the velopack library in requirements.txt, as on Windows.
     runs-on: macos-latest
     timeout-minutes: 45
     defaults:
@@ -280,27 +284,55 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: \
             -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
           security list-keychain -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          # The default keychain too: vpk 1.2.161 has no --keychain option, and the notarytool
+          # profile build_macos.sh makes for it is stored in, and read from, the default one.
+          security default-keychain -d user -s "$KEYCHAIN"
           rm -f "$RUNNER_TEMP/certificate.p12"
           echo "$NOTARY_KEY_P8" | base64 --decode > "$RUNNER_TEMP/notary.p8"
           chmod 600 "$RUNNER_TEMP/notary.p8"
           security find-identity -v -p codesigning "$KEYCHAIN"
 
-      # Tests, the app, its smoke test, signing, the .dmg and notarization: the same script as
-      # a local build. TCP_PYTHON makes .venv from the Python set up above.
+      # The runner's dotnet can install a tool but has no runtime for vpk (net10.0) to run on;
+      # setup-dotnet adds it and sets DOTNET_ROOT (GHManage found this). setup-dotnet v6.0.0.
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install vpk
+        run: dotnet tool install -g vpk --version 1.2.161
+
+      # As on Windows: the previous release's osx packages let vpk build a delta, and its full
+      # package goes up with this release. None before the first release with a Mac build.
+      - name: Download the previous release's packages
+        if: env.PUBLISH == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prev=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName,isDraft \
+            --jq '[.[] | select(.isDraft | not) | .tagName | select(startswith("v"))] | .[0] // empty')
+          if [ -z "$prev" ]; then echo "No earlier release."; exit 0; fi
+          echo "Previous release: $prev"
+          vpk download http --url "https://github.com/$GITHUB_REPOSITORY/releases/download/$prev/" \
+            --channel osx --outputDir releases
+
+      # Tests, the app and its smoke tests, signing, Velopack, the .dmg and notarization: the same
+      # script as a local build. TCP_PYTHON makes .venv from the Python set up above.
       - name: Build, sign and notarize
         env:
           TCP_PYTHON: python
+          TCP_KEEP_RELEASES: '1'
           TCP_SIGN_CODE: ${{ env.SIGN == 'true' && '1' || '0' }}
           TCP_NOTARIZE: ${{ env.SIGN == 'true' && '1' || '0' }}
           TCP_SIGNING_IDENTITY: "${{ secrets.MACOS_SIGNING_IDENTITY || 'Developer ID Application: Kelly Ford (P887QF74N8)' }}"
-          TCP_KEYCHAIN: ${{ runner.temp }}/signing.keychain-db
           NOTARY_KEY_PATH: ${{ runner.temp }}/notary.p8
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
           NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
-        run: ./build_macos.sh
+        run: BuildAndRelease/MacBuilds/build_macos.sh
 
       # What a person downloading it will see: Gatekeeper's verdict on the notarized .dmg, and
-      # that it mounts and holds the app.
+      # that it mounts and holds the app with Velopack's updater in it (an app without UpdateMac
+      # runs perfectly and never updates again).
       - name: Check the disk image
         run: |
           set -euo pipefail
@@ -308,12 +340,14 @@ jobs:
           hdiutil verify "$DMG"
           MNT=$(mktemp -d)
           hdiutil attach "$DMG" -mountpoint "$MNT" -nobrowse -readonly
-          test -x "$MNT/TheChatPlace.app/Contents/MacOS/TheChatPlace"
+          APP="$MNT/The Chat Place.app"
+          test -x "$APP/Contents/MacOS/TheChatPlace"
+          test -f "$APP/Contents/MacOS/UpdateMac"
           test -L "$MNT/Applications"
-          /usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$MNT/TheChatPlace.app/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Contents/Info.plist"
           if [ "$SIGN" = "true" ]; then
-            codesign --verify --strict --deep --verbose=2 "$MNT/TheChatPlace.app"
-            spctl --assess --type execute -v "$MNT/TheChatPlace.app"
+            codesign --verify --strict --deep --verbose=2 "$APP"
+            spctl --assess --type execute -v "$APP"
             spctl --assess --type open --context context:primary-signature -v "$DMG"
             xcrun stapler validate "$DMG"
           fi
@@ -323,7 +357,14 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: thechatplace-macos-${{ env.VERSION }}-${{ env.SIGN == 'true' && 'signed' || 'unsigned' }}
-          path: releases/TheChatPlace-macos-arm64.dmg
+          # The .pkg and portable zip vpk also makes aren't published: the .pkg would need a
+          # Developer ID Installer certificate, and the .dmg holds the same self-updating app.
+          path: |
+            releases/TheChatPlace-macos-arm64.dmg
+            releases/TheChatPlace-*-osx-*.nupkg
+            releases/releases.osx.json
+            releases/assets.osx.json
+            releases/RELEASES-osx
           if-no-files-found: error
           retention-days: 14
 
@@ -349,31 +390,36 @@ jobs:
           path: releases
           merge-multiple: true
 
-      # The Windows feed files (releases.windows.json, assets.windows.json, RELEASES-windows)
-      # and the full packages are what installed copies update from, so they go up with the
-      # installer, portable zip and Mac disk image. Before 1.0 a release is a pre-release;
-      # the updater includes pre-releases.
+      # Each platform's feed files (releases.<channel>.json, assets.<channel>.json,
+      # RELEASES-<channel>) and full packages are what installed copies update from, so they go
+      # up with the Windows installer and portable zip and the Mac disk image. Before 1.0 a
+      # release is a pre-release; the updater includes pre-releases.
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
-          CHANNEL: windows
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
           NOTES="release-notes/v$VERSION.md"
           ls -l releases
           shopt -s nullglob
-          assets=(releases/TheChatPlace-*-$CHANNEL-*.nupkg)
-          for name in "TheChatPlace-$CHANNEL-Setup.exe" "TheChatPlace-$CHANNEL-Portable.zip" \
-                      "releases.$CHANNEL.json" "assets.$CHANNEL.json" "RELEASES-$CHANNEL" \
-                      "TheChatPlace-macos-arm64.dmg"; do
+          assets=()
+          for channel in windows osx; do
+            packages=(releases/TheChatPlace-*-$channel-*.nupkg)
+            if [ ! -f "releases/TheChatPlace-$VERSION-$channel-full.nupkg" ]; then
+              echo "::error::TheChatPlace-$VERSION-$channel-full.nupkg is missing."; exit 1
+            fi
+            assets+=("${packages[@]}")
+            for name in "releases.$channel.json" "assets.$channel.json" "RELEASES-$channel"; do
+              if [ ! -f "releases/$name" ]; then echo "::error::$name is missing."; exit 1; fi
+              assets+=("releases/$name")
+            done
+          done
+          for name in TheChatPlace-windows-Setup.exe TheChatPlace-windows-Portable.zip \
+                      TheChatPlace-macos-arm64.dmg; do
             if [ ! -f "releases/$name" ]; then echo "::error::$name is missing."; exit 1; fi
             assets+=("releases/$name")
           done
-          if [ ${#assets[@]} -lt 7 ]; then
-            echo "::error::Expected the installer, portable zip, a package, three feed files and the .dmg; found ${#assets[@]}."
-            exit 1
-          fi
           pre=()
           case "$VERSION" in 0.*) pre=(--prerelease) ;; esac
           gh release create "$GITHUB_REF_NAME" "${assets[@]}" --title "The Chat Place $VERSION" \

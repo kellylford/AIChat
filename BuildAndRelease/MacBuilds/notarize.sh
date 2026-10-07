@@ -3,7 +3,7 @@
 # Notarize and staple a signed .dmg (from Image Description Toolkit's
 # notarize_macos.sh)
 # ============================================================================
-#   bash macos/notarize.sh releases/TheChatPlace-macos-arm64.dmg
+#   bash BuildAndRelease/MacBuilds/notarize.sh releases/TheChatPlace-macos-arm64.dmg
 #
 # Credentials, either:
 #   NOTARY_KEY_PATH + NOTARY_KEY_ID + NOTARY_ISSUER_ID   App Store Connect API key (CI)
