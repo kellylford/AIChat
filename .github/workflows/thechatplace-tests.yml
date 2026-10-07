@@ -1,6 +1,6 @@
-name: TheClaudeHub tests
+name: The Chat Place tests
 
-# Runs TheClaudeHub's pytest suite on Windows, the platform it targets: the
+# Runs The Chat Place's pytest suite on Windows, the platform it targets: the
 # process-tree, pipe and path handling it tests are Windows-specific. The UI
 # tests build the window hidden, which works on a runner without a desktop.
 
@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: theclaudehub-${{ github.ref }}
+  group: thechatplace-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

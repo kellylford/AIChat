@@ -1,7 +1,7 @@
 """The Claude desktop app's own session groups (#51)."""
 import json
 
-from theclaudehub.desktop_groups import CONFIG_NAME, load_desktop_groups
+from thechatplace.desktop_groups import CONFIG_NAME, load_desktop_groups
 
 
 def _config(tmp_path, scopes):

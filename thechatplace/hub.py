@@ -54,7 +54,7 @@ def collect(own: Iterable[OwnSession], running_own_ids: Set[str],
         elif (live.get(item.cli_session_id) is not None
               and live[item.cli_session_id].status == "busy"):
             # Someone resumed it elsewhere (a terminal); it is busy there.
-            info.state, info.detail = WORKING, "running outside TheClaudeHub"
+            info.state, info.detail = WORKING, "running outside The Chat Place"
         sessions.append(info)
     folders = [desktop_dir] if desktop_dir is not None else platform_paths.desktop_sessions_dirs()
     return Snapshot(sessions=sort_sessions(sessions, order),

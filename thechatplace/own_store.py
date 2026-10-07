@@ -1,8 +1,8 @@
-"""TheClaudeHub's own sessions: the ones it started, and so the only ones it
+"""The Chat Place's own sessions: the ones it started, and so the only ones it
 may send messages into.
 
-Kept in one small JSON file, ``%APPDATA%\\TheClaudeHub\\sessions.json``. It is
-the only session data TheClaudeHub ever writes. Writes go to a temporary file
+Kept in one small JSON file, ``%APPDATA%\\TheChatPlace\\sessions.json``. It is
+the only session data The Chat Place ever writes. Writes go to a temporary file
 first and replace the real one, so a crash mid-write cannot lose the list.
 """
 from __future__ import annotations
@@ -127,8 +127,8 @@ class OwnSessionStore:
         except OSError as exc:
             # Locked or unreadable right now (antivirus, a sync tool): the
             # data may be fine, so never save over it this run.
-            self.load_error = (f"Couldn't read TheClaudeHub's session list ({self.path}): "
-                               f"{exc}. Changes won't be saved until TheClaudeHub is "
+            self.load_error = (f"Couldn't read The Chat Place's session list ({self.path}): "
+                               f"{exc}. Changes won't be saved until The Chat Place is "
                                "restarted and can read it.")
             self._save_blocked = True
             return
@@ -153,11 +153,11 @@ class OwnSessionStore:
         backup = self.path.with_name(f"{self.path.name}.bad-{stamp}")
         try:
             os.replace(self.path, backup)
-            self.load_error = (f"TheClaudeHub's session list ({self.path}) {why}. It was "
-                               f"moved to {backup.name} in the same folder, and TheClaudeHub "
+            self.load_error = (f"The Chat Place's session list ({self.path}) {why}. It was "
+                               f"moved to {backup.name} in the same folder, and The Chat Place "
                                "started a new list. Its sessions' transcripts are untouched.")
         except OSError as exc:
-            self.load_error = (f"TheClaudeHub's session list ({self.path}) {why}, and it "
+            self.load_error = (f"The Chat Place's session list ({self.path}) {why}, and it "
                                f"couldn't be moved aside ({exc}). Changes won't be saved "
                                "until it is fixed or removed.")
             self._save_blocked = True

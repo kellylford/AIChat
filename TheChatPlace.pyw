@@ -4,6 +4,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from theclaudehub.app import main  # noqa: E402
+from thechatplace.app import main  # noqa: E402
 
 sys.exit(main())

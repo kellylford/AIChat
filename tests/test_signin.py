@@ -2,7 +2,7 @@
 import json
 import subprocess
 
-from theclaudehub import signin
+from thechatplace import signin
 
 
 def _run(stdout="", error=None, seen=None):

@@ -96,7 +96,7 @@ def limits_text(info: Optional[dict], now: Optional[float] = None) -> str:
     """"5-hour limit 8% used, resets at 7:00 AM. Weekly limit 34% used,
     resets on Friday at 3:00 PM." """
     if not isinstance(info, dict) or not info:
-        return "Usage limits: not known until a TheClaudeHub session runs a turn."
+        return "Usage limits: not known until a Chat Place session runs a turn."
     parts = []
     for name, used, resets in _windows(info):
         part = f"{name[0].upper()}{name[1:]} {round(used * 100)}% used"

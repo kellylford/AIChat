@@ -97,7 +97,7 @@ def _headings(messages) -> List[str]:
 
 
 def _intro(title: str, folder: str, when: datetime) -> List[str]:
-    lines = [f"Exported from TheClaudeHub on {when.strftime('%Y-%m-%d at %H:%M')}."]
+    lines = [f"Exported from The Chat Place on {when.strftime('%Y-%m-%d at %H:%M')}."]
     if folder:
         lines.append(f"Folder: {folder}")
     return lines

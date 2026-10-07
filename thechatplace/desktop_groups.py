@@ -8,7 +8,7 @@ The desktop app keeps them in ``claude_desktop_config.json``, beside its
 - ``groups``: ``[{"id": "cg-…", "name": "IDT"}, …]``, in the app's order;
 - ``assignments``: ``{"code:local_<id>": "cg-…"}``, a session's one group.
 
-TheClaudeHub only reads this: the desktop app owns the file and rewrites it,
+The Chat Place only reads this: the desktop app owns the file and rewrites it,
 so its groups are changed in the desktop app. Anything unexpected (no file,
 another shape after an update) just means no desktop groups.
 """
@@ -72,7 +72,7 @@ def _read_scope(scope, result: DesktopGroups) -> None:
     names: Dict[str, str] = {}
     for group in scope.get("groups") or []:
         if isinstance(group, dict) and isinstance(group.get("id"), str):
-            # Tidied as TheClaudeHub's own names are, so the same name matches.
+            # Tidied as The Chat Place's own names are, so the same name matches.
             name = clean_name(str(group.get("name") or ""))
             if name:
                 names[group["id"]] = name

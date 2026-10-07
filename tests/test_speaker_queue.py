@@ -3,8 +3,8 @@ import json
 import threading
 import time
 
-from theclaudehub import speech
-from theclaudehub.speech import Speaker, SpeechSettings
+from thechatplace import speech
+from thechatplace.speech import Speaker, SpeechSettings
 
 
 class FakeEngine:
@@ -105,7 +105,7 @@ def test_every_utterance_is_logged_in_its_own_file(tmp_path, monkeypatch):
     s = make(tmp_path, monkeypatch)
     s.speak("Sent. Hub is working.", SpeechSettings(), interrupt=False)
     s.speak("Hub replied. " + "word " * 40, SpeechSettings(engine="jaws"))
-    lines = (tmp_path / "theclaudehub-speak" / "speech.log").read_text(
+    lines = (tmp_path / "thechatplace-speak" / "speech.log").read_text(
         encoding="utf-8").splitlines()
     assert len(lines) == 2
     assert lines[0].endswith(" queue auto 21 chars: Sent. Hub is working.")
@@ -119,7 +119,7 @@ def test_speech_log_drops_its_older_half_when_too_big(tmp_path, monkeypatch):
     s = make(tmp_path, monkeypatch)
     for i in range(60):
         s.speak(f"utterance {i}", SpeechSettings(), interrupt=False)
-    text = (tmp_path / "theclaudehub-speak" / "speech.log").read_text(encoding="utf-8")
+    text = (tmp_path / "thechatplace-speak" / "speech.log").read_text(encoding="utf-8")
     assert len(text.encode("utf-8")) < 1100
     assert text.splitlines()[-1].endswith("utterance 59")
     assert text.splitlines()[0][:4].isdigit()  # starts on a whole line

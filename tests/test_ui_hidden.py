@@ -11,10 +11,10 @@ import pytest
 
 wx = pytest.importorskip("wx")
 
-from theclaudehub import hub, platform_paths, speech  # noqa: E402
-from theclaudehub.claude_cli import TurnEvent  # noqa: E402
-from theclaudehub.own_store import OwnSession, OwnSessionStore  # noqa: E402
-from theclaudehub.sessions import NEEDS_YOU  # noqa: E402
+from thechatplace import hub, platform_paths, speech  # noqa: E402
+from thechatplace.claude_cli import TurnEvent  # noqa: E402
+from thechatplace.own_store import OwnSession, OwnSessionStore  # noqa: E402
+from thechatplace.sessions import NEEDS_YOU  # noqa: E402
 
 from records import (assistant_block, lines, text_block, tool_result, tool_use_block,  # noqa: E402
                      user_text)
@@ -49,17 +49,17 @@ def env(tmp_path, monkeypatch, app):
     monkeypatch.setattr(platform_paths, "live_sessions_dir", lambda: live)
     monkeypatch.setattr(platform_paths, "projects_dir", lambda: projects)
     monkeypatch.setattr(speech, "DEFAULT_SETTINGS_PATH", tmp_path / "speech.json")
-    # TheClaudeHub's own files (groups.json) go here, never in the real %APPDATA%.
+    # The Chat Place's own files (groups.json) go here, never in the real %APPDATA%.
     monkeypatch.setattr(platform_paths, "app_data_dir", lambda: tmp_path / "appdata")
     # No real claude --version (bug reports) or clipboard from the tests.
-    from theclaudehub import bugreport
-    from theclaudehub.ui import dialogs, main_frame
+    from thechatplace import bugreport
+    from thechatplace.ui import dialogs, main_frame
     monkeypatch.setattr(bugreport, "claude_code_version", lambda: "2.1.286 (Claude Code)")
     copied = []
     monkeypatch.setattr(main_frame.MainFrame, "_copy_text",
                         lambda self, text: copied.append(text) or True)
     # Nor the real claude for its sign-in (#52): signed in, unless a test says not.
-    from theclaudehub import signin
+    from thechatplace import signin
     monkeypatch.setattr(signin, "check", lambda *a, **k: signin.SignIn(
         True, signed_in=True, method="claude.ai", plan="max", email="k@example.com"))
     # Nor the real claude for a folder's slash commands (#23).
@@ -134,7 +134,7 @@ def settle(frame):
 
 @pytest.fixture
 def frame(env):
-    from theclaudehub.ui.main_frame import MainFrame
+    from thechatplace.ui.main_frame import MainFrame
     add_desktop(env, "local_a", "cli-a", "Quiet one")
     add_desktop(env, "local_b", "cli-b", "Blocked one",
                 postTurnSummary={"status_category": "blocked", "needs_action": "Pick a name"})
@@ -187,7 +187,7 @@ class FakeRunner:
 
 @pytest.fixture
 def fake_runner(monkeypatch):
-    from theclaudehub.ui import main_frame
+    from thechatplace.ui import main_frame
     FakeRunner.instances = []
     monkeypatch.setattr(main_frame, "TurnRunner", FakeRunner)
     monkeypatch.setattr(platform_paths, "find_claude",
@@ -202,7 +202,7 @@ def test_list_order_and_lines(frame):
     items = list(frame.session_list.GetStrings())
     assert items[0].startswith("Blocked one, Repo, needs you: Pick a name")
     assert items[1].startswith("Hub probe, Scratch, idle")
-    assert items[1].endswith("TheClaudeHub session")
+    assert items[1].endswith("Chat Place session")
     assert items[2].startswith("Quiet one, Repo, idle, active 1 minute ago")
     assert frame.session_list.GetSelection() == 0
 
@@ -350,7 +350,7 @@ def test_escape_and_ctrl_shortcuts_move_between_the_three_parts(frame, monkeypat
 
 
 def test_enter_on_a_message_opens_its_full_text_and_returns_to_it(frame, env, monkeypatch):
-    from theclaudehub.ui import main_frame
+    from thechatplace.ui import main_frame
     add_transcript(env, "C:\\G\\Repo", "cli-a", [
         user_text("First"), assistant_block(text_block("Line one\nLine two"), "m1"),
         user_text("Third")])
@@ -379,7 +379,7 @@ def test_enter_on_a_message_opens_its_full_text_and_returns_to_it(frame, env, mo
 
 
 def test_message_dialog_is_a_labelled_read_only_rich_edit(frame):
-    from theclaudehub.ui.dialogs import MessageDialog
+    from thechatplace.ui.dialogs import MessageDialog
     dialog = MessageDialog(frame, "Claude", "Line one\nLine two")
     try:
         assert dialog.text.GetValue() == "Line one\nLine two"
@@ -481,7 +481,7 @@ def test_open_in_claude_refused_for_own_session(frame, env):
     select(frame, "Hub probe")
     frame.on_open_in_claude()
     assert env["opened"] == []
-    assert "started by TheClaudeHub" in env["boxes"][0]
+    assert "started by The Chat Place" in env["boxes"][0]
 
 
 def test_send_speaks_confirmation_and_one_turn_at_a_time(frame, env, fake_runner):
@@ -663,7 +663,7 @@ def test_forget_keeps_the_place_and_desktop_delete_is_spoken(frame, env):
     select(frame, "Blocked one")
     frame.on_forget(None)
     assert env["boxes"] == []  # no modal for a desktop session
-    assert "Only sessions TheClaudeHub started" in env["feedback"][-1]
+    assert "Only sessions The Chat Place started" in env["feedback"][-1]
     index = select(frame, "Hub probe")
     frame.on_forget(None)  # MessageBox stub answers Yes
     assert frame.store.get("own-1") is None
@@ -673,7 +673,7 @@ def test_forget_keeps_the_place_and_desktop_delete_is_spoken(frame, env):
 
 
 def test_new_session_view_says_claude_is_starting(frame, env, fake_runner, monkeypatch):
-    from theclaudehub.ui import main_frame
+    from thechatplace.ui import main_frame
 
     class FakeDialog:
         def __init__(self, parent, folder):
@@ -694,7 +694,7 @@ def test_new_session_view_says_claude_is_starting(frame, env, fake_runner, monke
     assert runner.command[runner.command.index("--model") + 1] == "opus"
     session_id = runner.command[runner.command.index("--session-id") + 1]
     assert frame.store.get(session_id).model == "opus"
-    assert frame.session_heading.GetLabel().endswith("TheClaudeHub session on Opus.")
+    assert frame.session_heading.GetLabel().endswith("Chat Place session on Opus.")
     # Read back first, then the new session's view is announced after it.
     assert env["feedback"][-2:] == [
         "Sent to Brand new work: Start the thing.",
@@ -873,17 +873,17 @@ def run_check(frame, manual=True):
 
 
 def test_manual_check_with_no_releases_says_so(frame, env):
-    from theclaudehub.updater import NO_RELEASES, CheckResult
+    from thechatplace.updater import NO_RELEASES, CheckResult
     frame.updates = FakeUpdates(CheckResult(NO_RELEASES, "0.1.0"))
     run_check(frame)
-    assert env["spoken"][-1].startswith("No TheClaudeHub release has been published yet.")
+    assert env["spoken"][-1].startswith("No The Chat Place release has been published yet.")
     assert frame._last_announcement == env["spoken"][-1]    # Ctrl+Shift+R repeats it
     assert env["boxes"] == []
 
 
 def test_manual_check_result_is_spoken_even_when_announcements_are_silent(frame, env):
-    from theclaudehub.speech import ANNOUNCE_SILENT
-    from theclaudehub.updater import FAILED, CheckResult
+    from thechatplace.speech import ANNOUNCE_SILENT
+    from thechatplace.updater import FAILED, CheckResult
     frame.speech.announce = ANNOUNCE_SILENT
     frame.updates = FakeUpdates(CheckResult(FAILED, "0.1.0", detail="GitHub couldn't be reached"))
     run_check(frame)
@@ -891,7 +891,7 @@ def test_manual_check_result_is_spoken_even_when_announcements_are_silent(frame,
 
 
 def test_startup_check_is_quiet_unless_there_is_an_update(frame, env):
-    from theclaudehub.updater import CURRENT, FAILED, NO_RELEASES, NOT_INSTALLED, CheckResult
+    from thechatplace.updater import CURRENT, FAILED, NO_RELEASES, NOT_INSTALLED, CheckResult
     for status in (CURRENT, NO_RELEASES, NOT_INSTALLED, FAILED):
         frame.updates = FakeUpdates(CheckResult(status, "0.1.0", "0.1.0"))
         before = (list(env["feedback"]), list(env["spoken"]))
@@ -901,10 +901,10 @@ def test_startup_check_is_quiet_unless_there_is_an_update(frame, env):
 
 
 def test_startup_check_announces_an_update_but_never_opens_a_dialog(frame, env):
-    from theclaudehub.updater import AVAILABLE, CheckResult
+    from thechatplace.updater import AVAILABLE, CheckResult
     frame.updates = FakeUpdates(CheckResult(AVAILABLE, "0.1.0", "0.2.0"))
     run_check(frame, manual=False)
-    assert env["spoken"][-1] == ("TheClaudeHub 0.2.0 is available. You have 0.1.0. "
+    assert env["spoken"][-1] == ("The Chat Place 0.2.0 is available. You have 0.1.0. "
                                  "Help, Check for Updates installs it, or the Update button "
                                  "on the status bar.")
     assert env["boxes"] == []
@@ -914,7 +914,7 @@ def test_startup_check_announces_an_update_but_never_opens_a_dialog(frame, env):
 
 
 def test_available_update_is_asked_about_with_no_as_the_default(frame, env, monkeypatch):
-    from theclaudehub.updater import AVAILABLE, CheckResult
+    from thechatplace.updater import AVAILABLE, CheckResult
     frame.updates = FakeUpdates(CheckResult(AVAILABLE, "0.1.0", "0.2.0"))
     asked = []
     monkeypatch.setattr(wx, "MessageBox",
@@ -922,7 +922,7 @@ def test_available_update_is_asked_about_with_no_as_the_default(frame, env, monk
     spoken_before = list(env["spoken"])
     run_check(frame)
     text, style = asked[-1]
-    assert text.startswith("TheClaudeHub 0.2.0 is available. You have 0.1.0.")
+    assert text.startswith("The Chat Place 0.2.0 is available. You have 0.1.0.")
     assert "Install it now?" in text and "sessions and settings are kept" in text
     assert style & wx.NO_DEFAULT
     assert env["spoken"] == spoken_before     # the dialog is read; nothing said over it
@@ -931,16 +931,16 @@ def test_available_update_is_asked_about_with_no_as_the_default(frame, env, monk
 
 
 def test_yes_downloads_then_applies(frame, env, monkeypatch):
-    from theclaudehub.updater import AVAILABLE, CheckResult
+    from thechatplace.updater import AVAILABLE, CheckResult
     frame.updates = FakeUpdates(CheckResult(AVAILABLE, "0.1.0", "0.2.0"))
     monkeypatch.setattr(wx, "MessageBox", lambda *a, **k: wx.YES)
     run_check(frame)
     assert pump(lambda: frame.updates.calls == ["check", "download", "apply"])
-    assert env["spoken"][-1] == "Installing TheClaudeHub 0.2.0 and restarting."
+    assert env["spoken"][-1] == "Installing The Chat Place 0.2.0 and restarting."
 
 
 def test_failed_apply_restarts_the_timers_and_says_so(frame, env, monkeypatch):
-    from theclaudehub.updater import AVAILABLE, CheckResult
+    from thechatplace.updater import AVAILABLE, CheckResult
     frame.updates = FakeUpdates(CheckResult(AVAILABLE, "0.1.0", "0.2.0"), apply_ok=False)
     monkeypatch.setattr(wx, "MessageBox", lambda *a, **k: wx.YES)
     run_check(frame)
@@ -950,7 +950,7 @@ def test_failed_apply_restarts_the_timers_and_says_so(frame, env, monkeypatch):
 
 
 def test_unsent_text_is_warned_about(frame, env, monkeypatch):
-    from theclaudehub.updater import AVAILABLE, CheckResult
+    from thechatplace.updater import AVAILABLE, CheckResult
     select(frame, "Hub probe")
     frame.on_open_session()
     frame.reply_text.SetValue("half a thought")
@@ -962,7 +962,7 @@ def test_unsent_text_is_warned_about(frame, env, monkeypatch):
 
 
 def test_text_typed_during_the_download_is_asked_about_again(frame, env, monkeypatch):
-    from theclaudehub.updater import AVAILABLE, CheckResult
+    from thechatplace.updater import AVAILABLE, CheckResult
     select(frame, "Hub probe")
     frame.on_open_session()
     frame.updates = FakeUpdates(CheckResult(AVAILABLE, "0.1.0", "0.2.0"),
@@ -977,11 +977,11 @@ def test_text_typed_during_the_download_is_asked_about_again(frame, env, monkeyp
     assert pump(lambda: "download" in frame.updates.calls and not frame._update_busy)
     assert len(asked) == 2 and "Restart now to install it?" in asked[1]
     assert "apply" not in frame.updates.calls
-    assert "installed the next time TheClaudeHub starts" in env["spoken"][-1]
+    assert "installed the next time The Chat Place starts" in env["spoken"][-1]
 
 
 def test_a_turn_started_during_the_download_postpones_the_install(frame, env, monkeypatch):
-    from theclaudehub.updater import AVAILABLE, CheckResult
+    from thechatplace.updater import AVAILABLE, CheckResult
 
     def start_turn():
         frame._runners["own-1"] = FakeRunner([], "", "", None)
@@ -991,13 +991,13 @@ def test_a_turn_started_during_the_download_postpones_the_install(frame, env, mo
     run_check(frame)
     assert pump(lambda: "download" in frame.updates.calls and not frame._update_busy)
     assert "apply" not in frame.updates.calls
-    assert "installed the next time TheClaudeHub starts" in env["spoken"][-1]
+    assert "installed the next time The Chat Place starts" in env["spoken"][-1]
     frame._runners.clear()
 
 
 def test_a_turn_started_while_the_install_is_announced_postpones_it(frame, env, monkeypatch):
-    from theclaudehub import speech
-    from theclaudehub.updater import AVAILABLE, CheckResult
+    from thechatplace import speech
+    from thechatplace.updater import AVAILABLE, CheckResult
     busy = iter([True])
 
     def still_speaking():
@@ -1017,7 +1017,7 @@ def test_a_turn_started_while_the_install_is_announced_postpones_it(frame, env, 
 
 
 def test_no_update_is_applied_while_claude_is_working(frame, env, monkeypatch):
-    from theclaudehub.updater import AVAILABLE, CheckResult
+    from thechatplace.updater import AVAILABLE, CheckResult
     frame._runners["own-1"] = FakeRunner([], "", "", None)
     frame.updates = FakeUpdates(CheckResult(AVAILABLE, "0.1.0", "0.2.0"))
     monkeypatch.setattr(wx, "MessageBox", lambda *a, **k: pytest.fail("must not ask"))
@@ -1030,13 +1030,13 @@ def test_no_update_is_applied_while_claude_is_working(frame, env, monkeypatch):
 
 
 def test_failed_download_is_reported_and_nothing_applied(frame, env, monkeypatch):
-    from theclaudehub.updater import AVAILABLE, CheckResult
+    from thechatplace.updater import AVAILABLE, CheckResult
     frame.updates = FakeUpdates(CheckResult(AVAILABLE, "0.1.0", "0.2.0"), download_ok=False)
     monkeypatch.setattr(wx, "MessageBox", lambda *a, **k: wx.YES)
     run_check(frame)
     assert pump(lambda: "download" in frame.updates.calls and not frame._update_busy)
     assert "apply" not in frame.updates.calls
-    assert env["spoken"][-1].startswith("Couldn't download TheClaudeHub 0.2.0.")
+    assert env["spoken"][-1].startswith("Couldn't download The Chat Place 0.2.0.")
 
 # -- queued messages (issue #175) -----------------------------------------------------------
 
@@ -1073,7 +1073,7 @@ def test_send_during_a_turn_queues_and_goes_when_it_ends(frame, env, fake_runner
 
 def test_queued_message_goes_despite_the_lists_stale_busy_status(frame, env, fake_runner,
                                                                  monkeypatch):
-    # During the turn, TheClaudeHub's own `claude -p` writes a busy pid file
+    # During the turn, The Chat Place's own `claude -p` writes a busy pid file
     # for the session, and the list's snapshot keeps it up to 5 seconds after
     # the process has exited.
     _start(frame, fake_runner)
@@ -1284,7 +1284,7 @@ def test_queued_message_is_read_once(frame, env, fake_runner):
 
 
 def test_settings_dialog_has_the_read_back_checkbox(frame):
-    from theclaudehub.ui.dialogs import SettingsDialog
+    from thechatplace.ui.dialogs import SettingsDialog
     settings = speech.SpeechSettings(announce_own=False)
     dialog = SettingsDialog(frame, settings, speech.default_options())
     try:
@@ -1304,7 +1304,7 @@ def test_a_later_turn_keeps_the_sessions_model(frame, env, fake_runner):
     frame.store.update("own-1", model="sonnet")
     select(frame, "Hub probe")
     frame.on_open_session()
-    assert frame.session_heading.GetLabel().endswith("TheClaudeHub session on Sonnet.")
+    assert frame.session_heading.GetLabel().endswith("Chat Place session on Sonnet.")
     frame.reply_text.SetValue("next")
     frame.on_send()
     command = fake_runner.instances[-1].command
@@ -1315,14 +1315,14 @@ def test_a_later_turn_keeps_the_sessions_model(frame, env, fake_runner):
 def test_an_old_session_without_a_model_uses_the_default(frame, env, fake_runner):
     select(frame, "Hub probe")
     frame.on_open_session()
-    assert frame.session_heading.GetLabel().endswith("TheClaudeHub session on the default model.")
+    assert frame.session_heading.GetLabel().endswith("Chat Place session on the default model.")
     frame.reply_text.SetValue("next")
     frame.on_send()
     assert "--model" not in fake_runner.instances[-1].command
 
 
 def test_new_session_dialog_offers_the_models(frame):
-    from theclaudehub.ui.dialogs import NewSessionDialog
+    from thechatplace.ui.dialogs import NewSessionDialog
     dialog = NewSessionDialog(frame, "C:\\G")
     try:
         assert dialog.model.GetStringSelection() == "Default (your Claude Code setting)"
@@ -1346,7 +1346,7 @@ def test_new_session_dialog_offers_the_models(frame):
 
 
 def _request(request_id="r1", tool="Bash", tool_input=None, suggestions=None):
-    from theclaudehub.claude_cli import PermissionRequest
+    from thechatplace.claude_cli import PermissionRequest
     return PermissionRequest(request_id, tool, tool_input or {"command": "git push"},
                              suggestions=suggestions or [])
 
@@ -1376,7 +1376,7 @@ def test_permission_request_is_announced_and_the_session_needs_you(frame, env):
 
 
 def test_answering_sends_the_response_and_announces_the_next(frame, env, monkeypatch):
-    from theclaudehub.claude_cli import allow_response
+    from thechatplace.claude_cli import allow_response
     first, second = _request("r1"), _request("r2", tool_input={"command": "git tag v1"})
     runner = _waiting_turn(frame, first, second)
     monkeypatch.setattr(frame, "_ask", lambda title, request, own: (
@@ -1402,7 +1402,7 @@ def test_answer_later_leaves_it_waiting(frame, env, monkeypatch):
 
 
 def test_allow_for_session_keeps_the_rule_for_later_turns(frame, env, fake_runner, monkeypatch):
-    from theclaudehub.ui import dialogs
+    from thechatplace.ui import dialogs
     request = _request(suggestions=[{"type": "addRules", "behavior": "allow",
                                      "destination": "localSettings",
                                      "rules": [{"toolName": "Bash",
@@ -1413,7 +1413,7 @@ def test_allow_for_session_keeps_the_rule_for_later_turns(frame, env, fake_runne
         def ShowModal(self):
             self.choice = dialogs.ALLOW_SESSION
             return wx.ID_OK
-    monkeypatch.setattr("theclaudehub.ui.main_frame.PermissionDialog", Picks)
+    monkeypatch.setattr("thechatplace.ui.main_frame.PermissionDialog", Picks)
     frame.on_answer()
     response = runner.responses[0][1]
     assert response["updatedPermissions"][0]["destination"] == "session"
@@ -1427,7 +1427,7 @@ def test_allow_for_session_keeps_the_rule_for_later_turns(frame, env, fake_runne
 
 
 def test_plan_approval_keeps_the_new_mode(frame, env, monkeypatch):
-    from theclaudehub.ui import dialogs
+    from thechatplace.ui import dialogs
     frame.store.update("own-1", permission_mode="plan")
     runner = _waiting_turn(frame, _request("p1", "ExitPlanMode", {"plan": "# Plan\n1. Go"}))
     assert "plan is ready" in env["spoken"][-1]
@@ -1438,7 +1438,7 @@ def test_plan_approval_keeps_the_new_mode(frame, env, monkeypatch):
             assert self.mode.GetStringSelection().startswith("Accept edits")
             self.approved = True
             return wx.ID_OK
-    monkeypatch.setattr("theclaudehub.ui.main_frame.PlanDialog", Approves)
+    monkeypatch.setattr("thechatplace.ui.main_frame.PlanDialog", Approves)
     frame.on_answer()
     assert runner.responses[0][1]["updatedPermissions"] == [
         {"type": "setMode", "mode": "acceptEdits", "destination": "session"}]
@@ -1447,7 +1447,7 @@ def test_plan_approval_keeps_the_new_mode(frame, env, monkeypatch):
 
 
 def test_question_answers_go_back_to_claude(frame, env, monkeypatch):
-    from theclaudehub.ui import dialogs
+    from thechatplace.ui import dialogs
     questions = [{"question": "Which color?", "header": "Color",
                   "options": [{"label": "Red", "description": "Warm"}, {"label": "Blue"}]},
                  {"question": "Which toppings?", "multiSelect": True,
@@ -1465,7 +1465,7 @@ def test_question_answers_go_back_to_claude(frame, env, monkeypatch):
             toppings[2].SetValue("anchovies")  # typing ticks Other
             assert toppings[1][2].GetValue()
             return wx.ID_OK
-    monkeypatch.setattr("theclaudehub.ui.main_frame.QuestionDialog", Answers)
+    monkeypatch.setattr("thechatplace.ui.main_frame.QuestionDialog", Answers)
     frame.on_answer()
     sent = runner.responses[0][1]
     assert sent["updatedInput"]["answers"] == {"Which color?": "Blue",
@@ -1474,7 +1474,7 @@ def test_question_answers_go_back_to_claude(frame, env, monkeypatch):
 
 
 def test_turn_end_clears_waiting_and_a_late_answer_says_so(frame, env, monkeypatch):
-    from theclaudehub.claude_cli import allow_response
+    from thechatplace.claude_cli import allow_response
     runner = _waiting_turn(frame, _request())
     request = frame._pending["own-1"][0]
     frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("failed", text="Stopped.",
@@ -1487,7 +1487,7 @@ def test_turn_end_clears_waiting_and_a_late_answer_says_so(frame, env, monkeypat
 
 
 def test_permission_dialog_buttons(frame):
-    from theclaudehub.ui.dialogs import PermissionDialog
+    from thechatplace.ui.dialogs import PermissionDialog
     plain = PermissionDialog(frame, "Hub probe", _request(tool="WebFetch",
                                                           tool_input={"url": "https://x"}))
     try:
@@ -1511,7 +1511,7 @@ def test_permission_dialog_buttons(frame):
 
 
 def _continue(frame, env, monkeypatch, message="Carry on from here"):
-    from theclaudehub.ui import dialogs
+    from thechatplace.ui import dialogs
     seen = {}
 
     class Fills(dialogs.NewSessionDialog):
@@ -1521,7 +1521,7 @@ def _continue(frame, env, monkeypatch, message="Carry on from here"):
             seen["name"] = self.title_text.GetValue()
             self.message.SetValue(message)
             return wx.ID_OK
-    monkeypatch.setattr("theclaudehub.ui.main_frame.NewSessionDialog", Fills)
+    monkeypatch.setattr("thechatplace.ui.main_frame.NewSessionDialog", Fills)
     frame.on_continue_here()
     return seen
 
@@ -1567,7 +1567,7 @@ def test_continue_here_needs_a_transcript_and_a_desktop_session(frame, env, fake
     assert "no longer on disk" in env["boxes"][-1]
     select(frame, "Hub probe")
     frame.on_continue_here()
-    assert env["feedback"][-1] == ("Hub probe is already a TheClaudeHub session; "
+    assert env["feedback"][-1] == ("Hub probe is already a Chat Place session; "
                                    "reply to it here.")
     assert fake_runner.instances == []
 
@@ -1584,7 +1584,7 @@ def _load_reply(frame, env, text):
 
 
 def _fake_viewer(monkeypatch, result):
-    from theclaudehub.ui import main_frame
+    from thechatplace.ui import main_frame
     shown = []
 
     class FakeViewer:
@@ -1605,7 +1605,7 @@ def test_full_message_opens_as_a_formatted_page(frame, env, monkeypatch):
     _load_reply(frame, env, "## Result\n\n| a | b |\n|---|---|\n| 1 | 2 |")
     shown = _fake_viewer(monkeypatch, wx.ID_CANCEL)
     plain = []
-    monkeypatch.setattr("theclaudehub.ui.main_frame.MessageDialog",
+    monkeypatch.setattr("thechatplace.ui.main_frame.MessageDialog",
                         lambda *a: plain.append(a) or pytest.fail("plain text opened"))
     frame.on_read_message()
     title, page = shown[0]
@@ -1614,7 +1614,7 @@ def test_full_message_opens_as_a_formatted_page(frame, env, monkeypatch):
 
 
 def test_read_as_plain_text_and_the_setting_open_the_text_box(frame, env, monkeypatch):
-    from theclaudehub.ui.dialogs import ID_PLAIN_TEXT, MessageDialog
+    from thechatplace.ui.dialogs import ID_PLAIN_TEXT, MessageDialog
     _load_reply(frame, env, "## Result")
     shown = _fake_viewer(monkeypatch, ID_PLAIN_TEXT)
     opened = []
@@ -1623,7 +1623,7 @@ def test_read_as_plain_text_and_the_setting_open_the_text_box(frame, env, monkey
         def ShowModal(self):
             opened.append(self.text.GetValue())
             return wx.ID_CANCEL
-    monkeypatch.setattr("theclaudehub.ui.main_frame.MessageDialog", Plain)
+    monkeypatch.setattr("thechatplace.ui.main_frame.MessageDialog", Plain)
     frame.on_read_message()
     assert len(shown) == 1 and opened == ["## Result"]
     frame.speech.formatted_messages = False
@@ -1632,7 +1632,7 @@ def test_read_as_plain_text_and_the_setting_open_the_text_box(frame, env, monkey
 
 
 def test_settings_dialog_has_the_formatted_page_choice(frame):
-    from theclaudehub.ui.dialogs import SettingsDialog
+    from thechatplace.ui.dialogs import SettingsDialog
     dialog = SettingsDialog(frame, speech.SpeechSettings(formatted_messages=False),
                             speech.default_options())
     try:
@@ -1644,7 +1644,7 @@ def test_settings_dialog_has_the_formatted_page_choice(frame):
 
 
 def test_f1_shows_the_shortcuts_page_or_the_text_box(frame, env, monkeypatch):
-    from theclaudehub.ui.dialogs import ID_PLAIN_TEXT
+    from thechatplace.ui.dialogs import ID_PLAIN_TEXT
     shown = _fake_viewer(monkeypatch, wx.ID_CANCEL)
     texts = []
     monkeypatch.setattr(frame, "_modal", lambda dialog: texts.append(dialog) or dialog.Destroy())
@@ -1657,7 +1657,7 @@ def test_f1_shows_the_shortcuts_page_or_the_text_box(frame, env, monkeypatch):
 
 
 def test_shortcuts_and_messages_fall_back_to_the_text_box(frame, env, monkeypatch):
-    from theclaudehub.ui import main_frame
+    from thechatplace.ui import main_frame
     texts = []
     monkeypatch.setattr(frame, "_modal", lambda dialog: texts.append(dialog) or dialog.Destroy())
     # No WebView2 (the fixture's default): straight to the text box.
@@ -1673,7 +1673,7 @@ def test_shortcuts_and_messages_fall_back_to_the_text_box(frame, env, monkeypatc
     assert len(texts) == 2
     assert frame.GetStatusBar().GetStatusText() == "Couldn't show the formatted page: no runtime"
     # Read Full Message takes the same way back to its text box.
-    from theclaudehub.ui.dialogs import MessageDialog
+    from thechatplace.ui.dialogs import MessageDialog
     _load_reply(frame, env, "## Result")
     opened = []
 
@@ -1690,7 +1690,7 @@ def test_shortcuts_and_messages_fall_back_to_the_text_box(frame, env, monkeypatc
 
 
 def test_sort_sessions_menu_reorders_keeps_place_and_remembers(frame, env):
-    from theclaudehub.speech import SpeechSettings
+    from thechatplace.speech import SpeechSettings
     assert frame.sort_items["status"].IsChecked()
     # Idle and a day old: last by status, first by title and by age.
     add_desktop(env, "local_z", "cli-z", "Aardvark", ago=86_400_000)
@@ -1715,7 +1715,7 @@ def test_sort_sessions_menu_reorders_keeps_place_and_remembers(frame, env):
 
 
 def test_settings_dialog_keeps_the_sort_order(frame):
-    from theclaudehub.ui.dialogs import SettingsDialog
+    from thechatplace.ui.dialogs import SettingsDialog
     dialog = SettingsDialog(frame, speech.SpeechSettings(session_order="folder"),
                             speech.default_options())
     try:
@@ -1725,7 +1725,7 @@ def test_settings_dialog_keeps_the_sort_order(frame):
 
 
 def test_saved_sort_order_is_used_and_checked_at_start(env):
-    from theclaudehub.ui.main_frame import MainFrame
+    from thechatplace.ui.main_frame import MainFrame
     speech.SpeechSettings(session_order="folder").save()
     add_desktop(env, "local_a", "cli-a", "Quiet one", cwd="C:\\G\\Zeta")
     add_desktop(env, "local_b", "cli-b", "Other", cwd="C:\\G\\Alpha")
@@ -1953,7 +1953,7 @@ def test_a_desktop_reply_drops_tool_calls_still_waiting(frame, env):
     frame.on_open_session()
     frame._set_activity(True)
     frame._queue_activity("tool", "Bash: npm test")
-    from theclaudehub.transcript import ASSISTANT, ChatMessage
+    from thechatplace.transcript import ASSISTANT, ChatMessage
     frame._chat_loaded = True
     frame._apply_chat(frame._open_generation, True,
                       [ChatMessage(ASSISTANT, "Tests pass.", "", "r1")], 0, None)
@@ -1988,7 +1988,7 @@ def test_rows_that_are_not_messages_read_as_shown(frame):
 
 
 def test_whole_message_setting_round_trips_and_is_in_settings(frame, tmp_path):
-    from theclaudehub.ui.dialogs import SettingsDialog
+    from thechatplace.ui.dialogs import SettingsDialog
     path = tmp_path / "s.json"
     assert speech.SpeechSettings.load(path).full_messages_in_list  # on by default
     speech.SpeechSettings(full_messages_in_list=False).save(path)
@@ -2108,7 +2108,7 @@ def test_a_refresh_keeps_the_view(frame, env):
     frame.refresh_sessions(force=True, resort=True)
     settle(frame)
     assert _titles(frame) == ["Hub probe"]
-    assert env["feedback"][-1].endswith("Showing TheClaudeHub sessions: 1.")
+    assert env["feedback"][-1].endswith("Showing Chat Place sessions: 1.")
 
 
 def test_add_to_a_new_group_then_show_it_then_remove(frame, env, monkeypatch):
@@ -2149,14 +2149,14 @@ def test_deleting_the_group_being_shown_goes_back_to_all(frame, env, monkeypatch
 
         def Destroy(self):
             pass
-    monkeypatch.setattr("theclaudehub.ui.main_frame.ManageGroupsDialog", Closes)
+    monkeypatch.setattr("thechatplace.ui.main_frame.ManageGroupsDialog", Closes)
     frame.on_manage_groups()
     assert frame.speech.session_view == "all" and frame.view_items["all"].IsChecked()
     assert "group:Temp" not in frame.view_items
 
 
 def test_manage_groups_dialog_lists_renames_and_deletes(frame, env, monkeypatch):
-    from theclaudehub.ui.dialogs import ManageGroupsDialog
+    from thechatplace.ui.dialogs import ManageGroupsDialog
     frame.groups.create("Work")
     frame.groups.add("Work", "local_a")
     frame.groups.create("Home")
@@ -2226,7 +2226,7 @@ def test_renaming_the_group_in_view_follows_it(frame, monkeypatch):
 
         def Destroy(self):
             pass
-    monkeypatch.setattr("theclaudehub.ui.main_frame.ManageGroupsDialog", Renames)
+    monkeypatch.setattr("thechatplace.ui.main_frame.ManageGroupsDialog", Renames)
     frame.on_manage_groups()
     assert frame.speech.session_view == "group:Jobs"
     assert frame.view_items["group:Jobs"].IsChecked()
@@ -2252,7 +2252,7 @@ def _fake_bug_dialog(monkeypatch, action, values):
 
         def Destroy(self):
             pass
-    monkeypatch.setattr("theclaudehub.ui.main_frame.BugReportDialog", Fills)
+    monkeypatch.setattr("thechatplace.ui.main_frame.BugReportDialog", Fills)
     return Fills
 
 
@@ -2260,7 +2260,7 @@ def test_report_a_bug_opens_github_with_the_report(frame, env, monkeypatch):
     fills = _fake_bug_dialog(monkeypatch, "open",
                              ("Sort resets", "It went back to status.", "Stay sorted", ""))
     frame.on_report_bug()
-    assert any(line.startswith("Sessions listed: 2 desktop app, 1 TheClaudeHub")
+    assert any(line.startswith("Sessions listed: 2 desktop app, 1 The Chat Place")
                for line in fills.seen)
     assert env["opened"][-1].startswith("https://github.com/kellylford/AIChat/issues/new?")
     assert "title=Sort+resets" in env["opened"][-1]
@@ -2276,10 +2276,10 @@ def test_copy_report_only_copies(frame, env, monkeypatch):
 
 
 def test_bug_dialog_needs_a_summary_and_what_happened(frame, env):
-    from theclaudehub.ui.dialogs import BugReportDialog
-    dialog = BugReportDialog(frame, ["TheClaudeHub: 0.1.0"])
+    from thechatplace.ui.dialogs import BugReportDialog
+    dialog = BugReportDialog(frame, ["The Chat Place: 0.1.0"])
     try:
-        assert dialog.included.GetValue() == "TheClaudeHub: 0.1.0"
+        assert dialog.included.GetValue() == "The Chat Place: 0.1.0"
         assert dialog.GetDefaultItem() is dialog.open_btn
         dialog._finish("open")
         assert "write a summary" in env["boxes"][-1] and dialog.action == ""
@@ -2309,14 +2309,14 @@ def test_insert_command_is_for_own_sessions(frame, env):
     select(frame, "Quiet one")
     frame.on_open_session()
     frame.on_insert_command()
-    assert env["feedback"][-1].startswith("Commands and skills are for TheClaudeHub")
+    assert env["feedback"][-1].startswith("Commands and skills are for The Chat Place")
 
 
 def test_commands_are_fetched_when_an_own_session_loads_and_inserted(frame, env, monkeypatch):
     # A claude to find, as on Kelly's PC; the fetch itself is faked by the fixture.
     monkeypatch.setattr(platform_paths, "find_claude",
                         lambda: platform_paths.ClaudeLookup("claude.exe"))
-    from theclaudehub.ui import dialogs
+    from thechatplace.ui import dialogs
     select(frame, "Hub probe")
     frame.on_open_session()
     assert pump(lambda: _folder_key("C:\\G\\Scratch") in frame._commands)
@@ -2329,7 +2329,7 @@ def test_commands_are_fetched_when_an_own_session_loads_and_inserted(frame, env,
             seen["filtered"] = list(self.list.GetStrings())
             self.chosen = self._shown[0]
             return wx.ID_OK
-    monkeypatch.setattr("theclaudehub.ui.main_frame.CommandPickerDialog", Picks)
+    monkeypatch.setattr("thechatplace.ui.main_frame.CommandPickerDialog", Picks)
     frame.reply_text.SetValue("/context please keep the tests")
     frame.on_insert_command()
     assert seen["rows"][0] == "/blog-publish: Publish a post to the blog"
@@ -2340,7 +2340,7 @@ def test_commands_are_fetched_when_an_own_session_loads_and_inserted(frame, env,
 
 
 def test_a_turn_keeps_the_folder_commands_current(frame, env):
-    from theclaudehub.claude_cli import StreamParser
+    from thechatplace.claude_cli import StreamParser
     select(frame, "Hub probe")
     frame.on_open_session()
     runner = FakeRunner([], "C:\\G\\Scratch", "", None)
@@ -2353,7 +2353,7 @@ def test_a_turn_keeps_the_folder_commands_current(frame, env):
 
 
 def _folder_key(cwd):
-    from theclaudehub.ui.main_frame import _folder_key as key
+    from thechatplace.ui.main_frame import _folder_key as key
     return key(cwd)
 
 
@@ -2361,12 +2361,12 @@ def test_commands_never_open_by_themselves(frame, env, monkeypatch):
     # A claude to find, as on Kelly's PC; the fetch itself is faked by the fixture.
     monkeypatch.setattr(platform_paths, "find_claude",
                         lambda: platform_paths.ClaudeLookup("claude.exe"))
-    from theclaudehub.ui import main_frame
+    from thechatplace.ui import main_frame
     select(frame, "Hub probe")
     frame.on_open_session()
     assert pump(lambda: frame._commands)
     frame._commands.clear()
-    monkeypatch.setattr("theclaudehub.ui.main_frame.CommandPickerDialog",
+    monkeypatch.setattr("thechatplace.ui.main_frame.CommandPickerDialog",
                         lambda *a: pytest.fail("opened by itself"))
     frame.on_insert_command()
     assert env["feedback"][-1] == "Getting the commands for this folder."
@@ -2389,7 +2389,7 @@ def test_inserting_keeps_line_breaks_and_leaves_paths_alone(frame):
 
 
 def test_picker_with_nothing_matching_chooses_nothing(frame):
-    from theclaudehub.ui.dialogs import CommandPickerDialog
+    from thechatplace.ui.dialogs import CommandPickerDialog
     dialog = CommandPickerDialog(frame, FAKE_COMMANDS)
     try:
         dialog.search.SetValue("zzz")
@@ -2501,7 +2501,7 @@ def test_attachments_are_for_own_sessions_and_follow_the_session(frame, env):
     select(frame, "Quiet one")
     frame.on_open_session()
     frame.on_attach_files()
-    assert env["feedback"][-1].startswith("Attachments are for TheClaudeHub")
+    assert env["feedback"][-1].startswith("Attachments are for The Chat Place")
     select(frame, "Hub probe")
     frame.on_open_session()
     frame._add_attachments("own-1", [str(image)])
@@ -2563,7 +2563,7 @@ def test_find_sessions_works_with_a_view_and_says_nothing_found(frame, env, monk
     monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
     frame.on_view("desktop")
     monkeypatch.setattr(frame, "_ask_text", lambda title, prompt, value: "probe")
-    frame.on_find()  # "Hub probe" is a TheClaudeHub session, not in this view
+    frame.on_find()  # "Hub probe" is a Chat Place session, not in this view
     assert frame.session_list.GetCount() == 0
     assert frame.session_list.GetName() == ('Session list, desktop app sessions, '
                                             'matching "probe", 0 of 3')
@@ -2734,7 +2734,7 @@ def _load_code(frame, env):
 
 
 def test_code_blocks_are_described_listed_and_copied(frame, env, monkeypatch):
-    from theclaudehub.ui.dialogs import CodeBlocksDialog
+    from thechatplace.ui.dialogs import CodeBlocksDialog
     _load_code(frame, env)
     assert frame._message_item_text(1) == ("Claude: Two ways. Code block, Python, 1 line. or. "
                                            "Code block, Bash, 2 lines. Done.")
@@ -2881,7 +2881,7 @@ def test_notifications_when_another_window_is_active(frame, env, monkeypatch):
     frame._on_turn_event({"id": "own-1"}, "Hub probe",
                          TurnEvent("failed", text="Stopped.", is_error=True))
     assert env["notified"][-1][0] == "Hub probe: the turn failed"
-    # Off, or while TheClaudeHub is the active window: nothing.
+    # Off, or while The Chat Place is the active window: nothing.
     count = len(env["notified"])
     frame.speech.notifications = speech.NOTIFY_OFF
     frame._runners["own-1"] = FakeRunner([], "", "", None)
@@ -2963,7 +2963,7 @@ def test_choosing_a_notification_with_a_dialog_open_leaves_the_session(frame, en
 
 
 def test_settings_keep_the_notification_choice(frame, env):
-    from theclaudehub.ui.dialogs import SettingsDialog
+    from thechatplace.ui.dialogs import SettingsDialog
     frame.speech.notifications = speech.NOTIFY_NEEDS_YOU
     dialog = SettingsDialog(frame, frame.speech, speech.default_options())
     try:
@@ -3030,7 +3030,7 @@ def test_a_part_you_are_reading_waits_for_you(frame, monkeypatch):
 
 
 def test_empty_parts_and_the_update_button_going_away(frame, env):
-    from theclaudehub.updater import AVAILABLE, CheckResult, CURRENT
+    from thechatplace.updater import AVAILABLE, CheckResult, CURRENT
     bar = frame.GetStatusBar()
     assert bar.GetStatusText(1) == "No session loaded"
     frame.updates = FakeUpdates(CheckResult(AVAILABLE, "0.1.0", "0.2.0"))
@@ -3145,7 +3145,7 @@ def test_the_desktop_apps_groups_show_in_the_list_and_views(frame, env, monkeypa
     frame.on_view("group:IDT")
     settle(frame)
     assert [r.split(",")[0] for r in frame.session_list.GetStrings()] == ["Quiet one"]
-    # Removing is for the desktop app; adding a TheClaudeHub session joins it.
+    # Removing is for the desktop app; adding a Chat Place session joins it.
     select(frame, "Quiet one")
     monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
     frame.on_remove_from_group()
@@ -3199,8 +3199,8 @@ def test_a_bad_read_of_the_desktop_apps_groups_keeps_your_view(frame, env):
 
 
 def test_sign_in_is_checked_and_offered(frame, env, monkeypatch):
-    from theclaudehub import signin
-    from theclaudehub.ui import main_frame
+    from thechatplace import signin
+    from thechatplace.ui import main_frame
     shown = []
     monkeypatch.setattr(wx, "MessageBox", lambda text, title, style, parent=None: (
         shown.append((text, style)), wx.YES)[1])

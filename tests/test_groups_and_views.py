@@ -3,8 +3,8 @@ import json
 
 import pytest
 
-from theclaudehub.groups import GroupStore, clean_name
-from theclaudehub.sessions import (DESKTOP, IDLE, NEEDS_YOU, OWN, WORKING, SessionInfo,
+from thechatplace.groups import GroupStore, clean_name
+from thechatplace.sessions import (DESKTOP, IDLE, NEEDS_YOU, OWN, WORKING, SessionInfo,
                                    group_view, in_view, load_desktop_sessions, view_spoken)
 
 
@@ -167,7 +167,7 @@ def test_forget_removes_a_session_everywhere(tmp_path):
 
 
 def test_archived_sessions_do_not_announce_turn_ends():
-    from theclaudehub.hub import finished_turns
+    from thechatplace.hub import finished_turns
     done = _info("done", archived=True)
     assert finished_turns({"done": "working"}, [done]) == []
     assert finished_turns({"done": "working"}, [_info("done")])[0].key == "done"

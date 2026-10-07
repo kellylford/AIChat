@@ -2,8 +2,8 @@
 import base64
 import json
 
-from theclaudehub import attachments, platform_paths
-from theclaudehub.claude_cli import stdin_lines
+from thechatplace import attachments, platform_paths
+from thechatplace.claude_cli import stdin_lines
 
 PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=")
 

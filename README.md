@@ -1,4 +1,4 @@
-# TheClaudeHub
+# The Chat Place
 
 > **Status: version 0.1.0, ready for its first release.** Used with JAWS on Kelly's PC; the
 > installer, uninstaller and update check have been tested in the vmtest VM. Downloading and
@@ -37,7 +37,7 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   and a new one is added at the end. F5, or a refresh while you're elsewhere, puts it back in
   order, keeping you on the same session.
   **View, Show Sessions** (Alt+V, H) chooses which sessions are listed: all, needs you or
-  working, needs you, desktop app sessions, TheClaudeHub's own, Remote Control sessions (ones
+  working, needs you, desktop app sessions, The Chat Place's own, Remote Control sessions (ones
   the desktop app has linked for Remote Control), archived (the desktop app's archived
   sessions, otherwise hidden), or one of your groups. The list's name says what it shows and how
   many ("Session list, needs you, 2 of 139"), and the choice is remembered.
@@ -53,18 +53,18 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   selected session in a group, or a new one; Session, Remove from Group takes it out; Session,
   Manage Groups lists your groups with how many sessions each has, to make, rename or delete
   them (deleting a group never touches its sessions). A session can be in several groups, and
-  its row says which ("…, group Work"). TheClaudeHub's groups are kept in
-  `%APPDATA%\TheClaudeHub\groups.json`; the desktop app's files are never changed.
+  its row says which ("…, group Work"). The Chat Place's groups are kept in
+  `%APPDATA%\TheChatPlace\groups.json`; the desktop app's files are never changed.
   The **desktop app's own groups** show too: in View, Show Sessions, in each session's row,
   and in Add to Group. They're read from the desktop app's settings each refresh, so a change
-  there shows here; they're changed in the desktop app. Adding one of TheClaudeHub's sessions
-  to a desktop app group keeps a TheClaudeHub group of the same name, shown together with it.
+  there shows here; they're changed in the desktop app. Adding one of The Chat Place's sessions
+  to a desktop app group keeps a Chat Place group of the same name, shown together with it.
 - **What "needs you" means.** For a Claude desktop app session: it isn't working right now (it can
   still be open in the desktop app), and the desktop
   app's summary of its latest turn says it's waiting on you, either with a "needs action" note
   (read after "needs you:") or a status such as blocked, needs input or review ready. The desktop
   app doesn't write that summary after every turn, so a session can be waiting on you and still
-  show as idle. For one of TheClaudeHub's own sessions: Claude is waiting right now for a
+  show as idle. For one of The Chat Place's own sessions: Claude is waiting right now for a
   permission, a question or a plan (Ctrl+Shift+A), which ends when you answer; or its last turn
   failed, or tools were refused in it, which is saved with the session and lasts, even across a
   restart, until its next turn starts.
@@ -90,20 +90,20 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   options in the full text, then "You answered: ...". Refused tools read "Permission denied:
   ...". Tool calls and tool results are hidden unless you turn on Show Tool Activity (Ctrl+T).
   With it on, the open session's tool calls are also **spoken as they happen**, so a long turn
-  isn't silent: "Using Bash: git status; Read: main.py." In TheClaudeHub's own sessions, what
+  isn't silent: "Using Bash: git status; Read: main.py." In The Chat Place's own sessions, what
   Claude writes between tool calls ("Let me check the build.") is spoken too. A run of calls is
   gathered for a moment and said together, counted when there are many ("Using Read 4 times,
   then Bash."), and never cuts off your screen reader. At the summary level tools are always
   counted; at silent only the status bar shows them. Tool results aren't spoken.
   New messages arrive at the end without moving you.
-- **Reply box:** for TheClaudeHub's own sessions, type and press Ctrl+Enter (or Send). You stay in
+- **Reply box:** for The Chat Place's own sessions, type and press Ctrl+Enter (or Send). You stay in
   the reply box. For desktop app sessions the same place holds a read-only note saying why
   replying happens in Claude, and an Open in Claude button.
 - **Escape** in the messages or the reply box (or Backspace in the messages) goes back to the
   session list, on the same session. Enter there on the session that's already loaded takes you
   back to its messages where you left them, without reloading.
 - **Commands and skills** (Ctrl+/, the Commands button after Stop, or Session, Insert Command
-  or Skill), in TheClaudeHub's own
+  or Skill), in The Chat Place's own
   sessions: a searchable list of your skills and custom commands, then Claude Code's own
   (/compact, /context, /code-review and the rest), each with its description and what it
   takes. Type to filter by name or description, Down to the list, Enter to choose: it goes
@@ -112,14 +112,14 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   folder, asked for in the background when the session loads (no turn, no cost) and kept
   current by each turn. If it isn't there yet, you hear "Commands are ready" when it is; the list
   never opens by itself.
-- **Attachments**, in TheClaudeHub's own sessions: **Attach Files** (Alt+F, after Commands;
+- **Attachments**, in The Chat Place's own sessions: **Attach Files** (Alt+F, after Commands;
   Ctrl+Shift+F) adds files and images to your next message, and **Ctrl+V** in the reply box
   attaches a picture on the clipboard, such as a screenshot from Win+Shift+S. They're listed
   under the reply box ("2 attachments: screenshot.png, log.txt"); Delete there removes one.
   Images go to Claude as images, so it can describe what's on screen; other files are named
   in the message as `@"path"`, which Claude Code reads in for Claude. A message can be
   just attachments. Each session keeps its own until they're sent. Pasted pictures are saved
-  in `%APPDATA%\TheClaudeHub\pasted images`.
+  in `%APPDATA%\TheChatPlace\pasted images`.
 - **Export** (Ctrl+E, Session, Export Session) saves the selected session's conversation,
   or the loaded one's, to a file: **Markdown**, a **web page** (formatted like the full-message
   view, nothing fetched from the internet) or **plain text**, chosen by the Save as type list
@@ -132,19 +132,19 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
 - **Open in Claude** (Ctrl+O) switches the desktop app to the session, for approving a permission
   prompt or answering a question card in a desktop app session.
 - **Continue Here** (Ctrl+Shift+N, or the button beside Open in Claude) carries a desktop app
-  session on in TheClaudeHub, as a copy: a new TheClaudeHub session in the same folder, with the
+  session on in The Chat Place, as a copy: a new Chat Place session in the same folder, with the
   whole conversation so far in its messages, that you reply to here. You type its first message
   in the same dialog as New Session; the title starts as "<title> (continued)". The desktop app
   session isn't changed, and what you do in the copy doesn't appear in it.
-- **New Session** (Ctrl+N) starts a session of TheClaudeHub's own: choose a folder, a title,
+- **New Session** (Ctrl+N) starts a session of The Chat Place's own: choose a folder, a title,
   the model (Alt+D), a permission mode (auto by default; accept edits, manual and plan are
   offered) and the first message. The models are Default (your Claude Code setting), Opus,
   Sonnet and Haiku, each the latest of its family. The model is kept with the session and
   passed to every turn. Arriving in the messages, you hear it ("Messages in Build (idle, on
   Opus)"). Fable isn't offered: on some plans it bills to usage credits, and in the headless
-  mode TheClaudeHub uses, Claude Code does that without asking. If that first message never reaches Claude (Claude Code not signed in, say), it goes
+  mode The Chat Place uses, Claude Code does that without asking. If that first message never reaches Claude (Claude Code not signed in, say), it goes
   back into the reply box and Send starts the session again.
-- **Claude asks, you answer.** In TheClaudeHub's own sessions, when Claude needs permission
+- **Claude asks, you answer.** In The Chat Place's own sessions, when Claude needs permission
   for something the permission mode doesn't allow, asks you a question, or has a plan for you
   to approve, the turn waits for you. It's announced ("Build needs you. Claude wants to run
   git push. Ctrl+Shift+A answers."), and the session shows as needing you in the list.
@@ -159,9 +159,9 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
     edits, auto or manual), or **Keep Planning** with what to change, which is the default.
 
   Escape in any of them answers later; nothing is approved or refused by waiting. "For this
-  session" lasts for the session, not just the turn: TheClaudeHub keeps the rule with the
+  session" lasts for the session, not just the turn: The Chat Place keeps the rule with the
   session and gives it to every later turn. It never writes Claude Code's settings files.
-- **Announcements.** When the open session gets a new reply, or one of TheClaudeHub's sessions
+- **Announcements.** When the open session gets a new reply, or one of The Chat Place's sessions
   finishes a turn, or any listed session stops working, it's announced through your screen reader
   (or a system voice) and put on the status bar. Settings (Ctrl+Comma) chooses full (the whole
   reply), summary (the session's name and the first sentence) or silent (status bar only), whether
@@ -183,18 +183,18 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   Markdown is read as words: a code block is "Code block omitted", and headings and list items
   are read as separate sentences. Turn it off in Settings with "Read your own messages back when
   they're sent" (Alt+M), and you hear just "Sent. Hub probe is working."
-- **Windows notifications** while you're in another window: when one of TheClaudeHub's own
+- **Windows notifications** while you're in another window: when one of The Chat Place's own
   sessions finishes a turn, fails or needs you (a permission or a question), when a desktop app
   session starts needing you, and when the loaded session finishes. Choosing one brings
-  TheClaudeHub forward with that session loaded. Settings, Windows notifications chooses every
+  The Chat Place forward with that session loaded. Settings, Windows notifications chooses every
   finished turn of its own sessions (the default), only when a session needs you, or off. They're
-  ordinary Windows notifications from TheClaudeHub's icon in the notification area: read by your
-  screen reader, and quiet under Do Not Disturb. Choosing the icon itself brings TheClaudeHub
-  forward. While you're in TheClaudeHub (or one of its dialogs), the announcement is enough and
+  ordinary Windows notifications from The Chat Place's icon in the notification area: read by your
+  screen reader, and quiet under Do Not Disturb. Choosing the icon itself brings The Chat Place
+  forward. While you're in The Chat Place (or one of its dialogs), the announcement is enough and
   none are shown.
 - **Changed Files** (Ctrl+Shift+D, View menu) lists the files Claude changed since your latest
   message, or in the whole session, each with its line counts ("main_frame.py, 40 lines added, 12
-  removed, in theclaudehub\ui"). Enter on a file reads its changes in a text box, a line at a
+  removed, in thechatplace\ui"). Enter on a file reads its changes in a text box, a line at a
   time: where each change is, then "Removed:", "Added:" and "Unchanged:" lines. It's built from the
   transcript, so it works for desktop app sessions too, with no git needed. Changes made by a
   subagent Claude hands work to, and notebook edits, aren't counted yet. When the loaded
@@ -203,7 +203,7 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
 - **Usage and Context** (Ctrl+Shift+U, View menu) says how full the loaded session's context is
   ("Context 62% full: 124,000 of 200,000 tokens"), from the token counts of Claude's latest
   reply (the percentage only once the window's size is known: Claude Code reports it for a model
-  when one of TheClaudeHub's sessions runs a turn on it, and a session past 200,000 tokens has the
+  when one of The Chat Place's sessions runs a turn on it, and a session past 200,000 tokens has the
   1,000,000 window), and how much of your plan's limits are used, as the latest turn reported them ("5-hour
   limit 8% used, resets at 10:00 AM. Weekly limit 34% used, resets on Friday at 9:00 AM.").
   It's said once, unasked, when the loaded session's context passes 80%, when a limit passes
@@ -216,12 +216,12 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
 - **Claude Code Sign-in** (Help menu) says whether Claude Code is signed in, to which plan and
   as whom ("Claude Code is signed in to your Claude Max plan as …"). If it isn't, it offers to
   sign in: `claude auth login` opens in its own window and your browser shows Claude's sign-in
-  page. TheClaudeHub also checks at start-up and says so only if there's a problem. Your
+  page. The Chat Place also checks at start-up and says so only if there's a problem. Your
   sessions are listed whether or not Claude Code is signed in (they're read from disk); only
   sending a message needs a sign-in.
 - **Report a Bug** (Help menu) asks for a summary, what happened, what you expected and the
   steps, and shows exactly what else the report includes before it goes anywhere: versions
-  (TheClaudeHub, Windows, Python, wxPython, Claude Code), the announcement level and speech
+  (The Chat Place, Windows, Python, wxPython, Claude Code), the announcement level and speech
   engine, the list's view and sort, and how many sessions it lists. Never a session's title,
   folder or messages. **Open on GitHub** copies the whole report and opens GitHub's new-issue
   page with it filled in; **Copy Report** only copies it. Filing on GitHub needs access to the
@@ -232,9 +232,9 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
 You need Windows 10 or 11 and **Claude Code installed with its native installer and signed in**
 to a Claude subscription (the `claude` command, the same login the desktop app uses).
 
-Download `TheClaudeHub-theclaudehub-Setup.exe` from the newest release on
+Download `TheChatPlace-thechatplace-Setup.exe` from the newest release on
 [the releases page](https://github.com/kellylford/AIChat/releases) and run it.
-It installs for you only, with no administrator rights, adds TheClaudeHub to the Start menu, and
+It installs for you only, with no administrator rights, adds The Chat Place to the Start menu, and
 starts it. The portable zip from the same release runs without installing, but doesn't update
 itself.
 
@@ -251,21 +251,21 @@ From Help, a new version is offered in a Yes/No dialog where No is the default. 
 it downloads the update, closes, and starts the new version. It won't install while Claude is
 working in one of its sessions, and it warns you if a reply box holds text you haven't sent. If a
 turn starts, a dialog opens, or you type a reply while it downloads, it asks again or leaves the
-update to be installed the next time TheClaudeHub starts.
+update to be installed the next time The Chat Place starts.
 
 **Updating never touches your sessions or settings.** The app lives in
-`%LOCALAPPDATA%\TheClaudeHub`, which Velopack replaces on update and removes on uninstall. Your
-data is in `%APPDATA%\TheClaudeHub`, a different folder that neither goes near, and the updater
+`%LOCALAPPDATA%\TheChatPlace`, which Velopack replaces on update and removes on uninstall. Your
+data is in `%APPDATA%\TheChatPlace`, a different folder that neither goes near, and the updater
 refuses to run if that were ever not so. What the updater did is logged in
-`%APPDATA%\TheClaudeHub\update.log`.
+`%APPDATA%\TheChatPlace\update.log`.
 
-The version is in Help, About. Releases come from tags named `theclaudehub-v<version>`, and
-TheClaudeHub publishes its update feed on its own Velopack channel (`releases.theclaudehub.json`).
-The updater finds the newest `theclaudehub-v*` release itself and reads the feed from that
+The version is in Help, About. Releases come from tags named `thechatplace-v<version>`, and
+The Chat Place publishes its update feed on its own Velopack channel (`releases.thechatplace.json`).
+The updater finds the newest `thechatplace-v*` release itself and reads the feed from that
 release only.
 
-**The updater still looks in TheWorkBench**, where TheClaudeHub lived until October 2026
-(`REPO_URL`, `RELEASES_API` and `TAG_PREFIX` in `theclaudehub/updater.py`). Pointing it at this
+**The updater still looks in TheWorkBench**, where The Chat Place lived until October 2026
+(`REPO_URL`, `RELEASES_API` and `TAG_PREFIX` in `thechatplace/updater.py`). Pointing it at this
 repository, with a hand-off release for copies already installed, is still to do; until then,
 installed copies find no updates.
 
@@ -279,11 +279,11 @@ cd AIChat
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements-dev.txt
-pythonw TheClaudeHub.pyw
+pythonw TheChatPlace.pyw
 python -m pytest tests
 ```
 
-`python -m theclaudehub` also works. A copy run from source doesn't update itself; Help, Check
+`python -m thechatplace` also works. A copy run from source doesn't update itself; Help, Check
 for Updates says so, and names the newest release.
 
 ### Build it yourself
@@ -299,7 +299,7 @@ build.cmd C:\Users\kelly\OneDrive\thehub      and copy Setup and the zip there
 ```
 
 The first run takes a few minutes to set up `.venv`. The results are `releases\` (Setup and the
-portable zip) and `dist\TheClaudeHub\` (the app itself, ready to run). The installer needs the
+portable zip) and `dist\TheChatPlace\` (the app itself, ready to run). The installer needs the
 Velopack tool, `vpk`; `build.cmd` installs or updates it to the version the workflow uses if the
 .NET SDK is there, and otherwise builds just the app, says why, and exits with an error. A
 relative output folder is taken relative to where you ran `build.cmd`. The build is unsigned, so SmartScreen may warn when you run Setup: More
@@ -307,13 +307,13 @@ info, then Run anyway.
 
 ### Releasing
 
-The version lives in one place, `__version__` in `theclaudehub/__init__.py`. To release:
+The version lives in one place, `__version__` in `thechatplace/__init__.py`. To release:
 
 1. Set `__version__`, and write `release-notes/v<version>.md` (what it is, what's new, downloads,
    requirements), in one commit on main.
-2. Tag it `theclaudehub-v<version>` and push the tag.
+2. Tag it `thechatplace-v<version>` and push the tag.
 
-`.github/workflows/release-theclaudehub.yml` then runs the tests, fails if the tag and
+`.github/workflows/release-thechatplace.yml` then runs the tests, fails if the tag and
 `__version__` disagree, builds the app with PyInstaller, smoke-tests the built exe, signs it with
 Azure Artifact Signing, packs the Velopack installer, portable zip and update feed (signing
 Setup, the updater and the launcher too), checks every signature, and publishes a GitHub release
@@ -336,7 +336,7 @@ shows it as plain text instead.
 | Messages | Backspace | Also back to the session list |
 | Session list | Enter | Load that session and move to its messages |
 | Session list | Ctrl+O | Open the selected session in the Claude desktop app |
-| Session list | Ctrl+N | New TheClaudeHub session |
+| Session list | Ctrl+N | New Chat Place session |
 | Session list | Ctrl+G | Add the selected session to a group |
 | Session list | Ctrl+F | Show only sessions matching some text (Escape shows all) |
 | Messages | Ctrl+F, F3, Shift+F3 | Find a message by its text; next; previous |
@@ -348,13 +348,13 @@ shows it as plain text instead.
 | Anywhere | Alt+V, H | Show Sessions: choose which sessions are listed |
 | Anywhere | Ctrl+Shift+N | Continue the selected (or loaded) desktop app session here, as a copy |
 | Session list | F5 | Refresh the list now and put it in order |
-| Session list | Delete | Forget the selected TheClaudeHub session (asks first; its transcript is kept) |
+| Session list | Delete | Forget the selected Chat Place session (asks first; its transcript is kept) |
 | Messages | Enter, or Applications key then Read Full Message | Read the whole message; Escape comes back to it |
 | Messages | Ctrl+C | Copy the whole message |
 | Messages | Ctrl+Shift+C | Copy the message's last code block |
 | Messages | Ctrl+T | Show or hide tool activity |
 | Messages | Ctrl+O | Open this session in the Claude desktop app |
-| Reply box | Ctrl+Enter | Send (TheClaudeHub sessions only); you stay in the reply box |
+| Reply box | Ctrl+Enter | Send (Chat Place sessions only); you stay in the reply box |
 | Reply box | Ctrl+Period | Stop the running turn |
 | Reply box | Ctrl+Shift+T | Turn status: how long it has been working, and on what |
 | Anywhere | Ctrl+Shift+A | Answer Claude: a permission request, a question or a plan |
@@ -376,26 +376,26 @@ Everything it reads is on your own PC, so reading costs nothing.
 | The desktop app's sessions | `%APPDATA%\Claude\claude-code-sessions\<id>\<org>\local_<id>.json`: title, folder, last activity, archived, and sometimes a summary of the last turn that says whether it needs you. Archived sessions are left out. The Microsoft Store version of the desktop app keeps the same files in `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude\claude-code-sessions`; both places are read, and a session in both is read from the newer copy. |
 | Whether a session is working | `%USERPROFILE%\.claude\sessions\<pid>.json`, which says busy or idle while Claude Code runs it. Files whose process has gone are ignored. |
 | The conversation | `%USERPROFILE%\.claude\projects\<folder>\<session>.jsonl`, where `<folder>` is the session's folder with every character that isn't a letter or digit turned into `-`. This was checked against every transcript on Kelly's PC; if it ever misses, the app searches all the project folders for the session id instead. |
-| TheClaudeHub's own sessions | `%APPDATA%\TheClaudeHub\sessions.json` (and `speech.json` for settings). If `sessions.json` can't be read, it's renamed to `sessions.json.bad-<date>` rather than overwritten, and the app says so. |
-| Errors | `%APPDATA%\TheClaudeHub\error.log`: anything that went wrong unexpectedly, with its traceback |
+| The Chat Place's own sessions | `%APPDATA%\TheChatPlace\sessions.json` (and `speech.json` for settings). If `sessions.json` can't be read, it's renamed to `sessions.json.bad-<date>` rather than overwritten, and the app says so. |
+| Errors | `%APPDATA%\TheChatPlace\error.log`: anything that went wrong unexpectedly, with its traceback |
 
 None of these formats is documented, and Claude Code says the transcript format changes between
-versions. So all the knowledge of it is in one small module (`theclaudehub/transcript.py`) that
+versions. So all the knowledge of it is in one small module (`thechatplace/transcript.py`) that
 skips record types it doesn't know, never crashes on a line it can't read, and says "couldn't read
 N lines" instead. A long transcript is read once, then only its new lines as it grows.
 
-**TheClaudeHub never writes to the desktop app's files or to any transcript.** The only files it
-writes are its own, in `%APPDATA%\TheClaudeHub`. Only one copy runs at a time; starting a second
+**The Chat Place never writes to the desktop app's files or to any transcript.** The only files it
+writes are its own, in `%APPDATA%\TheChatPlace`. Only one copy runs at a time; starting a second
 brings the first to the front.
 
 ### Its own sessions, and why desktop sessions are read-only
 
-TheClaudeHub drives its own sessions with the `claude` command in print (headless) mode:
+The Chat Place drives its own sessions with the `claude` command in print (headless) mode:
 `claude -p --input-format stream-json --output-format stream-json --verbose --permission-mode <mode>
 --permission-prompts host --permission-prompt-tool stdio`, with `--session-id` and `--name` for the
 first message and `--resume <id>` for each reply, plus `--allowedTools` with any rules you chose
 "for this session". The message goes in on standard input as a stream-json message, and standard
-input stays open for the turn so TheClaudeHub can answer what Claude asks; it's closed when the
+input stays open for the turn so The Chat Place can answer what Claude asks; it's closed when the
 turn's result arrives. That runs under the same login as the desktop app, never an API key; it
 uses the plan's Agent SDK credit, as any `claude -p` does.
 
@@ -411,11 +411,11 @@ uses the plan's Agent SDK credit, as any `claude -p` does.
   `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, and the Bedrock, Vertex and
   Foundry switches. Both lists are in `claude_cli.py`.
 - As a second check, `claude` reports where its credentials came from before it sends anything.
-  If that's an API key rather than the subscription login, TheClaudeHub stops the run and says so.
+  If that's an API key rather than the subscription login, The Chat Place stops the run and says so.
 
 Desktop app sessions are read-only because two programs resuming one session run their turns into
 the same transcript at once and tangle it. Only the desktop app writes to its sessions, and only
-TheClaudeHub writes to its own. The rule is enforced in code: TheClaudeHub refuses to build a
+The Chat Place writes to its own. The rule is enforced in code: The Chat Place refuses to build a
 `--resume` command for any session it didn't start, any session the desktop app knows about
 (archived ones included), or any `local_` id, and there are tests for each. It also won't send
 into one of its own sessions while that session is running somewhere else. Continue Here is the
@@ -423,19 +423,19 @@ one exception that reads a desktop session through `claude`, and it doesn't writ
 `--resume <desktop id> --fork-session --session-id <new id>` copies the history into a new
 session. Checked with Claude Code 2.1.286: the desktop session's transcript was byte for byte the
 same afterwards, and Claude knew the earlier conversation. One turn runs at a time
-per session. Send during a turn queues the message: TheClaudeHub says "Queued", and once the
+per session. Send during a turn queues the message: The Chat Place says "Queued", and once the
 turn's reply has been announced, it sends the message. More messages sent while one is waiting
 join it, and they go together as one message. Each queued message is at the end of the
 messages list as "Queued: …": Delete removes it, and its context menu has Edit Queued Message
 (back into the message box, to change and send again) and Remove Queued Message. Turn status
 (Ctrl+Shift+T) says when a message is queued. If the turn fails, or you press Stop, the queued text goes back in the message box
 instead, ahead of anything typed since, with the cursor left at the end. While one of
-TheClaudeHub's sessions is loaded, Send and Stop are never disabled, so from the message box, Tab
+The Chat Place's sessions is loaded, Send and Stop are never disabled, so from the message box, Tab
 is always Send and the next Tab is always Stop. When a turn is running, Tab doesn't jump past
 Send to Stop.
 
-Every announcement is also written to `speech.log` in `%TEMP%\theclaudehub-speak` (on a Mac,
-`$TMPDIR/theclaudehub-speak`), one line each: the time, whether it interrupts or waits its turn,
+Every announcement is also written to `speech.log` in `%TEMP%\thechatplace-speak` (on a Mac,
+`$TMPDIR/thechatplace-speak`), one line each: the time, whether it interrupts or waits its turn,
 the speech engine, and its opening words. A line means the text was handed to the speech engine,
 not that it was heard: a later announcement that interrupts can cut it off. The log shows
 whether a reply went to the screen reader at all when you didn't hear it.
@@ -451,7 +451,7 @@ slip out first.
 
 Checked with Claude Code 2.1.286 (issues #187 and #188):
 
-- **Permission prompts, questions and plans come to TheClaudeHub.** With
+- **Permission prompts, questions and plans come to The Chat Place.** With
   `--permission-prompts host --permission-prompt-tool stdio`, anything that would ask arrives on
   the turn's output as a `can_use_tool` request, the same control protocol the Agent SDK uses,
   and the turn waits for the answer on its input. AskUserQuestion and ExitPlanMode come the same
@@ -461,7 +461,7 @@ Checked with Claude Code 2.1.286 (issues #187 and #188):
   one didn't, and Claude quoted the reason it was given; an approved plan carried on in accept
   edits without asking again.
 - **Refusals still happen without asking** where Claude Code's own rules say so (a write outside
-  the session's folder, say, or auto mode's safety check). TheClaudeHub adds those to the
+  the session's folder, say, or auto mode's safety check). The Chat Place adds those to the
   announcement ("1 tool was refused: ..."), marks the session "needs you", and the chat shows a
   "Permission denied" line.
 - Question cards in desktop app sessions are shown as text in the chat ("Claude asked: ...,
@@ -469,16 +469,16 @@ Checked with Claude Code 2.1.286 (issues #187 and #188):
 
 ## Limitations
 
-- Windows only for now. The OS-specific parts are in `theclaudehub/platform_paths.py` and the
+- Windows only for now. The OS-specific parts are in `thechatplace/platform_paths.py` and the
   speech scripts, so a Mac version mostly means changing those.
 - "Needs you" for desktop sessions depends on the desktop app's turn summary, which it doesn't
   always write. A session without one shows as idle once it stops working.
 - A desktop session's transcript can be gone if it's older than Claude Code's retention period
   (`cleanupPeriodDays`, 90 days on Kelly's PC). The chat says so.
-- TheClaudeHub's own sessions don't appear in the desktop app, so Open in Claude doesn't work for
+- The Chat Place's own sessions don't appear in the desktop app, so Open in Claude doesn't work for
   them; the app says so.
 - Subagent conversations are left out of the chat.
-- Turns of TheClaudeHub's own sessions are also spoken by ClaudeSpeak's Stop hook, if that's
+- Turns of The Chat Place's own sessions are also spoken by ClaudeSpeak's Stop hook, if that's
   installed, since `claude -p` runs hooks; so a reply can be heard twice.
 - The desktop app's file formats are undocumented and could change with any update.
 
@@ -486,19 +486,19 @@ Checked with Claude Code 2.1.286 (issues #187 and #188):
 
 | Path | What |
 |---|---|
-| `TheClaudeHub.pyw` | Double-click launcher |
-| `theclaudehub/transcript.py` | Transcript parser |
-| `theclaudehub/sessions.py` | Desktop metadata, live state, sorting, the list wording |
-| `theclaudehub/own_store.py` | TheClaudeHub's own sessions |
-| `theclaudehub/claude_cli.py` | `claude` commands, the `--resume` guard, the environment, stream-json events, running a turn |
-| `theclaudehub/hub.py` | Gathering the list, noticing finished turns |
-| `theclaudehub/announce.py` | What gets announced |
-| `theclaudehub/rendering.py` | A message's markdown as a safe HTML page, for the formatted view |
-| `theclaudehub/speech.py`, `theclaudehub/speech/` | Speech, adapted from Image Description Toolkit (ClaudeSpeak's engine scripts) |
-| `theclaudehub/platform_paths.py` | Every path and OS call |
-| `theclaudehub/ui/` | The wxPython window and dialogs |
+| `TheChatPlace.pyw` | Double-click launcher |
+| `thechatplace/transcript.py` | Transcript parser |
+| `thechatplace/sessions.py` | Desktop metadata, live state, sorting, the list wording |
+| `thechatplace/own_store.py` | The Chat Place's own sessions |
+| `thechatplace/claude_cli.py` | `claude` commands, the `--resume` guard, the environment, stream-json events, running a turn |
+| `thechatplace/hub.py` | Gathering the list, noticing finished turns |
+| `thechatplace/announce.py` | What gets announced |
+| `thechatplace/rendering.py` | A message's markdown as a safe HTML page, for the formatted view |
+| `thechatplace/speech.py`, `thechatplace/speech/` | Speech, adapted from Image Description Toolkit (ClaudeSpeak's engine scripts) |
+| `thechatplace/platform_paths.py` | Every path and OS call |
+| `thechatplace/ui/` | The wxPython window and dialogs |
 | `tests/` | pytest tests, built on made-up records shaped like the real ones |
-| `theclaudehub/updater.py` | Velopack updates, adapted from GHManage's updater |
+| `thechatplace/updater.py` | Velopack updates, adapted from GHManage's updater |
 | `tools/check_version.py` | Prints the version; checks a release tag against it |
 | `tools/make_version_info.py` | The Windows version resource for the built exe |
 | `release-notes/` | One file per release, used as the GitHub release's notes and the update's notes |

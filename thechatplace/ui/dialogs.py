@@ -1,4 +1,4 @@
-"""TheClaudeHub's dialogs: New Session, Settings, Keyboard Shortcuts."""
+"""The Chat Place's dialogs: New Session, Settings, Keyboard Shortcuts."""
 from __future__ import annotations
 
 import dataclasses
@@ -35,12 +35,12 @@ class ShortcutsDialog(wx.Dialog):
 PERMISSION_NOTE = (
     "The permission mode decides what Claude may do without asking. When Claude "
     "asks for permission, asks you a question or has a plan for you to approve, "
-    "the turn waits: TheClaudeHub announces it, the session shows as needing "
+    "the turn waits: The Chat Place announces it, the session shows as needing "
     "you, and Ctrl+Shift+A answers.")
 
 
 CONTINUE_NOTE = (
-    "This starts a TheClaudeHub session that is a copy of the desktop app session, "
+    "This starts a Chat Place session that is a copy of the desktop app session, "
     "with its whole conversation so far, so you can carry on and reply here. The "
     "desktop app session isn't changed, and replies here don't appear in it.")
 
@@ -55,7 +55,7 @@ class NewSessionDialog(wx.Dialog):
 
     def __init__(self, parent, default_folder: str, continue_from: str = ""):
         title = f"Continue Here: {continue_from}" if continue_from \
-            else "New TheClaudeHub Session"
+            else "New Chat Place Session"
         super().__init__(parent, title=title, size=(640, 560),
                          style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
         self.continuing = bool(continue_from)
@@ -235,7 +235,7 @@ class SettingsDialog(wx.Dialog):
         notify_row.Add(wx.StaticText(self, label="Windows &notifications:"), 0,
                        wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
         self.notify_choice = wx.Choice(self, choices=[NOTIFY_LABELS[n] for n in NOTIFY_LEVELS])
-        set_accessible_name(self.notify_choice, "Windows notifications, while TheClaudeHub "
+        set_accessible_name(self.notify_choice, "Windows notifications, while The Chat Place "
                                                 "isn't the active window")
         self.notify_choice.SetSelection(NOTIFY_LEVELS.index(speech.notifications)
                                         if speech.notifications in NOTIFY_LEVELS else 0)
@@ -364,7 +364,7 @@ def _prepare_webview_data_folder() -> None:
         return
     local = os.environ.get("LOCALAPPDATA")
     if local:
-        os.environ["WEBVIEW2_USER_DATA_FOLDER"] = os.path.join(local, "TheClaudeHub WebView2")
+        os.environ["WEBVIEW2_USER_DATA_FOLDER"] = os.path.join(local, "TheChatPlace WebView2")
 
 
 class FormattedMessageDialog(wx.Dialog):

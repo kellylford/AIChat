@@ -1,8 +1,8 @@
 """Groups of sessions (#31), like groups in Claude on the web.
 
 A group is a name and the sessions in it, by their list key (a desktop
-session's ``local_`` id, or ``own:<id>`` for TheClaudeHub's own). A session
-can be in more than one group. Kept in ``%APPDATA%\\TheClaudeHub\\groups.json``
+session's ``local_`` id, or ``own:<id>`` for The Chat Place's own). A session
+can be in more than one group. Kept in ``%APPDATA%\\TheChatPlace\\groups.json``
 and written the same way as the session store: to a temporary file that then
 replaces the real one. The desktop app's files are never touched; they have
 no groups of their own.
@@ -50,7 +50,7 @@ class GroupStore:
         if not isinstance(items, list):
             # Not ours, or damaged: never save over it (save refuses).
             self.load_error = (f"Your groups file ({self.path}) isn't in the expected "
-                               "format, so TheClaudeHub won't change it. Groups are off "
+                               "format, so The Chat Place won't change it. Groups are off "
                                "until it's fixed or removed.")
             return
         for item in items:

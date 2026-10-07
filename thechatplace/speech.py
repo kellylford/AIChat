@@ -2,16 +2,16 @@
 
 Adapted from Image Description Toolkit's ``shared/speech_engine.py`` (Kelly's
 own code), which in turn bundles ClaudeSpeak's engine scripts. Changes for
-TheClaudeHub: settings live in ``%APPDATA%/TheClaudeHub/speech.json`` and
+The Chat Place: settings live in ``%APPDATA%/TheChatPlace/speech.json`` and
 carry the announcement level (full / summary / silent) and whether turn
 endings in every listed session are announced; the temp folder is
-``theclaudehub-speak``. Speech is on by default, through the screen reader
+``thechatplace-speak``. Speech is on by default, through the screen reader
 when one is running, because announcements are the point of this app.
 
 The actual speech routing is ClaudeSpeak's (TheWorkBench repo), bundled
 verbatim (IDT's copy, with its middle-of-the-scale default rates):
-``theclaudehub/speech/speak-engine.ps1`` routes JAWS → NVDA → OneCore →
-SAPI on Windows, ``theclaudehub/speech/speak-engine.sh`` routes VoiceOver → say on
+``thechatplace/speech/speak-engine.ps1`` routes JAWS → NVDA → OneCore →
+SAPI on Windows, ``thechatplace/speech/speak-engine.sh`` routes VoiceOver → say on
 macOS. Both were verified on real hardware there; this module is only the
 harness around them — settings, engine/voice enumeration, the detached
 speaker process, and interruption by killing the previous speaker before
@@ -91,7 +91,7 @@ RATE_PRESETS = {
 
 RATE_PRESET_LABELS = ["default", "slow", "normal", "fast", "fastest"]
 
-#: Windows notifications while TheClaudeHub isn't the active window (#20).
+#: Windows notifications while The Chat Place isn't the active window (#20).
 NOTIFY_ALL = "all"
 NOTIFY_NEEDS_YOU = "needs_you"
 NOTIFY_OFF = "off"
@@ -145,7 +145,7 @@ class SpeechSettings:
     #: Which sessions the list shows (View, Show Sessions, #32): a value from
     #: ``sessions.VIEWS`` or "group:<name>".
     session_view: str = "all"
-    #: Windows notifications when TheClaudeHub isn't the active window: a
+    #: Windows notifications when The Chat Place isn't the active window: a
     #: value from ``NOTIFY_LEVELS``.
     notifications: str = NOTIFY_ALL
 
@@ -207,7 +207,7 @@ def _script_dir() -> Path:
         # scripts against the current working directory. Test the string.
         meipass = getattr(sys, "_MEIPASS", "")
         base = Path(meipass) if meipass else Path(sys.executable).parent
-        return base / "theclaudehub" / "speech"
+        return base / "thechatplace" / "speech"
     return Path(__file__).resolve().parent / "speech"
 
 
@@ -397,7 +397,7 @@ class Speaker:
 
     @property
     def workdir(self) -> Path:
-        path = Path(tempfile.gettempdir()) / "theclaudehub-speak"
+        path = Path(tempfile.gettempdir()) / "thechatplace-speak"
         path.mkdir(parents=True, exist_ok=True)
         return path
 
@@ -420,7 +420,7 @@ class Speaker:
         """Queue ``text``; returns False when speech is unavailable.
 
         Never raises and never blocks. ``interrupt=True`` stops whatever is
-        being said or waiting first; ``interrupt=False`` (TheClaudeHub's short
+        being said or waiting first; ``interrupt=False`` (The Chat Place's short
         confirmations) waits for it, and asks a screen reader to queue rather
         than cut itself off.
         """
@@ -522,7 +522,7 @@ class Speaker:
     def _log(self, text: str, settings: SpeechSettings, interrupt: bool) -> None:
         """One line per utterance in ``speech.log`` beside the engine files.
 
-        TheClaudeHub's own record of what it handed to the engine and when;
+        The Chat Place's own record of what it handed to the engine and when;
         a later interrupting utterance can still cut one off, so a line is not
         proof it was heard. The engine script's ``last-route.log`` can't
         serve: ClaudeSpeak's hook

@@ -2,9 +2,9 @@ import json
 
 import pytest
 
-from theclaudehub import hub, platform_paths
-from theclaudehub.own_store import OwnSession
-from theclaudehub.sessions import (DESKTOP, IDLE, NEEDS_YOU, OWN, WORKING, LiveStatus,
+from thechatplace import hub, platform_paths
+from thechatplace.own_store import OwnSession
+from thechatplace.sessions import (DESKTOP, IDLE, NEEDS_YOU, OWN, WORKING, LiveStatus,
                                    SessionInfo, describe_age, desktop_state,
                                    load_desktop_sessions, load_live_status, sort_sessions)
 
@@ -184,7 +184,7 @@ def test_list_line_reads_every_part():
                        cli_session_id="x", state=NEEDS_YOU, detail="2 tools were refused",
                        last_activity_ms=NOW - 120_000, unread=True)
     assert info.list_line(NOW) == ("Probe, Repo, needs you: 2 tools were refused, new reply, "
-                                   "active 2 minutes ago, TheClaudeHub session")
+                                   "active 2 minutes ago, Chat Place session")
 
 
 # -- hub.collect ------------------------------------------------------------------
@@ -256,14 +256,14 @@ def test_sort_orders(order, expected):
 
 
 def test_sort_menu_labels_cover_every_order():
-    from theclaudehub.sessions import SORT_ORDERS, SORT_SPOKEN, SORT_VALUES
+    from thechatplace.sessions import SORT_ORDERS, SORT_SPOKEN, SORT_VALUES
     assert SORT_VALUES == ["status", "newest", "oldest", "title", "folder"]
     assert set(SORT_SPOKEN) == set(SORT_VALUES)
     assert len({label.split("&")[1][0] for _v, label in SORT_ORDERS}) == len(SORT_ORDERS)
 
 
 def test_session_order_setting_round_trips(tmp_path):
-    from theclaudehub.speech import SpeechSettings
+    from thechatplace.speech import SpeechSettings
     path = tmp_path / "speech.json"
     assert SpeechSettings.load(path).session_order == "status"
     SpeechSettings(session_order="title").save(path)

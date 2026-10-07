@@ -1,6 +1,6 @@
-"""Windows notifications (#20), for when TheClaudeHub isn't the window you're in.
+"""Windows notifications (#20), for when The Chat Place isn't the window you're in.
 
-One notification-area icon, TheClaudeHub's own, created with the first
+One notification-area icon, The Chat Place's own, created with the first
 notification and removed when the app closes. Windows shows its balloons as
 ordinary notifications: read by screen readers like any other, and quiet
 under Do Not Disturb. A balloon click doesn't say which balloon it was, so

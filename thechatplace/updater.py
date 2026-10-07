@@ -10,18 +10,18 @@ How it fits together
   found, as a ``CheckResult`` the UI turns into words. Nothing is downloaded
   until Kelly agrees: ``download()`` then ``apply_and_restart()``.
 
-TheWorkBench is a monorepo with other apps' releases in it, so TheClaudeHub
-publishes to its own Velopack channel, ``theclaudehub``: its feed files are
-``releases.theclaudehub.json`` and ``assets.theclaudehub.json``. Velopack's own
+TheWorkBench is a monorepo with other apps' releases in it, so The Chat Place
+publishes to its own Velopack channel, ``thechatplace``: its feed files are
+``releases.thechatplace.json`` and ``assets.thechatplace.json``. Velopack's own
 GitHub source reads only the repo's 10 newest releases, which other apps'
-releases soon push TheClaudeHub's out of. So the updater finds the newest
-``theclaudehub-v*`` release itself and points Velopack at that one release's
+releases soon push The Chat Place's out of. So the updater finds the newest
+``thechatplace-v*`` release itself and points Velopack at that one release's
 files. Each release carries every package its feed names (the workflow
 uploads the previous full package with the new one).
 
-Updating never touches TheClaudeHub's data. Velopack installs and replaces
-the app under ``%LOCALAPPDATA%\\TheClaudeHub``; sessions, settings and logs live
-in ``%APPDATA%\\TheClaudeHub`` (roaming), which neither an update nor an
+Updating never touches The Chat Place's data. Velopack installs and replaces
+the app under ``%LOCALAPPDATA%\\TheChatPlace``; sessions, settings and logs live
+in ``%APPDATA%\\TheChatPlace`` (roaming), which neither an update nor an
 uninstall goes near. ``data_is_outside_install_dir`` checks that.
 """
 from __future__ import annotations
@@ -39,12 +39,12 @@ from typing import Callable, Optional
 
 from . import platform_paths
 
-logger = logging.getLogger("theclaudehub.updater")
+logger = logging.getLogger("thechatplace.updater")
 
 REPO_URL = "https://github.com/kellylford/TheWorkBench"
 RELEASES_API = "https://api.github.com/repos/kellylford/TheWorkBench/releases?per_page=100"
-TAG_PREFIX = "theclaudehub-v"
-CHANNEL = "theclaudehub"
+TAG_PREFIX = "thechatplace-v"
+CHANNEL = "thechatplace"
 INCLUDE_PRERELEASES = True
 
 # CheckResult.status values
@@ -61,7 +61,7 @@ def feed_url(version: str) -> str:
 
 
 def configure_logging() -> None:
-    """Update activity goes to %APPDATA%\\TheClaudeHub\\update.log, because a
+    """Update activity goes to %APPDATA%\\TheChatPlace\\update.log, because a
     silently broken updater can't be diagnosed any other way."""
     try:
         path = platform_paths.app_data_dir() / "update.log"
@@ -93,7 +93,7 @@ def bootstrap() -> None:
 
 def data_is_outside_install_dir(data_dir: Optional[Path] = None,
                                 install_root: Optional[Path] = None) -> bool:
-    """True when TheClaudeHub's data folder is outside the folder Velopack
+    """True when The Chat Place's data folder is outside the folder Velopack
     replaces on update and deletes on uninstall."""
     data_dir = Path(data_dir or platform_paths.app_data_dir()).resolve()
     if install_root is None:
@@ -104,7 +104,7 @@ def data_is_outside_install_dir(data_dir: Optional[Path] = None,
             local = os.environ.get("LOCALAPPDATA")
             if not local:
                 return True
-            install_root = Path(local) / "TheClaudeHub"
+            install_root = Path(local) / "TheChatPlace"
     install_root = Path(install_root).resolve()
     return install_root != data_dir and install_root not in data_dir.parents
 
@@ -119,22 +119,22 @@ class CheckResult:
     def describe(self) -> str:
         """The result in words, for the status bar and speech."""
         if self.status == AVAILABLE:
-            return (f"TheClaudeHub {self.version} is available. You have {self.current}.")
+            return (f"The Chat Place {self.version} is available. You have {self.current}.")
         if self.status == CURRENT:
-            return f"TheClaudeHub is up to date (version {self.current})."
+            return f"The Chat Place is up to date (version {self.current})."
         if self.status == NO_RELEASES:
-            return (f"No TheClaudeHub release has been published yet. You have version "
+            return (f"No The Chat Place release has been published yet. You have version "
                     f"{self.current}.")
         if self.status == NOT_INSTALLED:
             latest = (f" The latest release is {self.version}." if self.version else
                       " No release has been published yet.")
-            return ("This copy of TheClaudeHub isn't the installed one (it's running from "
+            return ("This copy of The Chat Place isn't the installed one (it's running from "
                     f"source or the portable zip), so it can't update itself.{latest}")
         return f"Couldn't check for updates: {self.detail or 'unknown error'}."
 
 
 def latest_published_version(fetch: Optional[Callable[[str], bytes]] = None) -> Optional[str]:
-    """The newest theclaudehub-v* release on GitHub, or None if there is none.
+    """The newest thechatplace-v* release on GitHub, or None if there is none.
     Raises on network errors (the caller reports them)."""
     fetch = fetch or _fetch
     releases = json.loads(fetch(RELEASES_API).decode("utf-8"))
@@ -175,7 +175,7 @@ def _ssl_context() -> ssl.SSLContext:
 
 def _fetch(url: str) -> bytes:
     request = urllib.request.Request(url, headers={
-        "Accept": "application/vnd.github+json", "User-Agent": "TheClaudeHub-updater"})
+        "Accept": "application/vnd.github+json", "User-Agent": "TheChatPlace-updater"})
     with urllib.request.urlopen(request, timeout=15,  # noqa: S310
                                 context=_ssl_context()) as response:
         return response.read()

@@ -1,8 +1,8 @@
 @echo off
 REM ============================================================================
-REM Build TheClaudeHub on this PC: tests, the app, a smoke test, and the
+REM Build The Chat Place on this PC: tests, the app, a smoke test, and the
 REM Velopack installer and portable zip. The same steps as the release workflow
-REM (.github\workflows\release-theclaudehub.yml), unsigned.
+REM (.github\workflows\release-thechatplace.yml), unsigned.
 REM
 REM   build.cmd                                   build into releases\ and dist\
 REM   build.cmd C:\Users\kelly\OneDrive\thehub    and copy Setup and the zip there
@@ -27,11 +27,11 @@ REM Differences: the workflow uses Python 3.12 and needs release notes for the
 REM version; here any Python 3.11+ works and release notes are optional.
 set "PYINSTALLER_VERSION=6.22.3"
 set "VPK_VERSION=1.2.161"
-set "CHANNEL=theclaudehub"
+set "CHANNEL=thechatplace"
 set "PY=%~dp0.venv\Scripts\python.exe"
 
 echo ========================================================================
-echo Building TheClaudeHub
+echo Building The Chat Place
 echo ========================================================================
 
 REM ---------------------------------------------------------------- .venv ----
@@ -65,7 +65,7 @@ set "VERSION="
 for /f "usebackq delims=" %%v in (`"%PY%" tools\check_version.py`) do set "VERSION=%%v"
 if not defined VERSION goto :failed
 echo.
-echo TheClaudeHub %VERSION%
+echo The Chat Place %VERSION%
 
 REM ------------------------------------------------------------------ app ----
 echo.
@@ -75,14 +75,14 @@ if errorlevel 1 goto :failed
 REM --onedir because Velopack swaps an app folder in place; velopack is imported
 REM lazily, so it's named; --collect-binaries wx brings WebView2Loader.dll, which
 REM the formatted message view needs; the speech scripts are data files.
-"%PY%" -m PyInstaller --noconfirm --clean --noconsole --onedir --name TheClaudeHub --version-file build\version_info.txt --hidden-import velopack --collect-binaries wx --add-data "theclaudehub\speech;theclaudehub\speech" TheClaudeHub.pyw
+"%PY%" -m PyInstaller --noconfirm --clean --noconsole --onedir --name TheChatPlace --version-file build\version_info.txt --hidden-import velopack --collect-binaries wx --add-data "thechatplace\speech;thechatplace\speech" TheChatPlace.pyw
 if errorlevel 1 goto :failed
-if not exist "dist\TheClaudeHub\TheClaudeHub.exe" goto :failed
+if not exist "dist\TheChatPlace\TheChatPlace.exe" goto :failed
 
 echo.
 echo Smoke test of the built app...
 if exist smoke-local.json del smoke-local.json
-start "" /wait "dist\TheClaudeHub\TheClaudeHub.exe" --smoke-test smoke-local.json
+start "" /wait "dist\TheChatPlace\TheChatPlace.exe" --smoke-test smoke-local.json
 REM Any exit code but 0 fails, including a crash's negative one, which
 REM "if errorlevel 1" would let through.
 if not "%ERRORLEVEL%"=="0" goto :smoke_failed
@@ -112,27 +112,27 @@ echo Packing the installer and portable zip (Velopack)...
 if exist releases rmdir /s /q releases
 set "NOTES="
 if exist "release-notes\v%VERSION%.md" set "NOTES=--releaseNotes release-notes\v%VERSION%.md"
-"%VPK%" pack --packId TheClaudeHub --packVersion %VERSION% --packDir dist\TheClaudeHub --mainExe TheClaudeHub.exe --packTitle TheClaudeHub --packAuthors "Kelly Ford" --channel %CHANNEL% --outputDir releases --instLocation PerUser --shortcuts StartMenuRoot %NOTES%
+"%VPK%" pack --packId TheChatPlace --packVersion %VERSION% --packDir dist\TheChatPlace --mainExe TheChatPlace.exe --packTitle "The Chat Place" --packAuthors "Kelly Ford" --channel %CHANNEL% --outputDir releases --instLocation PerUser --shortcuts StartMenuRoot %NOTES%
 if errorlevel 1 goto :failed
-if not exist "releases\TheClaudeHub-%CHANNEL%-Setup.exe" goto :failed
+if not exist "releases\TheChatPlace-%CHANNEL%-Setup.exe" goto :failed
 
 if "%OUTPUT_DIR%"=="" goto :done
 echo.
 echo Copying Setup and the portable zip to %OUTPUT_DIR%...
 if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
-copy /y "releases\TheClaudeHub-%CHANNEL%-Setup.exe" "%OUTPUT_DIR%\" >nul
+copy /y "releases\TheChatPlace-%CHANNEL%-Setup.exe" "%OUTPUT_DIR%\" >nul
 if errorlevel 1 goto :copy_failed
-copy /y "releases\TheClaudeHub-%CHANNEL%-Portable.zip" "%OUTPUT_DIR%\" >nul
+copy /y "releases\TheChatPlace-%CHANNEL%-Portable.zip" "%OUTPUT_DIR%\" >nul
 if errorlevel 1 goto :copy_failed
 
 :done
 echo.
 echo ========================================================================
-echo BUILD SUCCESSFUL: TheClaudeHub %VERSION% (unsigned)
+echo BUILD SUCCESSFUL: The Chat Place %VERSION% (unsigned)
 echo ========================================================================
-echo   Installer:  releases\TheClaudeHub-%CHANNEL%-Setup.exe
-echo   Portable:   releases\TheClaudeHub-%CHANNEL%-Portable.zip
-echo   App folder: dist\TheClaudeHub
+echo   Installer:  releases\TheChatPlace-%CHANNEL%-Setup.exe
+echo   Portable:   releases\TheChatPlace-%CHANNEL%-Portable.zip
+echo   App folder: dist\TheChatPlace
 if not "%OUTPUT_DIR%"=="" echo   Copied to:  %OUTPUT_DIR%
 set "RESULT=0"
 goto :end
@@ -140,7 +140,7 @@ goto :end
 :no_vpk
 echo.
 echo ========================================================================
-echo The app is built (dist\TheClaudeHub\TheClaudeHub.exe), but not the
+echo The app is built (dist\TheChatPlace\TheChatPlace.exe), but not the
 echo installer: that needs the .NET SDK for the vpk tool. Install it from
 echo https://dotnet.microsoft.com/download and run build.cmd again.
 echo ========================================================================

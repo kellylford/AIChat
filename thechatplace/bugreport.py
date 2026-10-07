@@ -8,7 +8,7 @@ message text, or anything that names a person or path: the report becomes a
 public issue.
 
 QuickMail sends reports through a small relay (a Cloudflare Worker holding a
-GitHub App key), so nobody needs a GitHub account. TheClaudeHub has no relay
+GitHub App key), so nobody needs a GitHub account. The Chat Place has no relay
 yet: the dialog opens a GitHub "new issue" page with the report filled in,
 and copies the full report to the clipboard in case the page is cut short. A
 relay would add a POST with a timeout, this page as the fallback, and its
@@ -69,7 +69,7 @@ def environment(speech, counts: Dict[str, int], claude_version: Optional[str] = 
         wx_version = "not loaded"
     frozen = bool(getattr(sys, "frozen", False))
     facts = [
-        ("TheClaudeHub", f"{__version__} ({'installed build' if frozen else 'run from source'})"),
+        ("The Chat Place", f"{__version__} ({'installed build' if frozen else 'run from source'})"),
         ("Windows", platform.platform()),
         ("Python", platform.python_version()),
         ("wxPython", wx_version),
@@ -96,7 +96,7 @@ def report_text(report: BugReport) -> str:
     if report.environment:
         parts += ["### Environment"] + [f"- {label}: {value}" for label, value in report.environment]
         parts.append("")
-    parts.append("_Reported from TheClaudeHub's Help, Report a Bug._")
+    parts.append("_Reported from The Chat Place's Help, Report a Bug._")
     return "\n".join(parts)
 
 

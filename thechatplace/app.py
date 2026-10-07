@@ -1,4 +1,4 @@
-"""Start TheClaudeHub."""
+"""Start The Chat Place."""
 from __future__ import annotations
 
 import getpass
@@ -11,7 +11,7 @@ from typing import Optional
 
 from . import __version__, platform_paths
 
-APP_TITLE = "TheClaudeHub"
+APP_TITLE = "The Chat Place"
 
 
 def error_log_path() -> Path:
@@ -25,7 +25,7 @@ def log_exception(exc_type, exc, tb, where: str = "", path: Optional[Path] = Non
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "a", encoding="utf-8") as handle:
             stamp = time.strftime("%Y-%m-%d %H:%M:%S")
-            handle.write(f"--- {stamp} TheClaudeHub {__version__} {where}\n")
+            handle.write(f"--- {stamp} The Chat Place {__version__} {where}\n")
             handle.write("".join(traceback.format_exception(exc_type, exc, tb)))
     except Exception:  # noqa: BLE001
         pass
@@ -33,7 +33,7 @@ def log_exception(exc_type, exc, tb, where: str = "", path: Optional[Path] = Non
 
 def install_error_logging() -> None:
     """Unhandled exceptions (main thread, worker threads, wx handlers) go to
-    error.log in TheClaudeHub's folder as well as stderr, which pythonw drops."""
+    error.log in The Chat Place's folder as well as stderr, which pythonw drops."""
     previous = sys.excepthook
 
     def hook(exc_type, exc, tb):
@@ -129,7 +129,7 @@ def main(argv: Optional[list] = None) -> int:
     try:
         import wx
     except ImportError:
-        print("TheClaudeHub needs wxPython: pip install -r requirements.txt", file=sys.stderr)
+        print("The Chat Place needs wxPython: pip install -r requirements.txt", file=sys.stderr)
         return 1
     from .ui.main_frame import MainFrame
 
@@ -137,10 +137,10 @@ def main(argv: Optional[list] = None) -> int:
     app.SetAppName(APP_TITLE)
     # One copy at a time: two would both run turns, announce everything
     # twice, and write the same session list.
-    checker = wx.SingleInstanceChecker(f"TheClaudeHub-{getpass.getuser()}")
+    checker = wx.SingleInstanceChecker(f"TheChatPlace-{getpass.getuser()}")
     if checker.IsAnotherRunning():
         if not platform_paths.bring_window_forward(is_hub_window_title):
-            wx.MessageBox("TheClaudeHub is already running. Switch to it with Alt+Tab.",
+            wx.MessageBox("The Chat Place is already running. Switch to it with Alt+Tab.",
                           APP_TITLE, wx.OK | wx.ICON_INFORMATION)
         return 0
     frame = MainFrame()

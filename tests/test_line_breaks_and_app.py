@@ -2,8 +2,8 @@
 import json
 import sys
 
-from theclaudehub import app, hub
-from theclaudehub.transcript import TranscriptReader, read_transcript, split_jsonl
+from thechatplace import app, hub
+from thechatplace.transcript import TranscriptReader, read_transcript, split_jsonl
 
 from records import assistant_block, text_block, user_text
 
@@ -64,7 +64,7 @@ def test_log_exception_writes_traceback(tmp_path):
     except ValueError:
         app.log_exception(*sys.exc_info(), where="test", path=log)
     text = log.read_text(encoding="utf-8")
-    assert "TheClaudeHub" in text and "ValueError: boom" in text and "test" in text
+    assert "The Chat Place" in text and "ValueError: boom" in text and "test" in text
 
 
 def test_log_exception_never_raises(tmp_path):
@@ -89,6 +89,6 @@ def test_install_error_logging_routes_hooks(tmp_path, monkeypatch):
 
 
 def test_hub_window_title_matching():
-    assert app.is_hub_window_title("TheClaudeHub")
-    assert app.is_hub_window_title("Fix the build — TheClaudeHub")
-    assert not app.is_hub_window_title("TheClaudeHub notes.txt - Notepad")
+    assert app.is_hub_window_title("The Chat Place")
+    assert app.is_hub_window_title("Fix the build — The Chat Place")
+    assert not app.is_hub_window_title("The Chat Place notes.txt - Notepad")

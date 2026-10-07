@@ -60,4 +60,4 @@ if mode == "ask":
 out(type="assistant", parent_tool_use_id=None,
     message={"content": [{"type": "text", "text": "reply with a line separator"}]})
 out(type="result", subtype="success", is_error=False, result=result, session_id="abc-1")
-sys.stdin.buffer.read()  # until TheClaudeHub closes stdin
+sys.stdin.buffer.read()  # until The Chat Place closes stdin

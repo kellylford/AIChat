@@ -1,15 +1,15 @@
-name: Release TheClaudeHub
+name: Release The Chat Place
 
-# A tag like theclaudehub-v0.1.0 tests TheClaudeHub, builds it with PyInstaller, signs it with
+# A tag like thechatplace-v0.1.0 tests The Chat Place, builds it with PyInstaller, signs it with
 # Azure Artifact Signing, packs the Velopack installer, portable zip and update feed, checks every
 # signature, and publishes a GitHub release. (The tag prefix and the Velopack channel date from
-# when TheClaudeHub lived in TheWorkBench, a repo of several apps; they stay until the updater is
+# when The Chat Place lived in TheWorkBench, a repo of several apps; they stay until the updater is
 # moved over.)
 #
-#   (bump __version__ in theclaudehub/__init__.py and add
+#   (bump __version__ in thechatplace/__init__.py and add
 #    release-notes/v<version>.md in the same commit)
-#   git tag theclaudehub-v0.1.0
-#   git push origin theclaudehub-v0.1.0
+#   git tag thechatplace-v0.1.0
+#   git push origin thechatplace-v0.1.0
 #
 # Run by hand (Actions, Run workflow) or for a pull request, it tests, builds and packs the same
 # way and publishes nothing; the files are kept as a workflow artifact. A hand run with "sign"
@@ -18,14 +18,14 @@ name: Release TheClaudeHub
 #
 # Velopack and signing follow GHManage's ghmanage.yml and The-Idea-Place-Projects/signing
 # (lessons.md): sign the program first, then `vpk pack --azureTrustedSignFile` signs Setup, the
-# updater and the launcher stub, and skips the program it finds already signed. TheClaudeHub uses
-# its own Velopack channel, "theclaudehub", so its update feed (releases.theclaudehub.json) can't be
+# updater and the launcher stub, and skips the program it finds already signed. The Chat Place uses
+# its own Velopack channel, "thechatplace", so its update feed (releases.thechatplace.json) can't be
 # confused with any other app released from this repository.
 
 on:
   push:
     tags:
-      - 'theclaudehub-v*'
+      - 'thechatplace-v*'
   pull_request:
     # "labeled" so adding the sign-build label to a pull request re-runs it signed.
     types: [opened, synchronize, reopened, labeled]
@@ -41,7 +41,7 @@ permissions:
   id-token: write   # the OIDC token azure/login exchanges for Azure credentials
 
 concurrency:
-  group: release-theclaudehub-${{ github.ref }}
+  group: release-thechatplace-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -55,14 +55,14 @@ jobs:
       run:
         shell: pwsh
     env:
-      PUBLISH: ${{ startsWith(github.ref, 'refs/tags/theclaudehub-v') }}
+      PUBLISH: ${{ startsWith(github.ref, 'refs/tags/thechatplace-v') }}
       # Signs for a tag; for a hand run with "sign" ticked; and for a pull request labelled
       # sign-build, which proves signing before a workflow change reaches main (a hand run can
       # only start a workflow that is already on main). Nothing but a tag publishes.
-      SIGN: ${{ startsWith(github.ref, 'refs/tags/theclaudehub-v') || (github.event_name == 'workflow_dispatch' && inputs.sign) || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'sign-build')) }}
-      CHANNEL: theclaudehub
+      SIGN: ${{ startsWith(github.ref, 'refs/tags/thechatplace-v') || (github.event_name == 'workflow_dispatch' && inputs.sign) || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'sign-build')) }}
+      CHANNEL: thechatplace
     steps:
-      # Every action is pinned to a release commit, like theclaudehub-tests.yml: checkout v4.4.0,
+      # Every action is pinned to a release commit, like thechatplace-tests.yml: checkout v4.4.0,
       # setup-python v5.6.0, azure/login v3.1.0, artifact-signing-action v2.0.0, upload-artifact v4.6.2.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
@@ -80,7 +80,7 @@ jobs:
       - name: Test
         run: python -m pytest -q tests
 
-      # One version, in theclaudehub/__init__.py. A tag that disagrees fails here, before anything
+      # One version, in thechatplace/__init__.py. A tag that disagrees fails here, before anything
       # is built: the updater compares installed and published versions, so they must match.
       - name: Version
         run: |
@@ -94,7 +94,7 @@ jobs:
           if (-not (Test-Path $notes)) { throw "Write $notes before releasing $version." }
           "VERSION=$version" | Out-File $env:GITHUB_ENV -Append
           "NOTES=$notes" | Out-File $env:GITHUB_ENV -Append
-          Write-Host "TheClaudeHub $version"
+          Write-Host "The Chat Place $version"
 
       # --onedir, not --onefile: Velopack swaps an app folder in place, and a onefile exe would
       # unpack itself on every start. velopack is imported lazily, so it is named explicitly; the
@@ -104,16 +104,16 @@ jobs:
       - name: Build
         run: |
           python tools/make_version_info.py
-          python -m PyInstaller --noconfirm --clean --noconsole --onedir --name TheClaudeHub `
+          python -m PyInstaller --noconfirm --clean --noconsole --onedir --name TheChatPlace `
             --version-file build/version_info.txt --hidden-import velopack --collect-binaries wx `
-            --add-data "theclaudehub/speech;theclaudehub/speech" TheClaudeHub.pyw
+            --add-data "thechatplace/speech;thechatplace/speech" TheChatPlace.pyw
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       # The built app imports everything and checks its data files, without opening a window, so
       # a module PyInstaller missed fails the run here rather than on someone's PC.
       - name: Smoke test the built app
         run: |
-          $p = Start-Process dist\TheClaudeHub\TheClaudeHub.exe -ArgumentList '--smoke-test', 'smoke.json' -Wait -PassThru
+          $p = Start-Process dist\TheChatPlace\TheChatPlace.exe -ArgumentList '--smoke-test', 'smoke.json' -Wait -PassThru
           Get-Content smoke.json
           if ($p.ExitCode -ne 0) { throw "The built app's smoke test failed (exit $($p.ExitCode))." }
 
@@ -132,7 +132,7 @@ jobs:
           endpoint: https://eus.codesigning.azure.net/
           signing-account-name: kellylford
           certificate-profile-name: kellyford-public
-          files-folder: ${{ github.workspace }}\dist\TheClaudeHub
+          files-folder: ${{ github.workspace }}\dist\TheChatPlace
           files-folder-filter: exe
           files-folder-recurse: false
           file-digest: SHA256
@@ -166,8 +166,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $prev = gh release list --repo $env:GITHUB_REPOSITORY --limit 200 --json tagName,isDraft `
-            --jq '[.[] | select(.isDraft | not) | .tagName | select(startswith("theclaudehub-v"))] | .[0] // empty'
-          if (-not $prev) { Write-Host 'No earlier TheClaudeHub release.'; exit 0 }
+            --jq '[.[] | select(.isDraft | not) | .tagName | select(startswith("thechatplace-v"))] | .[0] // empty'
+          if (-not $prev) { Write-Host 'No earlier The Chat Place release.'; exit 0 }
           Write-Host "Previous release: $prev"
           vpk download http --url "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$prev/" `
             --channel $env:CHANNEL --outputDir releases
@@ -176,9 +176,9 @@ jobs:
         run: |
           $sign = @()
           if ($env:SIGN -eq 'true') { $sign = @('--azureTrustedSignFile', "$env:GITHUB_WORKSPACE\signing-metadata.json") }
-          vpk pack --packId TheClaudeHub --packVersion $env:VERSION `
-            --packDir dist/TheClaudeHub --mainExe TheClaudeHub.exe `
-            --packTitle TheClaudeHub --packAuthors "Kelly Ford" `
+          vpk pack --packId TheChatPlace --packVersion $env:VERSION `
+            --packDir dist/TheChatPlace --mainExe TheChatPlace.exe `
+            --packTitle "The Chat Place" --packAuthors "Kelly Ford" `
             --channel $env:CHANNEL --outputDir releases `
             --instLocation PerUser --shortcuts StartMenuRoot `
             --releaseNotes $env:NOTES @sign
@@ -192,9 +192,9 @@ jobs:
         run: |
           $check = New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\sigcheck"
           $files = @(Get-ChildItem releases\*.exe)
-          Expand-Archive "releases\TheClaudeHub-$env:CHANNEL-Portable.zip" "$check\portable" -Force
+          Expand-Archive "releases\TheChatPlace-$env:CHANNEL-Portable.zip" "$check\portable" -Force
           $files += Get-ChildItem "$check\portable" -Recurse -Filter *.exe
-          foreach ($pkg in Get-ChildItem "releases\TheClaudeHub-$env:VERSION-$env:CHANNEL-full.nupkg") {
+          foreach ($pkg in Get-ChildItem "releases\TheChatPlace-$env:VERSION-$env:CHANNEL-full.nupkg") {
             Copy-Item $pkg.FullName "$check\full.zip"
             Expand-Archive "$check\full.zip" "$check\full" -Force
             $files += Get-ChildItem "$check\full\lib\app" -Filter *.exe
@@ -211,13 +211,13 @@ jobs:
       - name: Keep the build
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: theclaudehub-${{ env.VERSION }}-${{ env.SIGN == 'true' && 'signed' || 'unsigned' }}
+          name: thechatplace-${{ env.VERSION }}-${{ env.SIGN == 'true' && 'signed' || 'unsigned' }}
           path: |
             releases/*
           if-no-files-found: error
           retention-days: 14
 
-      # The feed files (releases.theclaudehub.json, assets.theclaudehub.json, RELEASES-theclaudehub)
+      # The feed files (releases.thechatplace.json, assets.thechatplace.json, RELEASES-thechatplace)
       # and the full package are what installed copies update from, so they go up with the
       # installer and portable zip. Before 1.0 a release is a pre-release; the updater includes
       # pre-releases.
@@ -229,9 +229,9 @@ jobs:
           $pre = @()
           if ($env:VERSION.StartsWith('0.')) { $pre = @('--prerelease') }
           $assets = Get-ChildItem releases -File | Where-Object {
-            $_.Name -like "TheClaudeHub-*-$env:CHANNEL-*.nupkg" -or
-            $_.Name -in @("TheClaudeHub-$env:CHANNEL-Setup.exe", "TheClaudeHub-$env:CHANNEL-Portable.zip",
+            $_.Name -like "TheChatPlace-*-$env:CHANNEL-*.nupkg" -or
+            $_.Name -in @("TheChatPlace-$env:CHANNEL-Setup.exe", "TheChatPlace-$env:CHANNEL-Portable.zip",
                           "releases.$env:CHANNEL.json", "assets.$env:CHANNEL.json", "RELEASES-$env:CHANNEL")
           } | ForEach-Object { $_.FullName }
           if ($assets.Count -lt 6) { throw "Expected the installer, portable zip, package and three feed files; found $($assets.Count)." }
-          gh release create $env:GITHUB_REF_NAME @assets --title "TheClaudeHub $env:VERSION" --notes-file $env:NOTES @pre
+          gh release create $env:GITHUB_REF_NAME @assets --title "The Chat Place $env:VERSION" --notes-file $env:NOTES @pre
