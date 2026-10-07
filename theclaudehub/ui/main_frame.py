@@ -578,8 +578,24 @@ class MainFrame(wx.Frame):
         self._snapshot_busy = False
         if not self:
             return
+        previous_desktop_groups = self._snapshot.desktop_groups
         self._snapshot = snap
         self._previous_states = {s.key: s.state for s in snap.sessions}
+        if not snap.desktop_groups.read_ok:
+            snap.desktop_groups = previous_desktop_groups  # keep the last good read
+        if self._group_names() != getattr(self, "_menu_group_names", None):
+            self._build_show_menu()  # the desktop app's groups changed
+        if self._first_snapshot and snap.desktop_groups.read_ok:
+            gone = self._view_group_missing()
+            if gone is not None:
+                # Deleted while TheClaudeHub was closed: say so, show all.
+                self.speech.session_view = VIEW_ALL
+                try:
+                    self.speech.save()
+                except OSError:
+                    pass
+                self._build_show_menu()
+                self._status(f"Group {gone} is gone; showing all sessions.")
         self._update_status_needs_you()
         first = self._first_snapshot
         if not first:
@@ -2301,25 +2317,44 @@ class MainFrame(wx.Frame):
 
     # ------------------------------------------------- views and groups (#31, #32)
 
+    def _group_names(self) -> List[str]:
+        """Every group: TheClaudeHub's own, then the desktop app's (#51). A
+        desktop group with the name of one of ours (in any case) is the same
+        group here."""
+        names = list(self.groups.names())
+        known = {n.casefold() for n in names}
+        names += [n for n in self._snapshot.desktop_groups.names if n.casefold() not in known]
+        return names
+
+    def _view_group_missing(self) -> Optional[str]:
+        """The shown group's name, when no such group exists any more."""
+        view = self.speech.session_view
+        if not view.startswith(GROUP_VIEW_PREFIX):
+            return None
+        name = view[len(GROUP_VIEW_PREFIX):]
+        return None if name.casefold() in {n.casefold() for n in self._group_names()} \
+            else name
+
     def _build_show_menu(self):
         """View, Show Sessions: the fixed views, then one item per group."""
+        self._menu_group_names = self._group_names()
         for item in list(self.show_menu.GetMenuItems()):
             self.Unbind(wx.EVT_MENU, id=item.GetId())
             self.show_menu.Delete(item)
         self.view_items = {}
         choices = list(VIEWS)
-        names = self.groups.names()
+        names = self._menu_group_names
         for name in names:
             choices.append((group_view(name), "Group: " + name.replace("&", "&&")))
-        if self.speech.session_view not in [v for v, _label in choices]:
-            self.speech.session_view = VIEW_ALL  # its group is gone
-            try:
-                self.speech.save()
-            except OSError:
-                pass
-        for index, (view, label) in enumerate(choices):
-            if index == len(VIEWS) and names:
-                self.show_menu.AppendSeparator()
+        missing = self._view_group_missing()
+        if missing is not None:
+            # Kept, not reset: the desktop app's settings can be caught
+            # mid-rewrite. Its own item keeps the radio items honest.
+            choices.append((self.speech.session_view,
+                            f"Group: {missing.replace('&', '&&')} (not found)"))
+        # One run of radio items, no separator: a separator starts a second
+        # radio group, and then two items would read as checked.
+        for view, label in choices:
             item = self.show_menu.AppendRadioItem(wx.ID_ANY, label)
             self.Bind(wx.EVT_MENU, lambda e, v=view: self.on_view(v), item)
             self.view_items[view] = item
@@ -2328,8 +2363,15 @@ class MainFrame(wx.Frame):
 
     def _in_current_view(self, sessions: List[SessionInfo]) -> List[SessionInfo]:
         """The sessions the list shows now, each told its groups for its row."""
+        desktop = self._snapshot.desktop_groups.by_session
         for info in sessions:
-            info.groups = tuple(self.groups.groups_of(info.key))
+            groups = list(self.groups.groups_of(info.key))
+            if info.key in desktop:
+                theirs = desktop[info.key]
+                ours = self.groups.find(theirs)
+                if (ours or theirs) not in groups:
+                    groups.append(ours or theirs)
+            info.groups = tuple(groups)
         shown = [s for s in sessions if in_view(s, self.speech.session_view)]
         words = self._session_filter.casefold().split()
         if words:
@@ -2495,8 +2537,8 @@ class MainFrame(wx.Frame):
         info = self._group_target()
         if info is None:
             return
-        names = self.groups.names()
-        current = set(self.groups.groups_of(info.key))
+        names = self._group_names()
+        current = set(info.groups) | set(self.groups.groups_of(info.key))
         choices = [f"{n} (already in it)" if n in current else n for n in names]
         choices.append("New group...")
         index = self._choose("Add to Group", f"Add {info.title} to:", choices)
@@ -2511,6 +2553,16 @@ class MainFrame(wx.Frame):
                 self._build_show_menu()
             else:
                 name = names[index]
+                if name in current:
+                    self._feedback(f"{info.title} is already in {name}.")
+                    return
+                if self.groups.find(name) is None:
+                    # A desktop app group: TheClaudeHub keeps its own of the
+                    # same name, so the two show as one.
+                    name = self.groups.create(name)
+                    self._build_show_menu()
+                else:
+                    name = self.groups.find(name)
             added = self.groups.add(name, info.key)
         except (ValueError, OSError) as exc:
             wx.MessageBox(str(exc), APP_NAME, wx.OK | wx.ICON_WARNING, self)
@@ -2525,7 +2577,10 @@ class MainFrame(wx.Frame):
             return
         names = self.groups.groups_of(info.key)
         if not names:
-            self._feedback(f"{info.title} is not in any group.")
+            desktop = self._snapshot.desktop_groups.by_session.get(info.key)
+            self._feedback(
+                f"{info.title} is in the desktop app's group {desktop}; change that in the "
+                "desktop app." if desktop else f"{info.title} is not in any group.")
             return
         index = self._choose("Remove from Group", f"Remove {info.title} from:", names)
         if index is None:
@@ -2536,7 +2591,10 @@ class MainFrame(wx.Frame):
             wx.MessageBox(f"Couldn't save your groups: {exc}", APP_NAME,
                           wx.OK | wx.ICON_WARNING, self)
             return
-        self._feedback(f"Removed {info.title} from {names[index]}.")
+        still = self._snapshot.desktop_groups.by_session.get(info.key)
+        note = (f" It's still in the desktop app's group {still}."
+                if still and still.casefold() == names[index].casefold() else "")
+        self._feedback(f"Removed {info.title} from {names[index]}.{note}")
         self._refresh_list_in_place()
 
     def on_manage_groups(self):
@@ -2552,6 +2610,12 @@ class MainFrame(wx.Frame):
         view = self.speech.session_view
         if view.startswith(GROUP_VIEW_PREFIX) and view[len(GROUP_VIEW_PREFIX):] in renamed:
             self.speech.session_view = group_view(renamed[view[len(GROUP_VIEW_PREFIX):]])
+            try:
+                self.speech.save()
+            except OSError:
+                pass
+        if self._view_group_missing() is not None:
+            self.speech.session_view = VIEW_ALL  # you deleted the group it showed
             try:
                 self.speech.save()
             except OSError:

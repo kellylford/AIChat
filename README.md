@@ -53,8 +53,12 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   selected session in a group, or a new one; Session, Remove from Group takes it out; Session,
   Manage Groups lists your groups with how many sessions each has, to make, rename or delete
   them (deleting a group never touches its sessions). A session can be in several groups, and
-  its row says which ("…, group Work"). Groups are TheClaudeHub's own, kept in
+  its row says which ("…, group Work"). TheClaudeHub's groups are kept in
   `%APPDATA%\TheClaudeHub\groups.json`; the desktop app's files are never changed.
+  The **desktop app's own groups** show too: in View, Show Sessions, in each session's row,
+  and in Add to Group. They're read from the desktop app's settings each refresh, so a change
+  there shows here; they're changed in the desktop app. Adding one of TheClaudeHub's sessions
+  to a desktop app group keeps a TheClaudeHub group of the same name, shown together with it.
 - **What "needs you" means.** For a Claude desktop app session: it isn't working right now (it can
   still be open in the desktop app), and the desktop
   app's summary of its latest turn says it's waiting on you, either with a "needs action" note

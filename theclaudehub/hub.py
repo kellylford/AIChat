@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set
 
 from . import platform_paths
+from .desktop_groups import DesktopGroups, load_desktop_groups
 from .own_store import OwnSession
 from .sessions import (NEEDS_YOU, SORT_STATUS, WORKING, DesktopLoadResult, LiveStatus, SessionInfo,
                        load_desktop_sessions, load_live_status, sort_sessions)
@@ -23,6 +24,8 @@ class Snapshot:
     desktop_cli_ids: Set[str] = field(default_factory=set)
     live: Dict[str, LiveStatus] = field(default_factory=dict)
     unreadable_files: int = 0
+    #: The desktop app's own groups (#51), read-only here.
+    desktop_groups: DesktopGroups = field(default_factory=DesktopGroups)
 
 
 def collect(own: Iterable[OwnSession], running_own_ids: Set[str],
@@ -53,10 +56,12 @@ def collect(own: Iterable[OwnSession], running_own_ids: Set[str],
             # Someone resumed it elsewhere (a terminal); it is busy there.
             info.state, info.detail = WORKING, "running outside TheClaudeHub"
         sessions.append(info)
+    folders = [desktop_dir] if desktop_dir is not None else platform_paths.desktop_sessions_dirs()
     return Snapshot(sessions=sort_sessions(sessions, order),
                     desktop_cli_ids=desktop.desktop_cli_ids,
                     live=live,
-                    unreadable_files=desktop.unreadable_files)
+                    unreadable_files=desktop.unreadable_files,
+                    desktop_groups=load_desktop_groups(folders))
 
 
 def finished_turns(previous: Dict[str, str], current: Iterable[SessionInfo]) -> List[SessionInfo]:
