@@ -4,6 +4,7 @@ import json
 
 from thechatplace import attachments, platform_paths
 from thechatplace.claude_cli import stdin_lines
+from markers import windows_paths  # noqa: E402
 
 PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=")
 
@@ -34,6 +35,7 @@ def test_a_file_that_is_gone_is_said_not_sent(tmp_path):
     assert text == "hi\n\n(Couldn't attach, no longer there: gone.txt)" and blocks == []
 
 
+@windows_paths
 def test_describe_and_media_types():
     assert attachments.describe([]) == "No attachments"
     assert attachments.describe(["C:\\x\\a.png", "C:\\y\\b.txt"]) == "2 attachments: a.png, b.txt"

@@ -1,0 +1,5 @@
+# What a build needs on top of the app and its tests. The setup scripts,
+# build.cmd, build_macos.sh and both workflows install from this file, so a
+# local build and a CI one use the same PyInstaller.
+-r requirements-dev.txt
+pyinstaller==6.22.3

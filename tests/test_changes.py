@@ -3,6 +3,7 @@ from thechatplace.changes import by_file, edit_from_tool, file_text, summary_tex
 from thechatplace.transcript import TranscriptParser, parse_lines
 
 from records import assistant_block, lines, text_block, tool_result, tool_use_block, user_text
+from markers import windows_paths  # noqa: E402
 
 PATCH = [{"oldStart": 10, "oldLines": 3, "newStart": 10, "newLines": 4,
           "lines": [" keep", "-old line", "+new line", "+another", " end"]}]
@@ -34,6 +35,7 @@ def test_without_a_patch_the_change_comes_from_the_input():
     assert edit_from_tool("Bash", {"command": "ls"}, None, 1) is None
 
 
+@windows_paths
 def test_summary_groups_by_file_and_says_created():
     a1 = edit_from_tool("Edit", {}, {"filePath": "C:\\r\\a.py", "structuredPatch": PATCH}, 1)
     a2 = edit_from_tool("Edit", {}, {"filePath": "c:\\R\\A.py", "structuredPatch": PATCH}, 1)

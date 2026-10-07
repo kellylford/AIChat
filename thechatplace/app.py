@@ -80,13 +80,18 @@ def smoke_test(out_path: str) -> int:
         report["markdown"] = "<h2>" in message_page("t", "## x")
         import wx.html2
 
-        loader = Path(wx.html2.__file__).parent / "WebView2Loader.dll"
-        report["webview2_loader"] = loader.is_file()
-        if not loader.is_file():
-            problems.append(f"missing {loader}")
-        # Informational: the runtime itself is the PC's, not the build's.
-        report["webview2_available"] = bool(
-            wx.html2.WebView.IsBackendAvailable(wx.html2.WebViewBackendEdge))
+        if sys.platform == "win32":
+            loader = Path(wx.html2.__file__).parent / "WebView2Loader.dll"
+            report["webview2_loader"] = loader.is_file()
+            if not loader.is_file():
+                problems.append(f"missing {loader}")
+            # Informational: the runtime itself is the PC's, not the build's.
+            report["webview2_available"] = bool(
+                wx.html2.WebView.IsBackendAvailable(wx.html2.WebViewBackendEdge))
+        else:
+            # The Mac's WebKit is part of the system.
+            report["webkit_available"] = bool(
+                wx.html2.WebView.IsBackendAvailable(wx.html2.WebViewBackendWebKit))
     except Exception as exc:  # noqa: BLE001
         problems.append(f"formatted messages: {exc}")
     try:
@@ -95,10 +100,12 @@ def smoke_test(out_path: str) -> int:
         report["velopack"] = True
     except Exception as exc:  # noqa: BLE001
         report["velopack"] = False
-        if report["frozen"]:
+        # Only Windows installs its own updates; the Mac app doesn't bundle it.
+        if report["frozen"] and sys.platform == "win32":
             problems.append(f"velopack: {exc}")
     scripts = speech._script_dir()
-    for name in ("speak-engine.ps1", "speak-voices.ps1"):
+    extension = "ps1" if sys.platform == "win32" else "sh"
+    for name in (f"speak-engine.{extension}", f"speak-voices.{extension}"):
         if not (scripts / name).is_file():
             problems.append(f"missing speech script {scripts / name}")
     lookup = platform_paths.find_claude()

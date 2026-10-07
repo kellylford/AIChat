@@ -11,6 +11,7 @@ from thechatplace import platform_paths
 from thechatplace.claude_cli import (ResumeRefused, StreamParser, TurnRunner,
                                      build_new_command, build_resume_command,
                                      check_resume_allowed, child_environment)
+from markers import windows_paths  # noqa: E402
 
 EXE = "C:\\bin\\claude.exe"
 OWN = {"aaaa-1111"}
@@ -615,6 +616,7 @@ def test_parser_refuses_other_control_requests_and_reads_commands():
     assert parser.commands == [{"name": "compact", "description": "Compact"}]
 
 
+@windows_paths
 def test_allow_responses():
     request = cli.PermissionRequest("r1", "Write", {"file_path": "C:\\x\\a.txt", "content": "hi"},
                                     suggestions=[{"type": "setMode", "mode": "acceptEdits",
@@ -675,7 +677,8 @@ def test_allowed_tools_go_on_every_turn_and_unsafe_rules_are_dropped():
 
 @pytest.mark.parametrize("name,tool_input,words", [
     ("Bash", {"command": "git  status"}, "run git status"),
-    ("Edit", {"file_path": "C:\\r\\main.py"}, "edit main.py"),
+    pytest.param("Edit", {"file_path": "C:\\r\\main.py"}, "edit main.py",
+                 marks=windows_paths),
     ("WebFetch", {"url": "https://x.org"}, "fetch https://x.org"),
     ("WebSearch", {"query": "wx accessible"}, "search the web for wx accessible"),
     ("Task", {}, "use Task"),

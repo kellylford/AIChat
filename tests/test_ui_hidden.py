@@ -18,6 +18,7 @@ from thechatplace.sessions import NEEDS_YOU  # noqa: E402
 
 from records import (assistant_block, lines, text_block, tool_result, tool_use_block,  # noqa: E402
                      user_text)
+from markers import msaa, windows_paths  # noqa: E402
 
 
 FAKE_COMMANDS = [
@@ -870,6 +871,21 @@ class FakeUpdates:
 def run_check(frame, manual=True):
     frame.check_for_updates(manual)
     assert pump(lambda: not frame._update_busy)
+
+
+def test_mac_app_offers_the_release_page_and_never_downloads(frame, env, monkeypatch):
+    from thechatplace.updater import DOWNLOAD, CheckResult
+    frame.updates = FakeUpdates(CheckResult(DOWNLOAD, "0.1.0", "0.2.0"))
+    run_check(frame, manual=False)  # at start: said, never asked
+    assert "0.2.0 is available" in env["spoken"][-1] and env["boxes"] == []
+    asked = []
+    monkeypatch.setattr(wx, "MessageBox", lambda text, *a, **k: asked.append(text) or wx.NO)
+    run_check(frame)
+    assert "Open the release page" in asked[-1] and env["opened"] == []
+    monkeypatch.setattr(wx, "MessageBox", lambda *a, **k: wx.YES)
+    run_check(frame)
+    assert env["opened"] == ["https://github.com/kellylford/AIChat/releases/tag/v0.2.0"]
+    assert "download" not in frame.updates.calls
 
 
 def test_manual_check_with_no_releases_says_so(frame, env):
@@ -1791,6 +1807,7 @@ def test_f6_key_and_shift_f6_reach_cycle_focus(frame, monkeypatch):
     assert calls == [True, False]
 
 
+@msaa
 def test_status_bar_parts_are_read_only_text_and_buttons(frame):
     frame._status("Hub probe: Claude is using Bash.")
     bar = frame.GetStatusBar()
@@ -1962,6 +1979,7 @@ def test_a_desktop_reply_drops_tool_calls_still_waiting(frame, env):
 # -- whole messages in the messages list (#11) -----------------------------------------------
 
 
+@msaa
 def test_screen_reader_reads_whole_messages_in_the_list(frame, env):
     add_transcript(env, "C:\\G\\Repo", "cli-a", [
         user_text("Check the build"),
@@ -1981,6 +1999,7 @@ def test_screen_reader_reads_whole_messages_in_the_list(frame, env):
     assert accessible.GetName(2) == (wx.ACC_NOT_IMPLEMENTED, "")
 
 
+@msaa
 def test_rows_that_are_not_messages_read_as_shown(frame):
     accessible = frame.chat_list._hub_accessible
     assert frame.chat_list.GetString(0).startswith("No session loaded")
@@ -2339,6 +2358,7 @@ def test_commands_are_fetched_when_an_own_session_loads_and_inserted(frame, env,
     assert env["feedback"][-1] == "Inserted /compact."
 
 
+@windows_paths
 def test_a_turn_keeps_the_folder_commands_current(frame, env):
     from thechatplace.claude_cli import StreamParser
     select(frame, "Hub probe")
@@ -2787,6 +2807,7 @@ def test_ctrl_c_copies_the_message_and_ctrl_shift_c_its_code(frame, env, monkeyp
         assert env["copied"][-1].startswith(expected)
 
 
+@windows_paths
 def test_changed_files_view_and_turn_end_summary(frame, env, monkeypatch):
     patch = [{"oldStart": 3, "oldLines": 1, "newStart": 3, "newLines": 2,
               "lines": ["-old", "+new", "+more"]}]

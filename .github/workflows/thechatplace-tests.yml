@@ -1,8 +1,9 @@
 name: The Chat Place tests
 
-# Runs The Chat Place's pytest suite on Windows, the platform it targets: the
-# process-tree, pipe and path handling it tests are Windows-specific. The UI
-# tests build the window hidden, which works on a runner without a desktop.
+# Runs The Chat Place's pytest suite on Windows and macOS, the two platforms it
+# ships for. Tests of Windows-only behaviour (C:\ paths, MSAA names) skip on
+# the Mac (tests/markers.py). The UI tests build the window hidden, which
+# works on a runner without a desktop.
 
 on:
   push:
@@ -19,8 +20,16 @@ concurrency:
 
 jobs:
   tests:
-    name: pytest (Windows)
-    runs-on: windows-latest
+    name: pytest (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+          - name: macOS
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
       # Pinned to release commits (v4.4.0, v5.6.0).
