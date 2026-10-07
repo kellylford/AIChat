@@ -57,7 +57,7 @@ from ..own_store import OwnSession, OwnSessionStore
 from ..sessions import (IDLE, NEEDS_YOU, SORT_ORDERS, SORT_SPOKEN, WORKING,
                         SessionInfo)
 from ..speech import SpeechSettings, default_options, list_speech_options, speaker
-from ..transcript import ASSISTANT, ERROR, PLAN, QUESTION, ChatMessage, TranscriptReader
+from ..transcript import ASSISTANT, ERROR, PLAN, QUESTION, TOOL, ChatMessage, TranscriptReader
 from ..updater import AVAILABLE, FAILED, CheckResult, UpdateService
 from .a11y import set_accessible_name, set_list_items_accessible
 from ..rendering import html_page, message_page
@@ -72,6 +72,8 @@ LIST_REFRESH_MS = 5000
 UPDATE_CHECK_DELAY_MS = 4000
 APPLY_SPEECH_WAIT_S = 4.0
 CHAT_REFRESH_MS = 2000
+#: Tool calls and in-between text are gathered this long, then said together (#12).
+ACTIVITY_DELAY_MS = 1200
 
 _REPLY_KINDS = (ASSISTANT, QUESTION, PLAN, ERROR)
 
@@ -118,6 +120,9 @@ class MainFrame(wx.Frame):
         self._pending: Dict[str, List[PermissionRequest]] = {}
         self._chat_keys: List[str] = []
         self._announce_load = False  # say "Loaded X" once its chat arrives
+        # Activity in the open session waiting to be said (#12).
+        self._activity: List[tuple] = []
+        self._activity_timer = None
 
         self._build_menu()
         self._build_ui()
@@ -632,6 +637,7 @@ class MainFrame(wx.Frame):
 
     def open_session(self, info: SessionInfo):
         self._save_draft()
+        self._clear_activity()  # another session's tool calls aren't news here
         self._open = info
         self.reply_text.SetValue(self._drafts.get(info.cli_session_id, "") if info.is_own else "")
         self._open_generation += 1
@@ -664,6 +670,7 @@ class MainFrame(wx.Frame):
     def unload_session(self):
         """Nothing loaded (the loaded session was forgotten)."""
         self._chat_timer.Stop()
+        self._clear_activity()
         self._spoken.clear()
         self._open = None
         self._open_generation += 1
@@ -824,13 +831,56 @@ class MainFrame(wx.Frame):
             return
         if self._open.is_own:
             return  # its turn announces the reply when it finishes
+        if self._show_activity:
+            # A desktop session's tool calls, as they reach its transcript (#12).
+            for message in messages:
+                if message.key not in before_keys and message.kind == TOOL:
+                    self._queue_activity("tool", message.text)
         fresh = [m for m in messages if m.key not in before_keys and m.kind in _REPLY_KINDS]
         if fresh:
+            # The reply is the news now; tool calls before it are old.
+            self._clear_activity()
             text = announce.reply_text(self._open.title, fresh[-1].text, self.speech.announce)
             if text:
                 self._say(text)
             else:
                 self._status(f"{self._open.title}: new message.")
+
+    # Show Tool Activity on: tool calls (and, in TheClaudeHub's own sessions,
+    # what Claude writes between them) are spoken for the open session (#12).
+    # They're gathered for a moment and said together, without cutting off
+    # the screen reader, so a run of calls is one announcement ("Using Read 4
+    # times, then Bash.") and speech never falls far behind.
+
+    def _queue_activity(self, kind: str, text: str):
+        self._activity.append((kind, text))
+        if self._activity_timer is None:
+            self._activity_timer = wx.CallLater(ACTIVITY_DELAY_MS, self._flush_activity)
+
+    def _flush_activity(self):
+        if not self:
+            return
+        self._activity_timer = None
+        items, self._activity = self._activity, []
+        # What Claude wrote last waits for a tool call after it: if none comes,
+        # it was the reply, which the end of the turn announces (and drops).
+        held = []
+        while items and items[-1][0] == "text":
+            held.insert(0, items.pop())
+        self._activity = held
+        if self._open is None or not self._show_activity:
+            return
+        text = announce.activity_text(items, self.speech.announce)
+        if text:
+            self._feedback(text)
+
+    def _clear_activity(self):
+        """Forget activity not yet said: the session changed, or the turn
+        ended and its reply is announced instead."""
+        if self._activity_timer is not None:
+            self._activity_timer.Stop()
+            self._activity_timer = None
+        self._activity = []
 
     def _visible_messages(self) -> List[ChatMessage]:
         if self._show_activity:
@@ -1003,6 +1053,8 @@ class MainFrame(wx.Frame):
 
     def _set_activity(self, show: bool):
         self._show_activity = show
+        if not show:
+            self._clear_activity()
         self.activity_item.Check(show)
         self.activity_check.SetValue(show)
         if self._open is not None and self._chat_loaded and self._chat_messages:
@@ -1395,11 +1447,16 @@ class MainFrame(wx.Frame):
                 self._store_write(self.store.update, session_id, started=True)
             self._status(f"{title}: Claude is working.")
             return
+        is_open_now = self._open is not None and self._open.cli_session_id == session_id
         if event.kind == "tool":
             self._status(f"{title}: Claude is using {event.text}.")
+            if is_open_now and self._show_activity:
+                self._queue_activity("tool", event.detail or event.text)
             return
         if event.kind == "text":
             self._status(f"{title}: {announce.first_sentence(event.text)}")
+            if is_open_now and self._show_activity:
+                self._queue_activity("text", event.text)
             return
         if event.kind == "denied":
             self._denials.setdefault(session_id, []).append(event.text)
@@ -1421,6 +1478,10 @@ class MainFrame(wx.Frame):
         if event.kind in ("finished", "failed"):
             # Nothing can be waiting once the turn is over.
             self._pending.pop(session_id, None)
+            if is_open_now:
+                # The reply is announced next; activity not yet spoken is
+                # older news, and its last text is that same reply.
+                self._clear_activity()
             # UI first, store writes after: a failed write must not leave the
             # session looking busy for good.
             runner = self._runners.pop(session_id, None)
@@ -1813,6 +1874,7 @@ class MainFrame(wx.Frame):
                 return
         for runner in list(self._runners.values()):
             runner.cancel()
+        self._clear_activity()
         self._list_timer.Stop()
         self._chat_timer.Stop()
         startup_check = getattr(self, "_startup_update_check", None)

@@ -1789,6 +1789,91 @@ def test_status_bar_waits_while_you_read_it(frame, monkeypatch):
     assert frame.status_text.GetValue() == "Second."  # caught up on arriving
 
 
+# -- announcing tool activity (#12) ----------------------------------------------------------
+
+
+def test_own_session_tool_calls_and_notes_are_spoken_together(frame, env):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame._runners["own-1"] = FakeRunner([], "", "", None)
+    frame._set_activity(True)
+    for event in (TurnEvent("text", text="Let me check the **build**."),
+                  TurnEvent("tool", text="Bash", detail="Bash: git status"),
+                  TurnEvent("tool", text="Read", detail="Read: C:\\r\\main.py")):
+        frame._on_turn_event({"id": "own-1"}, "Hub probe", event)
+    assert frame._activity_timer is not None
+    frame._activity_timer.Stop()
+    frame._flush_activity()
+    assert env["feedback"][-1] == ("Let me check the build. Using Bash: git status; "
+                                   "Read: C:\\r\\main.py.")
+
+
+def test_activity_is_quiet_with_tool_activity_off_or_another_session(frame, env):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame._runners["own-1"] = FakeRunner([], "", "", None)
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("tool", text="Bash"))
+    assert frame._activity == []  # Show Tool Activity is off
+    frame._set_activity(True)
+    frame._on_turn_event({"id": "own-2"}, "Other", TurnEvent("tool", text="Bash"))
+    assert frame._activity == []  # not the open session
+
+
+def test_finishing_the_turn_drops_unspoken_activity(frame, env):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame._runners["own-1"] = FakeRunner([], "", "", None)
+    frame._set_activity(True)
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("text", text="All done."))
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("finished", text="All done."))
+    assert frame._activity == [] and frame._activity_timer is None
+    assert env["spoken"][-1].startswith("Hub probe replied. All done")  # said once, as the reply
+
+
+def test_desktop_session_tool_calls_are_spoken(frame, env):
+    from records import tool_use_block
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [user_text("Build it")])
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    assert pump(lambda: frame._chat_loaded)
+    frame._set_activity(True)
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [
+        user_text("Build it"),
+        assistant_block(tool_use_block("Bash", {"command": "make"}), "m1")])
+    frame._refresh_chat()
+    assert pump(lambda: frame._activity)
+    frame._activity_timer.Stop()
+    frame._flush_activity()
+    assert env["feedback"][-1] == "Using Bash: make."
+
+
+def test_last_note_waits_for_a_tool_call_so_a_slow_finish_says_the_reply_once(frame, env):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame._runners["own-1"] = FakeRunner([], "", "", None)
+    frame._set_activity(True)
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("tool", text="Bash", detail="Bash: make"))
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("text", text="All built."))
+    frame._activity_timer.Stop()
+    frame._flush_activity()
+    assert env["feedback"][-1] == "Using Bash: make."  # the note is held back
+    assert frame._activity == [("text", "All built.")]
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("finished", text="All built."))
+    assert frame._activity == []
+    assert sum("All built" in said for said in env["feedback"] + env["spoken"]) == 1
+
+
+def test_a_desktop_reply_drops_tool_calls_still_waiting(frame, env):
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    frame._set_activity(True)
+    frame._queue_activity("tool", "Bash: npm test")
+    from theclaudehub.transcript import ASSISTANT, ChatMessage
+    frame._chat_loaded = True
+    frame._apply_chat(frame._open_generation, True,
+                      [ChatMessage(ASSISTANT, "Tests pass.", "", "r1")], 0, None)
+    assert frame._activity == [] and frame._activity_timer is None
+    assert env["spoken"][-1].startswith("Quiet one replied. Tests pass")
 # -- whole messages in the messages list (#11) -----------------------------------------------
 
 

@@ -179,6 +179,39 @@ def test_replies_lose_quote_markers_rules_and_unclosed_fences():
     assert strip_for_speech("***bold***") == "bold"  # emphasis, not a rule
 
 
+@pytest.mark.parametrize("items,level,said", [
+    ([("text", "Let me check the **build**."), ("tool", "Bash: git status"),
+      ("tool", "Read: main.py")], "full",
+     "Let me check the build. Using Bash: git status; Read: main.py."),
+    ([("tool", "Read: a"), ("tool", "Read: b"), ("tool", "Read: c"), ("tool", "Read: d"),
+      ("tool", "Bash: x")], "full", "Using Read 4 times, then Bash."),
+    ([("tool", "Bash: git status")], "summary", "Using Bash."),
+    ([("text", "One. Two."), ("tool", "Edit: a.py")], "summary", "One. Using Edit."),
+    ([("tool", "Bash: x")], "silent", None),
+    ([], "full", None),
+    ([("text", "```\ncode only\n```")], "full", "Code block omitted."),
+])
+def test_activity_text(items, level, said):
+    from theclaudehub.announce import activity_text
+    assert activity_text(items, level) == said
+
+
+def test_activity_text_cuts_long_details():
+    from theclaudehub.announce import activity_text
+    said = activity_text([("tool", "Bash: " + "word " * 60)], "full")
+    assert said.endswith("…") and len(said) < 140
+
+
+@pytest.mark.parametrize("items,level,said", [
+    ([("tool", "Read: a"), ("tool", "Bash: b"), ("tool", "Read: c"), ("tool", "Bash: d")],
+     "full", "Using Read twice and Bash twice."),
+    ([("tool", "Read: a"), ("tool", "Read: b")], "summary", "Using Read twice."),
+    ([("tool", "mcp__github__create_issue: Fix it")], "full", "Using github create issue: Fix it."),
+    ([("tool", "mcp__github__create_issue: Fix it")], "summary", "Using github create issue."),
+])
+def test_activity_text_counts_and_names(items, level, said):
+    from theclaudehub.announce import activity_text
+    assert activity_text(items, level) == said
 def test_spoken_markdown_reads_a_whole_message():
     from theclaudehub.announce import spoken_markdown
     assert spoken_markdown("## Summary\nThe build **passes**.\n\n- one\n- two\n\n```py\nx=1\n```\nDone") == (
