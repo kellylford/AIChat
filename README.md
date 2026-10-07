@@ -50,10 +50,16 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   **View, Show Sessions** (Alt+V, H) chooses which sessions are listed: all, needs you or
   working, needs you, desktop app sessions, The Chat Place's own, Remote Control sessions (ones
   the desktop app has linked for Remote Control), archived (the desktop app's archived
-  sessions, otherwise hidden), or one of your groups. The list's name says what it shows and how
+  sessions, otherwise hidden), hidden (the ones you've hidden), or one of your groups. The list's name says what it shows and how
   many ("Session list, needs you, 2 of 139"), and the choice is remembered.
   Arrowing doesn't load anything; **Enter loads that session** into the messages list, moves you
   there, and says "Loaded Quiet one, 12 messages."
+- **Hide or delete a session.** **Delete** (File, Hide Session) takes the selected session out of
+  the list without changing it; View, Show Sessions, Hidden lists hidden sessions, and File, Bring
+  Back Session returns one. **Shift+Delete** (File, Delete Session Permanently) deletes one of The
+  Chat Place's own sessions for good, from any view, hidden or not: after you confirm (No is the
+  default), its Claude Code transcript is deleted from the PC and it leaves the list, its groups
+  and the hidden list. Desktop app sessions can only be hidden; delete those in the desktop app.
 - **Find** (Ctrl+F, View, Find). In the session list it asks for some text and shows only
   sessions whose title, folder or "needs you" note contains it, within the current view; the
   list's name says so ("Session list, matching \"build\", 3 of 139") and Escape shows them
@@ -413,6 +419,7 @@ shows it as plain text instead.
 | Anywhere | Ctrl+Shift+N | Continue the selected (or loaded) desktop app session here, as a copy |
 | Session list | F5 | Refresh the list now and put it in order |
 | Session list | Delete | Hide the selected session (View, Show Sessions, Hidden lists it; File, Bring Back Session returns it) |
+| Session list | Shift+Delete | Delete one of The Chat Place's own sessions permanently, after you confirm |
 | Messages | Enter, or Applications key then Read Full Message | Read the whole message; Escape comes back to it |
 | Messages | Ctrl+C | Copy the whole message |
 | Messages | Ctrl+Shift+C | Copy the message's last code block |

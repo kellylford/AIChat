@@ -227,7 +227,7 @@ class MainFrame(wx.Frame):
                    lambda e: self.refresh_sessions(force=True, resort=True))
         self._item(session, "H&ide Session\tDelete", lambda e: self.on_hide())
         self._item(session, "&Bring Back Session", lambda e: self.on_unhide())
-        self._item(session, "Delete Session &Permanently...",
+        self._item(session, "Delete Session &Permanently...\tShift+Delete",
                    lambda e: self.on_delete_permanently())
         self._item(session, "&Export Session...\tCtrl+E", lambda e: self.on_export())
         self._item(session, "Insert Command or S&kill...\tCtrl+/",
@@ -821,8 +821,11 @@ class MainFrame(wx.Frame):
         self._refresh_list_in_place()
 
     def on_delete_permanently(self):
-        """File, Delete Session Permanently: one of The Chat Place's hidden
-        sessions, gone for good, its Claude Code transcript with it."""
+        """File, Delete Session Permanently (Shift+Delete): one of The Chat
+        Place's own sessions, gone for good, its Claude Code transcript with
+        it. It works from any view, hidden or not: having to hide a session
+        first and then find it in the Hidden view was a hunt nobody could
+        guess, and the confirmation (No by default) is the safeguard."""
         info = self._selected_session()
         if info is None:
             self._feedback("No session selected.")
@@ -830,10 +833,6 @@ class MainFrame(wx.Frame):
         if not info.is_own:
             self._feedback(f"{info.title} is a desktop app session: delete it in the desktop "
                            "app. Here it can only be hidden.")
-            return
-        if info.key not in self.hidden:
-            self._feedback(f"Hide {info.title} first (Delete); then it can be deleted "
-                           "permanently from View, Show Sessions, Hidden.")
             return
         if info.cli_session_id in self._runners:
             self._feedback("A turn is running in that session. Stop it first.")
@@ -3317,7 +3316,10 @@ class MainFrame(wx.Frame):
             self.focus_sessions()
             return
         if key == wx.WXK_DELETE and focus is self.session_list:
-            self.on_hide()
+            if event.ShiftDown() and not ctrl and not event.AltDown():
+                self.on_delete_permanently()  # as Shift+Delete is in Explorer
+            else:
+                self.on_hide()
             return
         if key == wx.WXK_DELETE and focus is self.chat_list \
                 and self._selected_queued() is not None:

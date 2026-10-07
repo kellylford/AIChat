@@ -693,29 +693,65 @@ def test_hide_keeps_the_place_and_bring_back_returns_it(frame, env):
     assert env["feedback"][-1] == "Hub probe is back in the list."
 
 
-def test_delete_permanently_only_a_hidden_chat_place_session(frame, env):
+def test_delete_permanently_works_from_the_list_without_hiding_first(frame, env):
+    # Hiding first and then finding it in the Hidden view was a hunt nobody
+    # could guess: delete it right where it is.
     path = add_transcript(env, "C:\\G\\Scratch", "own-1", [user_text("hi")])
     select(frame, "Hub probe")
-    frame.on_delete_permanently()
-    assert env["feedback"][-1].startswith("Hide Hub probe first")
-    assert path.exists()
+    frame.on_delete_permanently()  # MessageBox stub answers Yes
+    assert frame.store.get("own-1") is None and not path.exists()
+    assert env["feedback"][-1] == "Deleted Hub probe permanently."
+    assert not any(s.startswith("Hub probe") for s in frame.session_list.GetStrings())
+
+
+def test_delete_permanently_a_hidden_session(frame, env):
+    path = add_transcript(env, "C:\\G\\Scratch", "own-1", [user_text("hi")])
+    select(frame, "Hub probe")
     frame.on_hide()
     frame.on_view("hidden")
     settle(frame)
     select(frame, "Hub probe")
-    frame.on_delete_permanently()  # MessageBox stub answers Yes
+    frame.on_delete_permanently()
     assert frame.store.get("own-1") is None and not path.exists()
     assert "own:own-1" not in frame.hidden
     assert env["feedback"][-1] == "Deleted Hub probe permanently."
-    frame.on_view("all")
-    settle(frame)
+
+
+def test_delete_permanently_refuses_a_desktop_session(frame, env):
     select(frame, "Blocked one")
+    frame.on_delete_permanently()
+    assert env["feedback"][-1].startswith("Blocked one is a desktop app session")
     frame.on_hide()
     frame.on_view("hidden")
     settle(frame)
     select(frame, "Blocked one")
     frame.on_delete_permanently()
     assert env["feedback"][-1].startswith("Blocked one is a desktop app session")
+
+
+def test_delete_permanently_asks_and_no_keeps_it(frame, env, monkeypatch):
+    from thechatplace.ui import main_frame
+    path = add_transcript(env, "C:\\G\\Scratch", "own-1", [user_text("hi")])
+    asked = []
+    monkeypatch.setattr(main_frame.wx, "MessageBox",
+                        lambda message, *a, **k: asked.append(message) or main_frame.wx.NO)
+    select(frame, "Hub probe")
+    frame.on_delete_permanently()
+    assert asked and "permanently" in asked[0]
+    assert frame.store.get("own-1") is not None and path.exists()
+
+
+def test_shift_delete_in_the_list_deletes_permanently(frame, env, monkeypatch):
+    calls = []
+    monkeypatch.setattr(frame, "on_delete_permanently", lambda: calls.append("delete"))
+    monkeypatch.setattr(frame, "on_hide", lambda: calls.append("hide"))
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    for shift in (True, False):
+        event = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
+        event.SetKeyCode(wx.WXK_DELETE)
+        event.SetShiftDown(shift)
+        frame._on_char_hook(event)
+    assert calls == ["delete", "hide"]
 
 
 def test_new_session_view_says_claude_is_starting(frame, env, fake_runner, monkeypatch):
@@ -2253,10 +2289,6 @@ def test_a_session_leaving_the_view_stays_while_you_are_on_it(frame, env, monkey
 def test_deleting_a_session_takes_it_out_of_its_groups(frame, env):
     frame.groups.create("Work")
     frame.groups.add("Work", "own:own-1")
-    select(frame, "Hub probe")
-    frame.on_hide()
-    frame.on_view("hidden")
-    settle(frame)
     select(frame, "Hub probe")
     frame.on_delete_permanently()  # wx.MessageBox is patched to say yes
     assert frame.groups.members("Work") == []
