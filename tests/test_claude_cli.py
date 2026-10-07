@@ -965,3 +965,17 @@ def test_a_state_change_before_initialize_answers_doesnt_send_the_message(tmp_pa
     runner, events, _ = run_turn(process, tmp_path)
     assert runner.stopped_before_answer
     assert b'"type": "user"' not in process.written
+
+
+def test_a_permission_answered_elsewhere_is_dropped(tmp_path):
+    process = FakeProcess([
+        ev(type="control_request", request_id="q1", request={
+            "subtype": "can_use_tool", "tool_name": "Bash", "input": {"command": "ls"},
+            "tool_use_id": "t1"}),
+        ev(type="control_cancel_request", request_id="q1"),
+        ev(type="result", subtype="success", result="ok"),
+    ])
+    runner, events, _ = run_turn(process, tmp_path)
+    kinds = [e.kind for e in events]
+    assert kinds.index("permission") < kinds.index("permission_cancelled")
+    assert runner.pending == {}

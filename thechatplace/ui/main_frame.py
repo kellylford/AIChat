@@ -1616,9 +1616,18 @@ class MainFrame(wx.Frame):
                   "Off for this session"]
         now = values.index(own.remote_control) if own.remote_control in values else 0
         labels[now] += " (now)"
+        if own.remote_url:
+            values.append("copy")
+            labels.append(f"Copy its claude.ai address ({own.remote_url})")
         index = self._choose("Remote Control",
-                             f"Remote Control for {info.title}:", labels, selection=now)
+                             f"Remote Control for {info.title}. When it's on, the "
+                             "conversation is copied to claude.ai and kept there:",
+                             labels, selection=now)
         if index is None or values[index] == own.remote_control:
+            return
+        if values[index] == "copy":
+            if self._copy_text(own.remote_url):
+                self._feedback(f"Copied {info.title}'s claude.ai address.")
             return
         if not self._store_write(self.store.update, info.cli_session_id,
                                  remote_control=values[index]):
@@ -1631,7 +1640,10 @@ class MainFrame(wx.Frame):
         """A turn's Remote Control answer: remembered, so the next turn joins
         the same Remote Control session; said the first time, or if it failed."""
         if data.get("error"):
-            self._status(f"{title}: couldn't turn on Remote Control: {data['error']}")
+            key = ("remote control", session_id, data["error"])
+            if key not in self._warned:  # once, not every turn
+                self._warned.add(key)
+                self._say(f"{title}: couldn't turn on Remote Control: {data['error']}")
             return
         bridge = str(data.get("bridge_session_id") or "")
         url = str(data.get("session_url") or "")
@@ -1642,8 +1654,8 @@ class MainFrame(wx.Frame):
         self._store_write(self.store.update, session_id, bridge_session_id=bridge,
                           remote_url=url)
         if first:
-            self._status(f"{title} is on Remote Control: {url}" if url
-                         else f"{title} is on Remote Control.")
+            self._say(f"{title} is on Remote Control. Session, Remote Control copies its "
+                      "claude.ai address." if url else f"{title} is on Remote Control.")
 
     @staticmethod
     def _queued_words(count: int) -> str:
@@ -2210,6 +2222,18 @@ class MainFrame(wx.Frame):
         if event.kind == "denied":
             self._denials.setdefault(session_id, []).append(event.text)
             self._status(f"{title}: permission denied, {event.text}")
+            return
+        if event.kind == "permission_cancelled":
+            queue = self._pending.get(session_id, [])
+            kept = [r for r in queue if r.request_id != event.text]
+            if len(kept) != len(queue):
+                if kept:
+                    self._pending[session_id] = kept
+                else:
+                    self._pending.pop(session_id, None)
+                self._status(f"{title}: answered elsewhere.")
+                self._update_send_state()
+                self.refresh_sessions()
             return
         if event.kind == "permission" and event.request is not None:
             if session_id not in self._runners:

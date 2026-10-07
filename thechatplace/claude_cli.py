@@ -596,6 +596,12 @@ class StreamParser:
         if isinstance(sid, str) and sid:
             self.session_id = sid
 
+        if etype == "control_cancel_request":
+            # A question or permission answered somewhere else (claude.ai, on
+            # Remote Control): it's no longer waiting here.
+            request_id = str(event.get("request_id") or "")
+            return [TurnEvent("permission_cancelled", text=request_id,
+                              session_id=self.session_id)] if request_id else []
         if etype == "control_request":
             request_id = str(event.get("request_id") or "")
             request = event.get("request") if isinstance(event.get("request"), dict) else {}
@@ -1060,6 +1066,10 @@ class TurnRunner:
                         self.last_activity = f"using {event.text}"
                     elif event.kind == "text":
                         self.last_activity = "writing a reply"
+                    elif event.kind == "permission_cancelled":
+                        with self._lock:
+                            self.pending.pop(event.text, None)
+                        self.last_activity = "working"
                     elif event.kind == "permission":
                         with self._lock:
                             self.pending[event.request.request_id] = event.request

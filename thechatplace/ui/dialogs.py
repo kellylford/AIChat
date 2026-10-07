@@ -246,8 +246,9 @@ class SettingsDialog(wx.Dialog):
 
         self.remote_control = wx.CheckBox(
             self, label="Turn on Remote &Control for The Chat Place's sessions, so you can "
-                        "reach them from claude.ai and other devices (Session, Remote "
-                        "Control changes one session)")
+                        "reach them from claude.ai and other devices. Their conversations "
+                        "are copied to claude.ai and kept there. (Session, Remote Control "
+                        "changes one session.)")
         self.remote_control.SetValue(speech.remote_control)
         outer.Add(self.remote_control, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 

@@ -3403,4 +3403,30 @@ def test_remote_control_follows_the_setting_and_each_session(frame, env, fake_ru
 def test_remote_control_refused_is_said_on_the_status_bar(frame, env):
     frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent(
         "remote_control", data={"error": "Remote Control is turned off by your organization"}))
-    assert frame.status_text.GetLabel().startswith("Hub probe: couldn't turn on Remote Control")
+    assert env["spoken"][-1].startswith("Hub probe: couldn't turn on Remote Control")
+
+
+def test_a_question_answered_elsewhere_is_no_longer_waiting(frame, env):
+    _waiting_turn(frame, _request("r1"))
+    assert frame._pending.get("own-1")
+    frame._on_turn_event({"id": "own-1"}, "Hub probe",
+                         TurnEvent("permission_cancelled", text="r1"))
+    assert "own-1" not in frame._pending
+    assert frame.status_text.GetLabel() == "Hub probe: answered elsewhere."
+
+
+def test_remote_control_address_copied_and_a_refusal_said_once(frame, env, monkeypatch):
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("remote_control", data={
+        "bridge_session_id": "cse_9", "session_url": "https://claude.ai/code/session_9"}))
+    assert env["spoken"][-1].startswith("Hub probe is on Remote Control.")
+    select(frame, "Hub probe")
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    monkeypatch.setattr(frame, "_choose", lambda title, prompt, choices, selection=None: next(
+        i for i, c in enumerate(choices) if c.startswith("Copy its claude.ai address")))
+    frame.on_remote_control()
+    assert env["copied"][-1] == "https://claude.ai/code/session_9"
+    refused = TurnEvent("remote_control", data={"error": "Remote Control is turned off"})
+    count = len(env["spoken"])
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", refused)
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", refused)
+    assert len(env["spoken"]) == count + 1
