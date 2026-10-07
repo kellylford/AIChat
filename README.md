@@ -30,13 +30,15 @@ session list is always there.
   order, keeping you on the same session.
   Arrowing doesn't load anything; **Enter loads that session** into the messages list, moves you
   there, and says "Loaded Quiet one, 12 messages."
-- **What "needs you" means.** For a Claude desktop app session: it isn't running, and the desktop
+- **What "needs you" means.** For a Claude desktop app session: it isn't working right now (it can
+  still be open in the desktop app), and the desktop
   app's summary of its latest turn says it's waiting on you, either with a "needs action" note
   (read after "needs you:") or a status such as blocked, needs input or review ready. The desktop
   app doesn't write that summary after every turn, so a session can be waiting on you and still
   show as idle. For one of TheClaudeHub's own sessions: Claude is waiting right now for a
-  permission, a question or a plan (Ctrl+Shift+A), or its last turn failed, or tools were
-  refused in it. That lasts until the next turn starts.
+  permission, a question or a plan (Ctrl+Shift+A), which ends when you answer; or its last turn
+  failed, or tools were refused in it, which is saved with the session and lasts, even across a
+  restart, until its next turn starts.
 - **Messages:** newest last, with focus on the newest. Each reads "You:" or "Claude:" and its
   first line, and the list's name says the session's state and whether it's read-only. **Enter**
   (or the context menu's Read Full Message, with the Applications key or Shift+F10) shows the

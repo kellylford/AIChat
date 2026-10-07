@@ -1648,15 +1648,20 @@ def test_shortcuts_and_messages_fall_back_to_the_text_box(frame, env, monkeypatc
 def test_sort_sessions_menu_reorders_keeps_place_and_remembers(frame, env):
     from theclaudehub.speech import SpeechSettings
     assert frame.sort_items["status"].IsChecked()
+    # Idle and a day old: last by status, first by title and by age.
+    add_desktop(env, "local_z", "cli-z", "Aardvark", ago=86_400_000)
+    frame.refresh_sessions(resort=True)
+    settle(frame)
     titles = lambda: [s.split(",")[0] for s in frame.session_list.GetStrings()]  # noqa: E731
-    assert titles() == ["Blocked one", "Hub probe", "Quiet one"]
+    assert titles() == ["Blocked one", "Hub probe", "Quiet one", "Aardvark"]
     select(frame, "Quiet one")
     frame.on_sort("title")
     settle(frame)
-    assert titles() == ["Blocked one", "Hub probe", "Quiet one"]
+    assert titles() == ["Aardvark", "Blocked one", "Hub probe", "Quiet one"]
+    assert frame.session_list.GetStringSelection().startswith("Quiet one")  # same session
     frame.on_sort("oldest")
     settle(frame)
-    assert titles()[-1] == "Hub probe"  # the newest, last
+    assert titles()[0] == "Aardvark" and titles()[-1] == "Hub probe"  # oldest first, newest last
     assert frame.session_list.GetStringSelection().startswith("Quiet one")  # same session
     assert frame.sort_items["oldest"].IsChecked() and not frame.sort_items["title"].IsChecked()
     assert env["feedback"][-1] == "Sessions sorted oldest first."
@@ -1673,3 +1678,22 @@ def test_settings_dialog_keeps_the_sort_order(frame):
         assert dialog.get_settings().session_order == "folder"
     finally:
         dialog.Destroy()
+
+
+def test_saved_sort_order_is_used_and_checked_at_start(env):
+    from theclaudehub.ui.main_frame import MainFrame
+    speech.SpeechSettings(session_order="folder").save()
+    add_desktop(env, "local_a", "cli-a", "Quiet one", cwd="C:\\G\\Zeta")
+    add_desktop(env, "local_b", "cli-b", "Other", cwd="C:\\G\\Alpha")
+    window = MainFrame(store=OwnSessionStore(env["tmp"] / "own.json"),
+                       check_updates_at_start=False)
+    try:
+        assert pump(lambda: window.session_list.GetCount() == 2)
+        assert [o for o, item in window.sort_items.items() if item.IsChecked()] == ["folder"]
+        assert window.session_list.GetString(0).startswith("Other, Alpha")
+    finally:
+        window._list_timer.Stop()
+        window._chat_timer.Stop()
+        window._pool.shutdown(wait=True)
+        window.Destroy()
+        wx.GetApp().ProcessPendingEvents()
