@@ -42,8 +42,11 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   permission, a question or a plan (Ctrl+Shift+A), which ends when you answer; or its last turn
   failed, or tools were refused in it, which is saved with the session and lasts, even across a
   restart, until its next turn starts.
-- **Messages:** newest last, with focus on the newest. Each reads "You:" or "Claude:" and its
-  first line, and the list's name says the session's state and whether it's read-only. **Enter**
+- **Messages:** newest last, with focus on the newest. Each row shows "You:" or "Claude:" and its
+  first line, but your screen reader reads the **whole message** as you arrow onto it, as words
+  (headings and list items as sentences, "Code block omitted" for code). Settings, Reading
+  messages turns that off, to hear just the first line. The list's name says the session's state
+  and whether it's read-only. **Enter**
   (or the context menu's Read Full Message, with the Applications key or Shift+F10) shows the
   whole message as a formatted page, so your screen reader's browse mode moves by heading (H),
   table (T, then its cell commands), list (L) and code block (each is a region, R, named like

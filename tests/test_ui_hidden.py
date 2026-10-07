@@ -1874,3 +1874,44 @@ def test_a_desktop_reply_drops_tool_calls_still_waiting(frame, env):
                       [ChatMessage(ASSISTANT, "Tests pass.", "", "r1")], 0, None)
     assert frame._activity == [] and frame._activity_timer is None
     assert env["spoken"][-1].startswith("Quiet one replied. Tests pass")
+# -- whole messages in the messages list (#11) -----------------------------------------------
+
+
+def test_screen_reader_reads_whole_messages_in_the_list(frame, env):
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [
+        user_text("Check the build"),
+        assistant_block(text_block("## Result\nIt **passes**.\n\n- tests: 352\n\n```py\nx = 1\n```\nShip it."),
+                        "m1")])
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    assert pump(lambda: frame._chat_loaded and frame.chat_list.GetCount() == 2)
+    assert frame.chat_list.GetString(1) == "Claude: ## Result"  # the row shows the first line
+    accessible = frame.chat_list._hub_accessible
+    assert accessible.GetName(2) == (wx.ACC_OK, "Claude: Result. It passes. tests: 352. "
+                                                "Code block omitted. Ship it.")
+    assert accessible.GetName(0) == (wx.ACC_OK, "Messages in Quiet one (idle, read-only)")
+    # The row's own text: the name must still be a string, or MSAA errors.
+    assert accessible.GetName(9) == (wx.ACC_NOT_IMPLEMENTED, "")  # no such row
+    frame.speech.full_messages_in_list = False
+    assert accessible.GetName(2) == (wx.ACC_NOT_IMPLEMENTED, "")
+
+
+def test_rows_that_are_not_messages_read_as_shown(frame):
+    accessible = frame.chat_list._hub_accessible
+    assert frame.chat_list.GetString(0).startswith("No session loaded")
+    assert accessible.GetName(1) == (wx.ACC_NOT_IMPLEMENTED, "")
+
+
+def test_whole_message_setting_round_trips_and_is_in_settings(frame, tmp_path):
+    from theclaudehub.ui.dialogs import SettingsDialog
+    path = tmp_path / "s.json"
+    assert speech.SpeechSettings.load(path).full_messages_in_list  # on by default
+    speech.SpeechSettings(full_messages_in_list=False).save(path)
+    assert not speech.SpeechSettings.load(path).full_messages_in_list
+    dialog = SettingsDialog(frame, speech.SpeechSettings(), speech.default_options())
+    try:
+        assert dialog.whole_in_list.GetValue()
+        dialog.whole_in_list.SetValue(False)
+        assert not dialog.get_settings().full_messages_in_list
+    finally:
+        dialog.Destroy()

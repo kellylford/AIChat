@@ -212,3 +212,8 @@ def test_activity_text_cuts_long_details():
 def test_activity_text_counts_and_names(items, level, said):
     from theclaudehub.announce import activity_text
     assert activity_text(items, level) == said
+def test_spoken_markdown_reads_a_whole_message():
+    from theclaudehub.announce import spoken_markdown
+    assert spoken_markdown("## Summary\nThe build **passes**.\n\n- one\n- two\n\n```py\nx=1\n```\nDone") == (
+        "Summary. The build passes. one. two. Code block omitted. Done.")
+    assert spoken_markdown("") == "" and spoken_markdown("```\nonly code\n```") == "Code block omitted."

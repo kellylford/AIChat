@@ -105,6 +105,32 @@ def _own_words(message: str, level: str, read_back: bool) -> Optional[str]:
     """
     if not read_back or level == ANNOUNCE_SILENT:
         return None
+    flat = spoken_markdown(message)
+    if not flat:
+        return None
+    if level == ANNOUNCE_SUMMARY:
+        return _end_sentence(first_sentence(flat))
+    # The limit counts the words, not the full stop added after them.
+    if len(flat.rstrip(".")) <= OWN_LIMIT:
+        return flat
+    cut = _cut_at_word(flat, OWN_LIMIT)
+    rest = flat[len(cut):]
+    blocks = rest.count(CODE_NOTE)
+    words = len(rest.replace(CODE_NOTE, " ").split())
+    if " " not in flat[:OWN_LIMIT]:
+        words = max(words - 1, 0)  # the long word was cut, not left out
+    more = [_plural(words, "more word")] if words else []
+    if blocks:
+        more.append("a code block" if blocks == 1 else _plural(blocks, "code block"))
+    return f"{cut}… and {' and '.join(more)}." if more else f"{cut}…"
+
+
+def spoken_markdown(message: str) -> str:
+    """A message's markdown as words to be spoken, whole: headings, list
+    items, code blocks and blank lines end sentences, wrapped lines read on,
+    markdown marks are dropped, and a code block is "Code block omitted".
+    "" if nothing is left. Used for read-back and for reading a whole message
+    in the messages list (#11)."""
     text = without_code_blocks(message or "", f"\n{CODE_NOTE}\n")
     lines = []  # (spoken text, whether a sentence must end after it)
     quoting = False
@@ -123,26 +149,11 @@ def _own_words(message: str, level: str, read_back: bool) -> Optional[str]:
         quoting = quote
         lines.append((spoken, structural))
     if not lines:
-        return None
+        return ""
     parts = [_end_sentence(spoken) if ends or i == len(lines) - 1 else spoken
              for i, (spoken, ends) in enumerate(lines)]
     # Once more over the joined text: emphasis can span a line break.
-    flat = " ".join(strip_for_speech(" ".join(parts)).split())
-    if level == ANNOUNCE_SUMMARY:
-        return _end_sentence(first_sentence(flat))
-    # The limit counts the words, not the full stop added after them.
-    if len(flat.rstrip(".")) <= OWN_LIMIT:
-        return flat
-    cut = _cut_at_word(flat, OWN_LIMIT)
-    rest = flat[len(cut):]
-    blocks = rest.count(CODE_NOTE)
-    words = len(rest.replace(CODE_NOTE, " ").split())
-    if " " not in flat[:OWN_LIMIT]:
-        words = max(words - 1, 0)  # the long word was cut, not left out
-    more = [_plural(words, "more word")] if words else []
-    if blocks:
-        more.append("a code block" if blocks == 1 else _plural(blocks, "code block"))
-    return f"{cut}… and {' and '.join(more)}." if more else f"{cut}…"
+    return " ".join(strip_for_speech(" ".join(parts)).split())
 
 
 def sent_text(title: str, message: str, level: str, read_back: bool,
