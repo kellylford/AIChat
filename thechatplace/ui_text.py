@@ -41,6 +41,10 @@ SHORTCUTS = [
                      "The Chat Place, Remote Control, archived, or one of your groups"),
         ("Ctrl+E", "Export the selected (or loaded) session as Markdown, a web page or "
                    "plain text"),
+        ("F2", "Rename the selected session (a desktop app session's new name shows only "
+               "in The Chat Place)"),
+        ("Applications key / Shift+F10", "The session's menu: load, open in Claude, rename, "
+                                         "groups, export, hide or delete"),
         ("Ctrl+G", "Add the selected session to a group (or a new one); File, Remove "
                    "from Group and Manage Groups are on the File menu"),
         ("Delete", "Hide the selected session; View, Show Sessions, Hidden lists hidden "
@@ -88,6 +92,9 @@ SHORTCUTS = [
         ("Ctrl+Shift+A", "Answer Claude: approve or deny a tool, answer its questions, or "
                          "approve its plan (the loaded session first, then the one that has "
                          "waited longest). Escape in the dialog answers later"),
+        ("Ctrl+Shift+K", "What Claude knows about you: your instructions, memories, "
+                         "skills, subagents, commands and settings, to read or open in "
+                         "your editor"),
         ("F1", "This list of shortcuts"),
         ("Ctrl+Comma", "Settings (announcements and speech)"),
         ("Ctrl+Shift+R", "Repeat the last announcement"),

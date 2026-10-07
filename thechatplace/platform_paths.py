@@ -242,6 +242,40 @@ def open_url(url: str) -> None:
         subprocess.Popen(["xdg-open", url])
 
 
+def edit_file(path: Path) -> None:
+    """Open a text file in your own editor (What Claude Knows About You's
+    Edit, #92): The Chat Place itself never writes to Claude Code's files.
+    Windows tries the file type's Edit verb, then Open, then Notepad, since
+    a ``.md`` file often has no program set for it. Raises OSError if none
+    of them could start."""
+    import subprocess
+
+    if sys.platform == "win32":
+        for verb in ("edit", "open"):
+            try:
+                os.startfile(str(path), verb)  # type: ignore[attr-defined]  # noqa: S606
+                return
+            except OSError:
+                continue
+        subprocess.Popen(["notepad.exe", str(path)])  # noqa: S607
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", "-t", str(path)])  # the default text editor
+    else:
+        subprocess.Popen(["xdg-open", str(path)])
+
+
+def show_in_folder(path: Path) -> None:
+    """Show a file selected in Explorer or the Finder."""
+    import subprocess
+
+    if sys.platform == "win32":
+        subprocess.Popen(["explorer.exe", f"/select,{path}"])  # noqa: S607
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", str(path)])
+    else:
+        subprocess.Popen(["xdg-open", str(Path(path).parent)])
+
+
 class ClaudeLookup:
     """Where ``claude`` is, or why it can't be used."""
 
