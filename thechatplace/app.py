@@ -117,6 +117,10 @@ def smoke_test(out_path: str) -> int:
     for name in (f"speak-engine.{extension}", f"speak-voices.{extension}"):
         if not (scripts / name).is_file():
             problems.append(f"missing speech script {scripts / name}")
+    if not platform_paths.app_icon_path().is_file():
+        # A build that left out the assets would fall back to a stock icon
+        # without a word; the smoke test says so instead (#64).
+        problems.append(f"missing icon {platform_paths.app_icon_path()}")
     lookup = platform_paths.find_claude()
     report["claude"] = lookup.path or lookup.problem
     report["data_outside_install"] = updater.data_is_outside_install_dir()
