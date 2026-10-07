@@ -103,6 +103,13 @@ class Transcript:
     messages: List[ChatMessage] = field(default_factory=list)
     unreadable_lines: int = 0
     lines_read: int = 0
+    #: How full the context was after Claude's latest reply (#19): its input,
+    #: cached input and output tokens. 0 until a reply says, and again after
+    #: the conversation is compacted.
+    context_tokens: int = 0
+    #: The model of Claude's latest reply ("claude-opus-5-5").
+    model: str = ""
+    compactions: int = 0
 
     def visible(self, show_activity: bool = False) -> List[ChatMessage]:
         if show_activity:
@@ -176,10 +183,18 @@ class TranscriptParser:
 
     def _record(self, record: dict) -> List[ChatMessage]:
         kind = record.get("type")
-        if kind not in ("user", "assistant"):
-            return []  # attachment, custom-title, pr-link, ...: not conversation
         if record.get("isSidechain"):
             return []
+        if kind == "system" and record.get("subtype") == "compact_boundary":
+            # Claude Code summarised the conversation to free the context.
+            self.transcript.compactions += 1
+            self.transcript.context_tokens = 0
+            meta = record.get("compactMetadata")
+            trigger = meta.get("trigger") if isinstance(meta, dict) else ""
+            how = {"manual": " (you asked)", "auto": " (the context was full)"}.get(trigger, "")
+            return [self._add(EVENT, f"Conversation compacted{how}.", record)]
+        if kind not in ("user", "assistant"):
+            return []  # attachment, custom-title, pr-link, ...: not conversation
         message = record.get("message")
         if not isinstance(message, dict):
             raise _Unreadable()
@@ -187,7 +202,20 @@ class TranscriptParser:
         if kind == "user":
             self._last_assistant_id = None
             return self._user(record, content)
+        self._note_usage(message)
         return self._assistant(record, message, content)
+
+    def _note_usage(self, message: dict) -> None:
+        usage = message.get("usage")
+        if isinstance(usage, dict):
+            total = sum(int(usage.get(k) or 0) for k in (
+                "input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens",
+                "output_tokens") if isinstance(usage.get(k), (int, float)))
+            if total:
+                self.transcript.context_tokens = total
+        model = message.get("model")
+        if isinstance(model, str) and model and not model.startswith("<"):
+            self.transcript.model = model
 
     def _add(self, kind: str, text: str, record: dict, key: str = "") -> ChatMessage:
         item = ChatMessage(kind=kind, text=text.strip(),

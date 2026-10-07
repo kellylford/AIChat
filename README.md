@@ -10,7 +10,12 @@ Claude desktop app has open, shows each one as a conversation you can arrow thro
 when a session answers, and switches the desktop app to a session when you need the real thing.
 It can also start sessions of its own, which you can read and reply to entirely from here.
 
-It runs on your existing Claude subscription. It never uses an API key and costs nothing extra.
+It runs on your existing Claude subscription, signed in to Claude Code, and never uses an API
+key. Its own sessions' turns are Claude Code turns in headless mode (`claude -p`). Anthropic's
+help article [Use the Claude Agent SDK with your Claude plan](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan)
+says those count against a monthly credit; past it, turns stop unless you've turned on extra
+usage, which is billed. View, Usage and Context (Ctrl+Shift+U) says where you
+stand. Reading the desktop app's sessions costs nothing.
 
 ## What it does
 
@@ -158,6 +163,16 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   Markdown is read as words: a code block is "Code block omitted", and headings and list items
   are read as separate sentences. Turn it off in Settings with "Read your own messages back when
   they're sent" (Alt+M), and you hear just "Sent. Hub probe is working."
+- **Usage and Context** (Ctrl+Shift+U, View menu) says how full the loaded session's context is
+  ("Context 62% full: 124,000 of 200,000 tokens"), from the token counts of Claude's latest
+  reply (the percentage only once the window's size is known: Claude Code reports it for a model
+  when one of TheClaudeHub's sessions runs a turn on it, and a session past 200,000 tokens has the
+  1,000,000 window), and how much of your plan's limits are used, as the latest turn reported them ("5-hour
+  limit 8% used, resets at 10:00 AM. Weekly limit 34% used, resets on Friday at 9:00 AM.").
+  It's said once, unasked, when the loaded session's context passes 80%, when a limit passes
+  90% or is reached, and when Claude Code compacts a conversation (the messages list shows
+  "Conversation compacted" too). A turn that fails on a usage limit says so in plain words,
+  with when it resets.
 - **Turn Status** (Ctrl+Shift+T) says how long Claude has been working on the current turn and what
   it last did. There's no time limit on a turn; Stop (Ctrl+Period) ends it, along with anything it
   started, such as a build.
@@ -283,6 +298,7 @@ shows it as plain text instead.
 | Anywhere | Ctrl+E | Export the session to a file |
 | Reply box | Ctrl+/ | Insert a slash command or skill |
 | Anywhere | Ctrl+Shift+F | Attach files or images to the next message |
+| Anywhere | Ctrl+Shift+U | Usage and context: how full the context is, and plan limits |
 | Anywhere | Alt+V, H | Show Sessions: choose which sessions are listed |
 | Anywhere | Ctrl+Shift+N | Continue the selected (or loaded) desktop app session here, as a copy |
 | Session list | F5 | Refresh the list now and put it in order |
@@ -333,8 +349,8 @@ TheClaudeHub drives its own sessions with the `claude` command in print (headles
 first message and `--resume <id>` for each reply, plus `--allowedTools` with any rules you chose
 "for this session". The message goes in on standard input as a stream-json message, and standard
 input stays open for the turn so TheClaudeHub can answer what Claude asks; it's closed when the
-turn's result arrives. That runs under the same login as the desktop app, which is why it costs
-nothing extra.
+turn's result arrives. That runs under the same login as the desktop app, never an API key; it
+uses the plan's Agent SDK credit, as any `claude -p` does.
 
 - It never uses `--bare`, which needs an API key.
 - It needs the native `claude.exe`. The npm install's `claude.cmd` is refused, because Windows runs

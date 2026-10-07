@@ -2476,3 +2476,67 @@ def test_shift_insert_pastes_through_the_same_path(frame, monkeypatch):
     event.SetShiftDown(True)
     frame._on_char_hook(event)
     assert pasted == [True]
+
+
+# -- usage and context (#19) -----------------------------------------------------------------
+
+
+def _limits(seven):
+    import time
+    return {"status": "allowed", "unifiedWindows": {
+        "five_hour": {"utilization": 0.1, "resetsAt": time.time() + 3600},
+        "seven_day": {"utilization": seven, "resetsAt": time.time() + 86400}}}
+
+
+def test_limits_are_kept_and_a_near_limit_is_said_once(frame, env):
+    frame._runners["own-1"] = FakeRunner([], "", "", None)
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("limits", data=_limits(0.5)))
+    assert frame._limits["unifiedWindows"]["seven_day"]["utilization"] == 0.5
+    said = len(env["spoken"])
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("limits", data=_limits(0.92)))
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("limits", data=_limits(0.93)))
+    warnings = [s for s in env["spoken"][said:] if "weekly limit" in s]
+    assert len(warnings) == 1 and warnings[0].startswith("You've used 92% of your weekly limit")
+
+
+def test_usage_and_context_command(frame, env):
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [user_text("Hi"), {
+        "type": "assistant", "uuid": "a1", "timestamp": "2026-10-07T03:00:00Z", "message": {
+            "role": "assistant", "id": "m1", "model": "claude-opus-5-5",
+            "content": [{"type": "text", "text": "Hello"}],
+            "usage": {"input_tokens": 100, "cache_read_input_tokens": 170_000,
+                      "output_tokens": 900}}}])
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    assert pump(lambda: frame._chat_loaded and frame._reader is not None)
+    frame.on_usage()
+    # The window isn't known yet: no percentage, and no warning.
+    assert env["feedback"][-1].startswith("Quiet one: Context: 171,000 tokens used; the "
+                                          "window's size isn't known")
+    assert not any("Context" in s for s in env["spoken"])
+    # A turn of ours reported this model's window: now there's a percentage,
+    # and over 80% it's said once, unasked.
+    frame._model_windows["claude-opus-5-5"] = 200_000
+    frame.on_usage()
+    assert env["feedback"][-1].startswith("Quiet one: Context 86% full: 171,000 of 200,000")
+    frame._check_context()
+    frame._check_context()
+    assert sum("Context 86% full" in s for s in env["spoken"]) == 1
+
+
+def test_a_usage_limit_failure_is_said_plainly(frame, env):
+    import time
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame._runners["own-1"] = FakeRunner([], "", "", None)
+    reset = int(time.time() + 3600)
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent(
+        "finished", text=f"Claude AI usage limit reached|{reset}", is_error=True))
+    assert "You've reached your Claude usage limit. It resets" in env["spoken"][-1]
+
+
+def test_compaction_is_said(frame, env):
+    frame._runners["own-1"] = FakeRunner([], "", "", None)
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("compacted"))
+    assert env["spoken"][-1] == ("Hub probe: Claude Code compacted the conversation to "
+                                 "free the context.")
