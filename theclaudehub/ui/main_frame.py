@@ -54,7 +54,8 @@ from ..claude_cli import (PERMISSION_MODES, PermissionRequest, ResumeRefused, Tu
                           describe_elapsed, model_label, new_session_id)
 from ..hub import Snapshot, collect, finished_turns, last_reply_from_tail
 from ..own_store import OwnSession, OwnSessionStore
-from ..sessions import IDLE, NEEDS_YOU, WORKING, SessionInfo
+from ..sessions import (IDLE, NEEDS_YOU, SORT_ORDERS, SORT_SPOKEN, WORKING,
+                        SessionInfo)
 from ..speech import SpeechSettings, default_options, list_speech_options, speaker
 from ..transcript import ASSISTANT, ERROR, PLAN, QUESTION, ChatMessage, TranscriptReader
 from ..updater import AVAILABLE, FAILED, CheckResult, UpdateService
@@ -166,6 +167,16 @@ class MainFrame(wx.Frame):
         self._item(view, "Go to &Sessions\tCtrl+1", lambda e: self.focus_sessions())
         self._item(view, "Go to &Messages\tCtrl+2", lambda e: self.focus_messages())
         self._item(view, "Go to &Reply\tCtrl+3", lambda e: self.focus_reply())
+        # Radio items: a screen reader says which order is checked.
+        sort_menu = wx.Menu()
+        self.sort_items = {}
+        for order, label in SORT_ORDERS:
+            item = sort_menu.AppendRadioItem(wx.ID_ANY, label)
+            item.Check(order == self.speech.session_order)
+            self.Bind(wx.EVT_MENU, lambda e, o=order: self.on_sort(o), item)
+            self.sort_items[order] = item
+        view.AppendSubMenu(sort_menu, "S&ort Sessions")
+        view.AppendSeparator()
         self._item(view, "Read &Full Message", lambda e: self.on_read_message())
         self.activity_item = view.AppendCheckItem(wx.ID_ANY, "Show &Tool Activity\tCtrl+T")
         self.Bind(wx.EVT_MENU, self.on_toggle_activity_menu, self.activity_item)
@@ -380,10 +391,11 @@ class MainFrame(wx.Frame):
         own = [OwnSession(**vars(s)) for s in self.store.all()]
         running = set(self._runners)
         waiting = self._waiting()
+        order = self.speech.session_order
 
         def work():
             try:
-                snap = collect(own, running, waiting=waiting)
+                snap = collect(own, running, waiting=waiting, order=order)
                 ended = finished_turns(self._previous_states, snap.sessions)
                 replies = {}
                 if not self._first_snapshot and self.speech.announce_all_sessions:
@@ -1434,6 +1446,21 @@ class MainFrame(wx.Frame):
         self._feedback("Stopping.")
 
     # ------------------------------------------------------- settings, about
+
+    def on_sort(self, order: str):
+        """View, Sort Sessions: put the list in ``order`` now, keeping you on
+        the same session, and remember the choice."""
+        if order == self.speech.session_order:
+            self._feedback(f"Sessions are already sorted {SORT_SPOKEN[order]}.")
+            return
+        self.speech.session_order = order
+        self.sort_items[order].Check(True)
+        try:
+            self.speech.save()
+        except OSError as exc:
+            self._status(f"Couldn't save the sort order: {exc}")
+        self.refresh_sessions(resort=True)
+        self._feedback(f"Sessions sorted {SORT_SPOKEN[order]}.")
 
     def on_settings(self, _event=None):
         options = self._speech_options or default_options()

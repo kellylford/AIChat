@@ -125,6 +125,9 @@ class SpeechSettings:
     #: Read Full Message opens a formatted page (headings, lists, tables) when
     #: Edge WebView2 is there, rather than the plain text box (issue #190).
     formatted_messages: bool = True
+    #: How the session list is sorted (View, Sort Sessions): a value from
+    #: ``sessions.SORT_VALUES``. Kept here so the choice survives a restart.
+    session_order: str = "status"
 
     @property
     def enabled(self) -> bool:
@@ -153,6 +156,9 @@ class SpeechSettings:
         preset = str(raw.get("rate_preset", "default"))
         settings.rate_preset = preset if preset in RATE_PRESET_LABELS else "default"
         settings.formatted_messages = bool(raw.get("formatted_messages", True))
+        from .sessions import SORT_STATUS, SORT_VALUES
+        order = str(raw.get("session_order", SORT_STATUS))
+        settings.session_order = order if order in SORT_VALUES else SORT_STATUS
         return settings
 
     def save(self, path: Optional[Path] = None) -> None:
