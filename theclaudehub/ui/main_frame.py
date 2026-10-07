@@ -61,13 +61,14 @@ from ..hub import Snapshot, collect, finished_turns, last_reply_from_tail
 from ..own_store import OwnSession, OwnSessionStore
 from ..groups import GroupStore
 from ..sessions import (GROUP_VIEW_PREFIX, IDLE, NEEDS_YOU, SORT_ORDERS, SORT_SPOKEN,
-                        VIEW_ALL, VIEWS, WORKING,
+                        VIEW_ALL, VIEW_NEEDS_YOU, VIEWS, WORKING,
                         SessionInfo, group_view, in_view, view_spoken)
 from ..speech import ANNOUNCE_FULL, NOTIFY_ALL, NOTIFY_OFF, SpeechSettings, default_options, list_speech_options, speaker
 from ..transcript import ASSISTANT, ERROR, PLAN, QUESTION, TOOL, ChatMessage, TranscriptReader
 from ..updater import AVAILABLE, FAILED, CheckResult, UpdateService
 from .a11y import set_accessible_name, set_list_items_accessible
 from .notify import Notifier
+from .statusbar import StatusParts
 from ..rendering import html_page, message_page
 from ..ui_text import shortcuts_html
 from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, ChangesDialog, CodeBlocksDialog, FormattedMessageDialog,
@@ -403,47 +404,70 @@ class MainFrame(wx.Frame):
             dialog.Destroy()
 
     def _build_status_bar(self):
-        """The status bar, reachable with F6 and Ctrl+9 (#10).
-
-        A native status bar can't take focus, so a read-only text box sits
-        over its one field, holding the same text, to read by line, word and
-        character. The field keeps its own text too, for the screen reader's
-        read-status-bar key. Being a child of the status bar, not of the
-        window's panel, the box is never in the Tab order.
-        """
+        """The status bar, reachable with F6 and Ctrl+9 (#10), in parts as
+        in QuickMail: what just happened, the loaded session, and buttons for
+        what you can act on (how full the context is, sessions that need
+        you, an update). Left and Right move between them; Tab leaves.
+        Information is read-only text with no caret; actions are buttons.
+        Being children of the status bar, not of the window's panel, none of
+        them is in the Tab order."""
         bar = self.CreateStatusBar(1)
-        self.status_text = wx.TextCtrl(bar, style=wx.TE_READONLY | wx.BORDER_NONE,
-                                       name="Status bar")
-        set_accessible_name(self.status_text, "Status bar")
-        self.status_text.SetBackgroundColour(bar.GetBackgroundColour())
-
-        def fit(event=None):
-            rect = bar.GetFieldRect(0)
-            # Short of the right edge, so the size grip stays visible.
-            grip = bar.GetSize().height
-            self.status_text.SetSize(rect.x + 2, rect.y + 2,
-                                     max(rect.width - 4 - grip, 20), rect.height - 4)
-            if event is not None:
-                event.Skip()
-        bar.Bind(wx.EVT_SIZE, fit)
-        fit()
+        self.status_parts = StatusParts(bar)
+        self.status_text = self.status_parts.add_text("message", "Status", -3,
+                                                      empty_text="Ready")
+        self.status_session = self.status_parts.add_text("session", "Loaded session", -2,
+                                                         empty_text="No session loaded")
+        self.status_parts.add_button("context", 150, self.on_usage)
+        self.status_parts.add_button("needs_you", 170, self._go_to_needs_you)
+        self.status_parts.add_button("update", 190, lambda: self.check_for_updates(True))
         self._status_latest = ""
-        self.status_text.Bind(wx.EVT_SET_FOCUS, self._on_status_focus)
 
     def _status(self, text: str):
         text = announce.status_text(text)
         self._status_latest = text
-        self.SetStatusText(text)
-        # Not while you're reading it: a new value would put the caret back at
-        # the start. It catches up the next time you arrive (and the native
-        # field, and the announcement, have it now).
-        if wx.Window.FindFocus() is not self.status_text:
-            self.status_text.ChangeValue(text)
+        self.status_parts.set("message", text)
 
-    def _on_status_focus(self, event):
-        if self.status_text.GetValue() != self._status_latest:
-            self.status_text.ChangeValue(self._status_latest)
-        event.Skip()
+    def _update_status_session(self):
+        """The loaded session's part: its name and what it's doing."""
+        info = self._open
+        if info is None:
+            text = ""
+        elif info.is_own and info.cli_session_id in self._runners:
+            text = f"{info.title}: {self.turn_status.GetLabel()}"
+        else:
+            state = info.state + (f", {info.detail}" if info.detail else "")
+            text = f"{info.title}: {state}"
+        self.status_parts.set("session", text)
+
+    def _update_status_context(self):
+        tokens, window = self._context(self._open)
+        text = ""
+        if self._open is not None and tokens and window:
+            text = f"Context {round(100 * usage.context_share(tokens, window))}% full"
+        self.status_parts.set("context", text)
+
+    def _update_status_needs_you(self):
+        count = sum(1 for s in self._snapshot.sessions
+                    if s.state == NEEDS_YOU and not s.archived)
+        text = "" if not count else (
+            "1 session needs you" if count == 1 else f"{count} sessions need you")
+        self.status_parts.set("needs_you", text)
+
+    def _go_to_needs_you(self):
+        """The status bar's "needs you" button: the first session that needs
+        you, selected in the session list (shown there if the view hid it)."""
+        waiting = [s for s in self._snapshot.sessions
+                   if s.state == NEEDS_YOU and not s.archived]
+        if not waiting:
+            self._feedback("No session needs you.")
+            return
+        key = next((k for k in self._list_keys if k in {s.key for s in waiting}), None)
+        if key is None:
+            self.on_view(VIEW_NEEDS_YOU)
+            key = next((k for k in self._list_keys if k in {s.key for s in waiting}), None)
+        if key is not None:
+            self.session_list.SetSelection(self._list_keys.index(key))
+        self.focus_sessions()
 
     def _say(self, text: Optional[str], force: bool = False):
         """Speak an announcement (per the level) and put it in the status bar."""
@@ -552,6 +576,7 @@ class MainFrame(wx.Frame):
             return
         self._snapshot = snap
         self._previous_states = {s.key: s.state for s in snap.sessions}
+        self._update_status_needs_you()
         first = self._first_snapshot
         if not first:
             for info in ended:
@@ -807,6 +832,9 @@ class MainFrame(wx.Frame):
                             "press Enter."])
         self.chat_list.SetSelection(0)
         self.session_heading.SetLabel("")
+        if hasattr(self, "status_parts"):
+            self._update_status_session()
+            self._update_status_context()
         self.own_reply.Hide()
         self.desktop_reply.Hide()
         self.session_view.Layout()
@@ -842,6 +870,7 @@ class MainFrame(wx.Frame):
         state = info.state + (f": {info.detail}" if info.detail else "")
         self.session_heading.SetLabel(f"{info.title}, {info.repo}, {state}. {kind}.")
         self._update_messages_label()
+        self._update_status_session()
 
     def _update_messages_label(self):
         """The chat list's label (its accessible name) carries the session's
@@ -1365,6 +1394,7 @@ class MainFrame(wx.Frame):
                 label = "Ready."
             if self.turn_status.GetLabel() != label:
                 self.turn_status.SetLabel(label)
+        self._update_status_session()
 
     def _context(self, info: Optional[SessionInfo]):
         """(tokens, window) for a session, from its transcript as read."""
@@ -1522,6 +1552,7 @@ class MainFrame(wx.Frame):
 
     def _check_context(self):
         """Say once when the loaded session's context passes 80%."""
+        self._update_status_context()
         info = self._open
         tokens, window = self._context(info)
         if info is None:
@@ -2501,8 +2532,10 @@ class MainFrame(wx.Frame):
             elif result.status == FAILED:
                 self._status(text)
             return
+        self.status_parts.set("update", f"Update available: {result.version}")
         if not manual:
-            self._say(f"{text} Help, Check for Updates installs it.")
+            self._say(f"{text} Help, Check for Updates installs it, or the Update "
+                      "button on the status bar.")
             return
         if self._runners:
             self._say(f"{text} It can be installed once Claude finishes; use Help, "
@@ -2760,7 +2793,13 @@ class MainFrame(wx.Frame):
         if key == wx.WXK_F6 and not ctrl and not event.AltDown():
             self.cycle_focus(forward=not event.ShiftDown())
             return
-        if key == wx.WXK_TAB and not ctrl and focus is self.status_text:
+        if self.status_parts.contains(focus) and not ctrl and key in (
+                wx.WXK_LEFT, wx.WXK_RIGHT, wx.WXK_HOME, wx.WXK_END):
+            # Between the status bar's parts, as in QuickMail.
+            self.status_parts.move(focus, -1 if key in (wx.WXK_LEFT, wx.WXK_HOME) else 1,
+                                   to_end=key in (wx.WXK_HOME, wx.WXK_END))
+            return
+        if key == wx.WXK_TAB and not ctrl and self.status_parts.contains(focus):
             # The status bar isn't in the panel's Tab order, so wx would leave
             # Tab nowhere to go. It sits after everything else: Tab wraps to
             # the session list, Shift+Tab goes back to the last control.
@@ -2809,7 +2848,7 @@ class MainFrame(wx.Frame):
             return self.PANE_SESSIONS
         if focus is self.chat_list:
             return self.PANE_MESSAGES
-        if focus is self.status_text:
+        if self.status_parts.contains(focus):
             return self.PANE_STATUS
         # Anything else in the window comes after the messages in Tab order:
         # the reply area, its buttons, Show tool activity, New and Refresh.
@@ -2834,9 +2873,8 @@ class MainFrame(wx.Frame):
             self.focus_status()
 
     def focus_status(self):
-        """Ctrl+9, and the last F6 stop: the status bar's text, read-only."""
-        self.status_text.SetFocus()
-        self.status_text.SetInsertionPoint(0)
+        """Ctrl+9, and the last F6 stop: the status bar's first part."""
+        self.status_parts.focus_first()
 
     def _is_in_session_view(self, window) -> bool:
         """True for the messages list, the reply area and the controls after
