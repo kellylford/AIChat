@@ -1595,18 +1595,23 @@ class MainFrame(wx.Frame):
         """Session, Change Model: the model for this session's next turns. A
         session's model goes with every turn, so it can change at any time."""
         info = self._selected_session()
-        if self._open is not None and wx.Window.FindFocus() is not self.session_list:
-            info = self._open
-        if info is None or not info.is_own:
-            self._feedback("Choose one of The Chat Place's sessions first: a desktop app "
-                           "session's model is set in the desktop app.")
+        if info is None:
+            self._feedback("No session selected.")
+            return
+        if not info.is_own:
+            self._feedback(f"{info.title} is a desktop app session: its model is set in the "
+                           "desktop app.")
             return
         own = self.store.get(info.cli_session_id)
         if own is None:
+            self._feedback(f"Couldn't find {info.title} in The Chat Place's sessions.")
             return
         values = [value for value, _label in MODELS]
         labels = [f"{label} (now)" if value == own.model else label for value, label in MODELS]
-        index = self._choose("Change Model", f"Model for {info.title}:", labels)
+        current = values.index(own.model) if own.model in values else None
+        index = self._choose("Change Model",
+                             f"Model for {info.title}, now {model_label(own.model)}:", labels,
+                             selection=current)
         if index is None or values[index] == own.model:
             return
         if not self._store_write(self.store.update, info.cli_session_id, model=values[index]):
@@ -2182,8 +2187,9 @@ class MainFrame(wx.Frame):
             # Text to give back, oldest first: a first message that never
             # reached Claude, then anything queued behind it.
             unsent = []
-            if (event.kind == "failed" and runner is not None
-                    and not runner.session_started and not runner.cancelled):
+            if (event.kind == "failed" and runner is not None and not runner.cancelled
+                    and (not runner.session_started
+                         or getattr(runner, "stopped_before_answer", False))):
                 typed = getattr(runner, "typed", runner.prompt)
                 if typed:
                     unsent.append(typed)
@@ -2539,10 +2545,13 @@ class MainFrame(wx.Frame):
             self._feedback("No session selected.")
         return info
 
-    def _choose(self, title: str, prompt: str, choices: List[str]) -> Optional[int]:
+    def _choose(self, title: str, prompt: str, choices: List[str],
+                selection: Optional[int] = None) -> Optional[int]:
         """A standard single-choice list (wx's own dialog, which screen
         readers handle well). The chosen index, or None."""
         dialog = wx.SingleChoiceDialog(self, prompt, title, choices)
+        if selection is not None:
+            dialog.SetSelection(selection)  # on the current choice, not the first
         try:
             if dialog.ShowModal() != wx.ID_OK:
                 return None

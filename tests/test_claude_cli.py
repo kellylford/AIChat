@@ -786,8 +786,37 @@ def test_a_turn_on_an_unchosen_fable_is_stopped():
     from thechatplace.claude_cli import chosen_model, fable_problem
     assert chosen_model(["claude", "-p", "--model", "opus"]) == "opus"
     assert chosen_model(["claude", "-p"]) == ""
-    assert fable_problem("claude-fable-5-1", "").startswith("Claude Code was about to use Fable")
+    assert fable_problem("claude-fable-5-1", "") == (
+        "Claude Code would have used Fable, Claude Code's default model. Some plans bill Fable "
+        "to usage credits, so The Chat Place didn't send your message. Choose another model "
+        "with Session, Change Model, then send again.")
+    assert "instead of Opus, the model this session chose" in fable_problem(
+        "claude-fable-5-1", "opus")
+    assert "as soon as it started" in fable_problem("claude-fable-5-1", "", sent=True)
     assert fable_problem("claude-fable-5-1", "opus")  # a fallback to Fable: stopped too
     assert fable_problem("claude-fable-5-1", "claude-fable-5-1") is None  # chosen
     assert fable_problem("claude-opus-5-5", "") is None
     assert fable_problem("", "") is None
+
+
+def test_the_message_waits_for_initialize_and_is_never_sent_to_a_fable_default(tmp_path):
+    from thechatplace.claude_cli import INIT_REQUEST_ID
+    answer = ev(type="control_response", response={
+        "subtype": "success", "request_id": INIT_REQUEST_ID,
+        "response": {"commands": [], "models": [
+            {"value": "default", "resolvedModel": "claude-fable-5-1"},
+            {"value": "opus", "resolvedModel": "claude-opus-5-5"}]}})
+    process = FakeProcess([answer, ev(type="system", subtype="init", session_id="s1",
+                                      apiKeySource="none", model="claude-fable-5-1")])
+    runner, events, _ = run_turn(process, tmp_path)
+    assert process.killed and runner.stopped_before_answer
+    assert [e.kind for e in events] == ["failed"]
+    assert "didn't send your message" in events[0].text
+    assert b'"type": "user"' not in process.written  # the message never went
+    # Opus chosen: initialize answered, then the message goes.
+    process = FakeProcess([answer, ev(type="system", subtype="init", session_id="s1",
+                                      apiKeySource="none", model="claude-opus-5-5"),
+                           ev(type="result", subtype="success", result="ok")])
+    _runner, events, _ = run_turn(process, tmp_path, command=["claude", "-p", "--model", "opus"])
+    assert events[-1].kind == "finished"
+    assert b'"type": "user"' in process.written

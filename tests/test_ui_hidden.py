@@ -3239,16 +3239,29 @@ def test_change_model_for_the_next_turns(frame, env, monkeypatch):
     monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.chat_list))
     offered = []
 
-    def choose(title, prompt, choices):
-        offered.append(choices)
+    def choose(title, prompt, choices, selection=None):
+        offered.append((choices, selection, prompt))
         return [c.split(" (")[0] for c in choices].index("Sonnet")
     monkeypatch.setattr(frame, "_choose", choose)
     frame.on_change_model()
     assert frame.store.get("own-1").model == "sonnet"
     assert env["feedback"][-1] == "Hub probe now uses Sonnet, from its next turn."
-    assert "Sonnet" in offered[0] and any(c.endswith("(now)") for c in offered[0])
+    choices, selection, prompt = offered[0]
+    assert "Sonnet" in choices and choices[selection].endswith("(now)")
+    assert prompt.startswith("Model for Hub probe, now ")
     # A desktop app session's model isn't The Chat Place's to change.
     select(frame, "Quiet one")
     frame.on_open_session()
     frame.on_change_model()
-    assert env["feedback"][-1].startswith("Choose one of The Chat Place's sessions first")
+    assert env["feedback"][-1] == ("Quiet one is a desktop app session: its model is set "
+                                   "in the desktop app.")
+
+
+def test_a_turn_stopped_before_claude_answered_gives_the_message_back(frame, env, fake_runner):
+    _start(frame, fake_runner, text="Fix the build")
+    runner = fake_runner.instances[-1]
+    runner.session_started = True  # init came, then the stop
+    runner.stopped_before_answer = True
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent(
+        "failed", text="Claude Code would have used Fable…", is_error=True))
+    assert frame.reply_text.GetValue() == "Fix the build"

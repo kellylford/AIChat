@@ -20,6 +20,17 @@ prompt = None
 for raw in iter(sys.stdin.buffer.readline, b""):
     message = json.loads(raw.decode("utf-8"))
     received.append(message)
+    if message.get("type") == "control_request" \
+            and message.get("request", {}).get("subtype") == "initialize":
+        # As the real CLI does, at once, before any message.
+        sys.stdout.buffer.write(json.dumps({"type": "control_response", "response": {
+            "subtype": "success", "request_id": message.get("request_id"),
+            "response": {"commands": [], "models": [
+                {"value": "default", "resolvedModel":
+                    os.environ.get("FAKE_CLAUDE_DEFAULT", "claude-opus-5-5")},
+                {"value": "opus", "resolvedModel": "claude-opus-5-5"}]}}}).encode("utf-8")
+            + b"\n")
+        sys.stdout.buffer.flush()
     if message.get("type") == "user":
         prompt = message["message"]["content"]
         break
