@@ -618,6 +618,11 @@ class StreamParser:
             if isinstance(info, dict) and info:
                 return [TurnEvent("limits", session_id=self.session_id, data=info)]
             return []
+        if etype == "system" and subtype == "session_state_changed":
+            # "idle" is Claude Code's own turn-over signal: it comes after the
+            # last result, background agents' included (#76).
+            return [TurnEvent("state", text=str(event.get("state") or ""),
+                              session_id=self.session_id)]
         if etype == "system" and subtype == "compact_boundary":
             return [TurnEvent("compacted", session_id=self.session_id)]
         if etype == "system" and subtype == "init":
@@ -782,7 +787,10 @@ class TurnRunner:
         self.images = list(images or [])
         self.on_event = on_event
         self._popen = popen
-        self._env = env if env is not None else child_environment()
+        self._env = dict(env if env is not None else child_environment())
+        # Ask for session_state_changed, so the turn ends when Claude Code says
+        # it's idle, not at the first result (#76).
+        self._env["CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS"] = "1"
         self._process: Optional[subprocess.Popen] = None
         self._tree = platform_paths.ProcessTree()
         self._lock = threading.Lock()
@@ -939,6 +947,7 @@ class TurnRunner:
                     pass  # the process died early; its exit code tells us why
             chosen = chosen_model(self.command)
             message_sent = False
+            states_seen = False
             sent_lock = threading.Lock()
 
             def send_message() -> bool:
@@ -999,10 +1008,20 @@ class TurnRunner:
                         with self._lock:
                             self.pending[event.request.request_id] = event.request
                         self.last_activity = f"waiting for you: {event.request.summary()}"
+                    if event.kind == "state":
+                        states_seen = True
+                        if event.text == "idle" and final is not None:
+                            # Really over: closing stdin lets the CLI exit.
+                            self._close_stdin()
+                        continue
                     if event.kind == "finished":
+                        # The latest result is the turn's. With state events,
+                        # more can follow (a background agent's notification
+                        # runs as its own result), so the turn waits for idle;
+                        # an older Claude Code without them ends here.
                         final = event
-                        # The turn is over: closing stdin lets the CLI exit.
-                        self._close_stdin()
+                        if not states_seen:
+                            self._close_stdin()
                     else:
                         self._emit(event)
                 self._refuse_unsupported()

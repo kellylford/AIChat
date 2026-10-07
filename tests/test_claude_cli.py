@@ -324,7 +324,7 @@ def test_runner_sends_prompt_on_stdin_and_reports_events(tmp_path):
     assert sent[1]["type"] == "user"
     assert sent[1]["message"] == {"role": "user", "content": "Hello -p --bare"}
     assert captured["cwd"] == str(tmp_path)
-    assert captured["env"] == {"PATH": "x"}
+    assert captured["env"] == {"PATH": "x", "CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS": "1"}
     assert "encoding" not in captured and "text" not in captured  # byte pipes
     assert [e.kind for e in events] == ["started", "text", "finished"]
     assert events[-1].session_id == "s1"
@@ -833,3 +833,34 @@ def test_an_old_claude_code_is_told_to_update():
     assert cli.exit_message(3, "boom") == \
         "Claude exited without finishing the turn (exit code 3). boom"
     assert cli.exit_message(3, "") == "Claude exited without finishing the turn (exit code 3)."
+
+
+def test_the_turn_ends_when_claude_code_says_idle_not_at_the_first_result(tmp_path):
+    process = FakeProcess([
+        ev(type="system", subtype="session_state_changed", state="running"),
+        ev(type="system", subtype="init", session_id="s1", apiKeySource="none"),
+        # A background agent's notification answered first, as its own result.
+        ev(type="result", subtype="success", result="noted"),
+        ev(type="assistant", message={"content": [{"type": "text", "text": "Real reply."}]}),
+        ev(type="control_request", request_id="q1", request={
+            "subtype": "can_use_tool", "tool_name": "Bash", "input": {"command": "ls"},
+            "tool_use_id": "t1"}),
+        ev(type="result", subtype="success", result="Real reply."),
+        ev(type="system", subtype="session_state_changed", state="idle"),
+    ])
+    runner, events, captured = run_turn(process, tmp_path)
+    kinds = [e.kind for e in events]
+    assert kinds.count("finished") == 1 and kinds[-1] == "finished"
+    assert events[-1].text == "Real reply."
+    assert "permission" in kinds  # the question after the first result still came
+    assert "state" not in kinds
+    assert captured["env"]["CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS"] == "1"
+
+
+def test_an_older_claude_code_without_state_events_ends_at_the_result(tmp_path):
+    process = FakeProcess([
+        ev(type="system", subtype="init", session_id="s1", apiKeySource="none"),
+        ev(type="result", subtype="success", result="done"),
+    ])
+    _runner, events, _ = run_turn(process, tmp_path)
+    assert [e.kind for e in events][-1] == "finished"
