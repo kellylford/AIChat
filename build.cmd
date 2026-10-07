@@ -16,13 +16,18 @@ REM Description Toolkit's build scripts: cmd loses the exit code of an
 REM "exit /b" inside a nested block.
 REM ============================================================================
 setlocal
+REM The output folder is read before the cd, so a relative one means relative
+REM to where you ran build.cmd, not this folder.
+set "OUTPUT_DIR="
+if not "%~1"=="" set "OUTPUT_DIR=%~f1"
 cd /d "%~dp0"
 
 REM Pinned to what the release workflow uses, so a local build matches a CI one.
+REM Differences: the workflow uses Python 3.12 and needs release notes for the
+REM version; here any Python 3.11+ works and release notes are optional.
 set "PYINSTALLER_VERSION=6.22.3"
 set "VPK_VERSION=1.2.161"
 set "CHANNEL=theclaudehub"
-set "OUTPUT_DIR=%~1"
 set "PY=%~dp0.venv\Scripts\python.exe"
 
 echo ========================================================================
@@ -78,22 +83,28 @@ echo.
 echo Smoke test of the built app...
 if exist smoke-local.json del smoke-local.json
 start "" /wait "dist\TheClaudeHub\TheClaudeHub.exe" --smoke-test smoke-local.json
-if errorlevel 1 goto :smoke_failed
+REM Any exit code but 0 fails, including a crash's negative one, which
+REM "if errorlevel 1" would let through.
+if not "%ERRORLEVEL%"=="0" goto :smoke_failed
+if not exist smoke-local.json goto :smoke_failed
 type smoke-local.json
 echo.
 
 REM ------------------------------------------------- installer and zip ----
-set "VPK=vpk"
-where vpk >nul 2>nul
-if not errorlevel 1 goto :have_vpk
+REM vpk must match the velopack library the app is built with, so it's put at
+REM the pinned version whether or not it's already installed.
 set "VPK=%USERPROFILE%\.dotnet\tools\vpk.exe"
-if exist "%VPK%" goto :have_vpk
 where dotnet >nul 2>nul
-if errorlevel 1 goto :no_vpk
-echo Installing the Velopack tool (vpk)...
-dotnet tool install -g vpk --version %VPK_VERSION%
+if errorlevel 1 goto :vpk_without_dotnet
+echo Making sure the Velopack tool (vpk) is version %VPK_VERSION%...
+dotnet tool update -g vpk --version %VPK_VERSION% >nul
 if errorlevel 1 goto :failed
-if not exist "%VPK%" goto :no_vpk
+if exist "%VPK%" goto :have_vpk
+goto :no_vpk
+:vpk_without_dotnet
+REM No .NET SDK: use a vpk that's already there, at whatever version.
+if exist "%VPK%" goto :have_vpk
+goto :no_vpk
 :have_vpk
 
 echo.
@@ -164,6 +175,11 @@ set "RESULT=1"
 
 :end
 REM Started by double-clicking: keep the window open to read the result.
-echo %cmdcmdline% | find /i "%~0" >nul
-if not errorlevel 1 pause
+REM Explorer starts it as  cmd /c ""<full path>" " ; a prompt, PowerShell,
+REM another script or CI doesn't, and never waits on a key here.
+if defined CI goto :exit
+set "LAUNCH=%cmdcmdline%"
+set "LAUNCH=%LAUNCH:"=%"
+if /i "%LAUNCH%"=="%ComSpec% /c %~f0 " pause
+:exit
 endlocal & exit /b %RESULT%
