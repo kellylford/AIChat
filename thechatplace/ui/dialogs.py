@@ -201,8 +201,9 @@ class SettingsDialog(wx.Dialog):
         outer.Add(self.own_messages, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 
         # What you read, apart from what's spoken on its own.
+        quiet = wx.LogNull()  # siblings on purpose (see QuestionDialog)
         messages = wx.StaticBoxSizer(wx.VERTICAL, self, "Reading messages")
-        box = messages.GetStaticBox()
+        box = self  # siblings after the group box, so its label is read (see QuestionDialog)
         self.formatted = wx.CheckBox(
             box, label="Open full messages as a formatted &page (headings, lists and "
                        "tables), not plain text")
@@ -213,6 +214,7 @@ class SettingsDialog(wx.Dialog):
                        "(otherwise just its first line)")
         self.whole_in_list.SetValue(speech.full_messages_in_list)
         messages.Add(self.whole_in_list, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 6)
+        del quiet
         outer.Add(messages, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 
         grid = wx.FlexGridSizer(rows=2, cols=2, vgap=8, hgap=8)
@@ -533,12 +535,18 @@ class QuestionDialog(wx.Dialog):
         panel.SetScrollRate(0, 20)
         sizer = wx.BoxSizer(wx.VERTICAL)
         first = None
+        # wx logs that a box's controls "should be" its children: on purpose
+        # they aren't (see below), so that note is kept out of the log.
+        quiet = wx.LogNull()
         for number, question in enumerate(self._questions, start=1):
             header = str(question.get("header") or f"Question {number}")
-            # The question is the group's label: a screen reader reads it on
-            # arriving at the first option, which a text above it is not.
+            # The question is the group's label. The options are the group
+            # box's siblings, after it and inside its rectangle, as in a
+            # classic Windows dialog: that is how JAWS and NVDA find a
+            # group's label when Tab moves into it. As the box's children,
+            # only the first question was read (the one focus starts in).
             box = wx.StaticBoxSizer(wx.VERTICAL, panel, f"{header}: {question['question']}")
-            parent_window = box.GetStaticBox()
+            parent_window = panel
             options = [o for o in question.get("options") or [] if isinstance(o, dict)]
             multi = bool(question.get("multiSelect"))
             controls = []
@@ -573,6 +581,7 @@ class QuestionDialog(wx.Dialog):
             self._controls.append(("multi" if multi else "single", controls, other_text))
             sizer.Add(box, 0, wx.EXPAND | wx.ALL, 6)
             first = first or other
+        del quiet
         panel.SetSizer(sizer)
         outer.Add(panel, 1, wx.EXPAND | wx.ALL, 4)
 
