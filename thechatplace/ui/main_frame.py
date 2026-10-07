@@ -21,8 +21,8 @@ Accessibility decisions, and why
 * **The full message opens from the list** (Enter, or the context menu) in a
   read-only multiline text box in a dialog, to read by line, word and
   character. Escape closes it, back on the same message.
-* **Mnemonics stay off the menu bar's letters.** Menus are Session, View and
-  Help, so no control on a page uses Alt+S, Alt+V or Alt+H (a panel mnemonic
+* **Mnemonics stay off the menu bar's letters.** Menus are File, View and
+  Help, so no control on a page uses Alt+F, Alt+V or Alt+H (a panel mnemonic
   would take the letter away from the menu).
 * **Refreshes do not move the reader.** The list is only rewritten where it
   changed, and the selection follows the same session, not the same row.
@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 import threading
 import time
@@ -62,6 +63,7 @@ from ..claude_cli import (MODELS, PERMISSION_MODES, PermissionRequest, ResumeRef
 from ..hub import Snapshot, collect, finished_turns, last_reply_from_tail
 from ..own_store import OwnSession, OwnSessionStore
 from ..groups import GroupStore
+from ..hidden import HiddenStore
 from ..sessions import (GROUP_VIEW_PREFIX, IDLE, NEEDS_YOU, SORT_ORDERS, SORT_SPOKEN,
                         VIEW_ALL, VIEW_NEEDS_YOU, VIEWS, WORKING,
                         SessionInfo, group_view, in_view, view_spoken)
@@ -107,6 +109,7 @@ class MainFrame(wx.Frame):
         super().__init__(None, title=APP_NAME, size=_fitting_size(1000, 720))
         self.store = store or OwnSessionStore()
         self.groups = GroupStore()
+        self.hidden = HiddenStore()
         self.updates = updates or UpdateService(__version__)
         self._update_busy = False
         self.speech = SpeechSettings.load()
@@ -188,6 +191,9 @@ class MainFrame(wx.Frame):
         if self.groups.load_error:
             wx.CallAfter(wx.MessageBox, self.groups.load_error, APP_NAME,
                          wx.OK | wx.ICON_WARNING, self)
+        if self.hidden.load_error:
+            wx.CallAfter(wx.MessageBox, self.hidden.load_error, APP_NAME,
+                         wx.OK | wx.ICON_WARNING, self)
         self.refresh_sessions()
         self._check_claude_version()
         # After the session list has been read, like the update check.
@@ -216,7 +222,10 @@ class MainFrame(wx.Frame):
         self._item(session, "Rem&ote Control...", lambda e: self.on_remote_control())
         self._item(session, "&Refresh\tF5",
                    lambda e: self.refresh_sessions(force=True, resort=True))
-        self._item(session, "&Forget Chat Place Session...", self.on_forget)
+        self._item(session, "H&ide Session\tDelete", lambda e: self.on_hide())
+        self._item(session, "&Bring Back Session", lambda e: self.on_unhide())
+        self._item(session, "Delete Session &Permanently...",
+                   lambda e: self.on_delete_permanently())
         self._item(session, "&Export Session...\tCtrl+E", lambda e: self.on_export())
         self._item(session, "Insert Command or S&kill...\tCtrl+/",
                    lambda e: self.on_insert_command())
@@ -229,7 +238,7 @@ class MainFrame(wx.Frame):
         self._item(session, "&Settings...\tCtrl+,", self.on_settings, wx.ID_PREFERENCES)
         session.AppendSeparator()
         self._item(session, "E&xit", lambda e: self.Close(), wx.ID_EXIT)
-        bar.Append(session, "&Session")
+        bar.Append(session, "&File")
 
         view = wx.Menu()
         self._item(view, "Go to &Sessions\tCtrl+1", lambda e: self.focus_sessions())
@@ -338,8 +347,8 @@ class MainFrame(wx.Frame):
         self.stop_btn = wx.Button(self.own_reply, label="Sto&p")
         # After Stop, so Tab from the reply box is still Send, then Stop (#175).
         self.commands_btn = wx.Button(self.own_reply, label="C&ommands...")
-        # Alt+F: Alt+A is Show tool activity, and S, V, H are the menus'.
-        self.attach_btn = wx.Button(self.own_reply, label="Attach &Files...")
+        # Alt+T: Alt+A is Show tool activity, and F, V, H are the menus'.
+        self.attach_btn = wx.Button(self.own_reply, label="A&ttach Files...")
         orow.Add(self.send_btn, 0, wx.RIGHT, 6)
         orow.Add(self.stop_btn, 0, wx.RIGHT, 6)
         orow.Add(self.commands_btn, 0, wx.RIGHT, 6)
@@ -403,7 +412,7 @@ class MainFrame(wx.Frame):
         self.session_view = root
 
         # Session-list commands come last in the Tab order; all of them are
-        # also on the Session menu with shortcuts.
+        # also on the File menu with shortcuts.
         row = wx.BoxSizer(wx.HORIZONTAL)
         self.new_btn = new_btn = wx.Button(root, label="&New Session...")
         self.refresh_btn = refresh_btn = wx.Button(root, label="&Refresh")
@@ -474,7 +483,7 @@ class MainFrame(wx.Frame):
 
     def _update_status_needs_you(self):
         count = sum(1 for s in self._snapshot.sessions
-                    if s.state == NEEDS_YOU and not s.archived)
+                    if s.state == NEEDS_YOU and not s.archived and not s.hidden)
         text = "" if not count else (
             "1 session needs you" if count == 1 else f"{count} sessions need you")
         self.status_parts.set("needs_you", text)
@@ -483,7 +492,7 @@ class MainFrame(wx.Frame):
         """The status bar's "needs you" button: the first session that needs
         you, selected in the session list (shown there if the view hid it)."""
         waiting = [s for s in self._snapshot.sessions
-                   if s.state == NEEDS_YOU and not s.archived]
+                   if s.state == NEEDS_YOU and not s.archived and not s.hidden]
         if not waiting:
             self._feedback("No session needs you.")
             return
@@ -605,6 +614,11 @@ class MainFrame(wx.Frame):
         previous_desktop_groups = self._snapshot.desktop_groups
         self._snapshot = snap
         self._previous_states = {s.key: s.state for s in snap.sessions}
+        # Hidden sessions (File, Hide Session) are out of everything here:
+        # counts, announcements and notifications as well as the list.
+        for info in snap.sessions:
+            info.hidden = info.key in self.hidden
+        ended = [info for info in ended if info.key not in self.hidden]
         if not snap.desktop_groups.read_ok:
             snap.desktop_groups = previous_desktop_groups  # keep the last good read
         if self._group_names() != getattr(self, "_menu_group_names", None):
@@ -673,7 +687,7 @@ class MainFrame(wx.Frame):
                 self._open = current
                 self._update_heading()
         if first or force:
-            current = [s for s in snap.sessions if not s.archived]
+            current = [s for s in snap.sessions if not s.archived and not s.hidden]
             waiting = sum(1 for s in current if s.state == NEEDS_YOU)
             working = sum(1 for s in current if s.state == WORKING)
             text = (f"{len(current)} sessions: {waiting} need you, "
@@ -760,43 +774,109 @@ class MainFrame(wx.Frame):
         its place, or the new last row."""
         return min(max(index, 0), count - 1)
 
-    def on_forget(self, _event):
+    def on_hide(self):
+        """File, Hide Session (Delete): out of the list, into View, Show
+        Sessions, Hidden. Nothing about the session changes; File, Bring Back
+        Session shows it again."""
+        info = self._selected_session()
+        if info is None:
+            self._feedback("No session selected.")
+            return
+        if info.key in self.hidden:
+            self._feedback(f"{info.title} is already hidden. File, Bring Back Session "
+                           "returns it to the list.")
+            return
+        if info.is_own and info.cli_session_id in self._runners:
+            self._feedback("A turn is running in that session. Stop it first.")
+            return
+        try:
+            self.hidden.hide(info.key)
+        except OSError as exc:
+            wx.MessageBox(f"Couldn't save your hidden sessions: {exc}", APP_NAME,
+                          wx.OK | wx.ICON_WARNING, self)
+            return
+        self._leave_list(info)
+        self._feedback(f"Hid {info.title}. View, Show Sessions, Hidden lists it; File, Bring "
+                       "Back Session shows it again.")
+
+    def on_unhide(self):
+        """File, Bring Back Session: a hidden session back in the list."""
+        info = self._selected_session()
+        if info is None:
+            self._feedback("No session selected.")
+            return
+        if info.key not in self.hidden:
+            self._feedback(f"{info.title} isn't hidden.")
+            return
+        try:
+            self.hidden.show(info.key)
+        except OSError as exc:
+            wx.MessageBox(f"Couldn't save your hidden sessions: {exc}", APP_NAME,
+                          wx.OK | wx.ICON_WARNING, self)
+            return
+        self._feedback(f"{info.title} is back in the list.")
+        self._refresh_list_in_place()
+
+    def on_delete_permanently(self):
+        """File, Delete Session Permanently: one of The Chat Place's hidden
+        sessions, gone for good, its Claude Code transcript with it."""
         info = self._selected_session()
         if info is None:
             self._feedback("No session selected.")
             return
         if not info.is_own:
-            self._feedback("Only sessions The Chat Place started can be forgotten. "
-                           "Desktop app sessions are managed in Claude.")
+            self._feedback(f"{info.title} is a desktop app session: delete it in the desktop "
+                           "app. Here it can only be hidden.")
+            return
+        if info.key not in self.hidden:
+            self._feedback(f"Hide {info.title} first (Delete); then it can be deleted "
+                           "permanently from View, Show Sessions, Hidden.")
             return
         if info.cli_session_id in self._runners:
             self._feedback("A turn is running in that session. Stop it first.")
             return
         answer = wx.MessageBox(
-            f"Remove \"{info.title}\" from The Chat Place's list? Its transcript stays on "
-            "disk; this only stops The Chat Place listing it.",
-            "Forget Session", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION, self)
+            f"Delete \"{info.title}\" permanently? Its conversation (Claude Code's "
+            "transcript) is deleted from this PC and can't be brought back.",
+            "Delete Session Permanently", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING, self)
         if answer != wx.YES:
             return
+        path = platform_paths.transcript_path(info.cwd, info.cli_session_id)
+        # Out of The Chat Place first: if that can't be saved, nothing is lost.
         if not self._store_write(self.store.remove, info.cli_session_id):
             return
         try:
+            if path is not None and path.exists():
+                path.unlink()
+            folder = path.with_suffix("") if path is not None else None
+            if folder is not None and folder.is_dir():
+                shutil.rmtree(folder)  # its subagents' transcripts and tool output
+        except OSError as exc:
+            wx.MessageBox(f"{info.title} is gone from The Chat Place, but its files "
+                          f"couldn't all be deleted ({path}): {exc}", APP_NAME,
+                          wx.OK | wx.ICON_WARNING, self)
+        try:
             self.groups.forget(info.key)
-            self._attachments.pop(info.cli_session_id, None)
+            self.hidden.show(info.key)
         except OSError:
-            pass  # a gone session in a group is harmless; it isn't listed
+            pass  # a deleted session in a group or the hidden list is harmless
+        self._attachments.pop(info.cli_session_id, None)
+        self._leave_list(info)
+        self._feedback(f"Deleted {info.title} permanently.")
+
+    def _leave_list(self, info: SessionInfo):
+        """``info`` leaves the list: the neighbour moves into its row, and if
+        it was loaded, nothing is."""
         if self._open is not None and self._open.key == info.key:
             self.unload_session()
             # Its messages and reply box are gone: don't leave focus on them.
             self.session_list.SetFocus()
-        # Keep the place: the neighbour moves into the forgotten row.
         index = self._list_keys.index(info.key) if info.key in self._list_keys else -1
         if index >= 0:
             self.session_list.Delete(index)
             del self._list_keys[index]
             if self._list_keys:
                 self.session_list.SetSelection(min(index, len(self._list_keys) - 1))
-        self._feedback(f"Forgot {info.title}.")
         self.refresh_sessions()
 
     # ----------------------------------------------------------- session view
@@ -1359,7 +1439,7 @@ class MainFrame(wx.Frame):
         return None, path
 
     def on_export(self):
-        """Session, Export Session (Ctrl+E): save the conversation as
+        """File, Export Session (Ctrl+E): save the conversation as
         Markdown, a web page or plain text. Reading a long transcript and
         rendering it happen in the background, so the window never stops
         answering the screen reader."""
@@ -1614,7 +1694,7 @@ class MainFrame(wx.Frame):
         return self.speech.remote_control
 
     def on_remote_control(self):
-        """Session, Remote Control (#72): on, off, or as Settings says, for
+        """File, Remote Control (#72): on, off, or as Settings says, for
         the selected session from its next turn. While a turn runs, the
         session can be reached from claude.ai and your other devices."""
         info = self._selected_session()
@@ -1673,7 +1753,7 @@ class MainFrame(wx.Frame):
         self._store_write(self.store.update, session_id, bridge_session_id=bridge,
                           remote_url=url)
         if first:
-            self._say(f"{title} is on Remote Control. Session, Remote Control copies its "
+            self._say(f"{title} is on Remote Control. File, Remote Control copies its "
                       "claude.ai address." if url else f"{title} is on Remote Control.")
 
     @staticmethod
@@ -1681,7 +1761,7 @@ class MainFrame(wx.Frame):
         return "1 message queued." if count == 1 else f"{count} messages queued."
 
     def on_change_model(self):
-        """Session, Change Model: the model for this session's next turns. A
+        """File, Change Model: the model for this session's next turns. A
         session's model goes with every turn, so it can change at any time."""
         info = self._selected_session()
         if info is None:
@@ -2193,6 +2273,10 @@ class MainFrame(wx.Frame):
                     self.groups.rename_key(f"own:{session_id}", f"own:{reported}")
                 except OSError:
                     pass  # its groups lose it; nothing else does
+                try:
+                    self.hidden.rename_key(f"own:{session_id}", f"own:{reported}")
+                except OSError:
+                    pass  # it shows again; nothing else is lost
                 self._runners[reported] = self._runners.pop(session_id)
                 self._denials[reported] = self._denials.pop(session_id, [])
                 for per_session in (self._drafts, self._queued, self._pending):
@@ -2529,6 +2613,7 @@ class MainFrame(wx.Frame):
         """The sessions the list shows now, each told its groups for its row."""
         desktop = self._snapshot.desktop_groups.by_session
         for info in sessions:
+            info.hidden = info.key in self.hidden
             groups = list(self.groups.groups_of(info.key))
             if info.key in desktop:
                 theirs = desktop[info.key]
@@ -2548,7 +2633,8 @@ class MainFrame(wx.Frame):
         view = self.speech.session_view
         rest = ""
         if view != VIEW_ALL or self._session_filter:
-            total = sum(1 for s in self._snapshot.sessions if not s.archived)
+            total = sum(1 for s in self._snapshot.sessions
+                        if not s.archived and not s.hidden)
             what = view_spoken(view) if view != VIEW_ALL else ""
             if self._session_filter:
                 matching = f'matching "{self._session_filter}"'
@@ -2999,7 +3085,7 @@ class MainFrame(wx.Frame):
             then()
 
     def on_insert_command(self):
-        """Session, Insert Command or Skill (Ctrl+/): choose one of Claude
+        """File, Insert Command or Skill (Ctrl+/): choose one of Claude
         Code's slash commands or your skills; it goes at the start of the
         reply box, ready to finish and send."""
         info = self._open
@@ -3225,7 +3311,7 @@ class MainFrame(wx.Frame):
             self.focus_sessions()
             return
         if key == wx.WXK_DELETE and focus is self.session_list:
-            self.on_forget(None)
+            self.on_hide()
             return
         if key == wx.WXK_DELETE and focus is self.chat_list \
                 and self._selected_queued() is not None:

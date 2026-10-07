@@ -41,9 +41,10 @@ SHORTCUTS = [
                      "The Chat Place, Remote Control, archived, or one of your groups"),
         ("Ctrl+E", "Export the selected (or loaded) session as Markdown, a web page or "
                    "plain text"),
-        ("Ctrl+G", "Add the selected session to a group (or a new one); Session, Remove "
-                   "from Group and Manage Groups are on the Session menu"),
-        ("Delete", "Forget the selected Chat Place session (asks first)"),
+        ("Ctrl+G", "Add the selected session to a group (or a new one); File, Remove "
+                   "from Group and Manage Groups are on the File menu"),
+        ("Delete", "Hide the selected session; View, Show Sessions, Hidden lists hidden "
+                   "sessions, and File, Bring Back Session returns one"),
         ("Ctrl+F", "Show only sessions whose title, folder or what they need contains some "
                    "text; Escape in the list shows them all again"),
     ]),
@@ -70,7 +71,7 @@ SHORTCUTS = [
         ("Ctrl+/", "Insert a slash command or one of your skills (type to search); it goes at "
                    "the start of the reply box"),
         ("Ctrl+Shift+F", "Attach files or images to your next message (Attach Files button, "
-                         "Alt+F); Delete in the attachments list removes one"),
+                         "Alt+T); Delete in the attachments list removes one"),
         ("Ctrl+V with a picture copied", "Attach the picture (a screenshot from Win+Shift+S, "
                                          "say)"),
         ("Ctrl+Shift+D", "Changed files: what Claude changed since your latest message or in "

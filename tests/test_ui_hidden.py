@@ -666,20 +666,56 @@ def test_silent_level_still_puts_the_reply_in_the_status_bar(frame, env):
     assert frame.GetStatusBar().GetStatusText() == "Hub probe finished. All good."
 
 
-# -- forget --------------------------------------------------------------------------------
+# -- hide --------------------------------------------------------------------------------
 
 
-def test_forget_keeps_the_place_and_desktop_delete_is_spoken(frame, env):
-    select(frame, "Blocked one")
-    frame.on_forget(None)
-    assert env["boxes"] == []  # no modal for a desktop session
-    assert "Only sessions The Chat Place started" in env["feedback"][-1]
+def test_hide_keeps_the_place_and_bring_back_returns_it(frame, env):
     index = select(frame, "Hub probe")
-    frame.on_forget(None)  # MessageBox stub answers Yes
-    assert frame.store.get("own-1") is None
+    frame.on_hide()
+    assert env["boxes"] == []  # no question: nothing is lost
+    assert frame.store.get("own-1") is not None  # still a session, just hidden
+    assert "own:own-1" in frame.hidden
     assert frame.session_list.GetSelection() == index
     assert frame.session_list.GetStringSelection().startswith("Quiet one")
-    assert env["feedback"][-1] == "Forgot Hub probe."
+    assert env["feedback"][-1].startswith("Hid Hub probe.")
+    # A desktop app session can be hidden too.
+    select(frame, "Blocked one")
+    frame.on_hide()
+    assert any(k.startswith("local_") for k in frame.hidden.keys())
+    # The Hidden view lists them; Bring Back returns one.
+    frame.on_view("hidden")
+    settle(frame)
+    rows = list(frame.session_list.GetStrings())
+    assert len(rows) == 2 and all("hidden" in r for r in rows)
+    select(frame, "Hub probe")
+    frame.on_unhide()
+    assert "own:own-1" not in frame.hidden
+    assert env["feedback"][-1] == "Hub probe is back in the list."
+
+
+def test_delete_permanently_only_a_hidden_chat_place_session(frame, env):
+    path = add_transcript(env, "C:\\G\\Scratch", "own-1", [user_text("hi")])
+    select(frame, "Hub probe")
+    frame.on_delete_permanently()
+    assert env["feedback"][-1].startswith("Hide Hub probe first")
+    assert path.exists()
+    frame.on_hide()
+    frame.on_view("hidden")
+    settle(frame)
+    select(frame, "Hub probe")
+    frame.on_delete_permanently()  # MessageBox stub answers Yes
+    assert frame.store.get("own-1") is None and not path.exists()
+    assert "own:own-1" not in frame.hidden
+    assert env["feedback"][-1] == "Deleted Hub probe permanently."
+    frame.on_view("all")
+    settle(frame)
+    select(frame, "Blocked one")
+    frame.on_hide()
+    frame.on_view("hidden")
+    settle(frame)
+    select(frame, "Blocked one")
+    frame.on_delete_permanently()
+    assert env["feedback"][-1].startswith("Blocked one is a desktop app session")
 
 
 def test_new_session_view_says_claude_is_starting(frame, env, fake_runner, monkeypatch):
@@ -773,13 +809,13 @@ def test_enter_on_the_loaded_session_goes_back_without_reloading(frame, env, mon
     assert env["feedback"][-1] == "Back in Quiet one."
 
 
-def test_forgetting_the_loaded_session_moves_focus_to_the_session_list(frame, env,
+def test_hiding_the_loaded_session_moves_focus_to_the_session_list(frame, env,
                                                                        monkeypatch):
     select(frame, "Hub probe")
     frame.on_open_session()
     focused = []
     monkeypatch.setattr(frame.session_list, "SetFocus", lambda: focused.append("sessions"))
-    frame.on_forget(None)            # MessageBox stub answers Yes
+    frame.on_hide()
     assert frame._open is None
     assert not frame.own_reply.IsShown()
     assert focused == ["sessions"]
@@ -2214,11 +2250,15 @@ def test_a_session_leaving_the_view_stays_while_you_are_on_it(frame, env, monkey
     assert frame.session_list.GetCount() == 0
 
 
-def test_forgetting_a_session_takes_it_out_of_its_groups(frame, env):
+def test_deleting_a_session_takes_it_out_of_its_groups(frame, env):
     frame.groups.create("Work")
     frame.groups.add("Work", "own:own-1")
     select(frame, "Hub probe")
-    frame.on_forget(None)  # wx.MessageBox is patched to say yes
+    frame.on_hide()
+    frame.on_view("hidden")
+    settle(frame)
+    select(frame, "Hub probe")
+    frame.on_delete_permanently()  # wx.MessageBox is patched to say yes
     assert frame.groups.members("Work") == []
 
 
@@ -3563,3 +3603,18 @@ def test_long_session_titles_leave_the_reply_box_its_width(env):
         window._chat_timer.Stop()
         window._pool.shutdown(wait=True)
         window.Destroy()
+
+
+def test_a_hidden_session_is_not_said_counted_or_notified(frame, env, monkeypatch):
+    import dataclasses
+    settle(frame)
+    blocked = next(s for s in frame._snapshot.sessions if s.title == "Blocked one")
+    select(frame, "Blocked one")
+    frame.on_hide()
+    settle(frame)
+    assert not frame.status_parts.get("needs_you").IsShown()
+    monkeypatch.setattr(frame, "_app_is_active", lambda: False)
+    spoken = len(env["spoken"])
+    again = dataclasses.replace(blocked, state="needs you", detail="Pick a name")
+    frame._apply_snapshot(frame._snapshot, [again], {}, False)
+    assert env["notified"] == [] and len(env["spoken"]) == spoken

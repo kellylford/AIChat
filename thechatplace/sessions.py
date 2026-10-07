@@ -55,6 +55,8 @@ class SessionInfo:
     remote: bool = False
     #: Chat Place groups it's in (#31), set by the window, read in its row.
     groups: tuple = ()
+    #: Hidden with File, Hide Session: only in the Hidden view.
+    hidden: bool = False
 
     @property
     def is_own(self) -> bool:
@@ -92,6 +94,8 @@ class SessionInfo:
             parts.append("Chat Place session")
         if self.archived:
             parts.append("archived")
+        if self.hidden:
+            parts.append("hidden")
         if self.groups:
             parts.append(("group " if len(self.groups) == 1 else "groups ")
                          + ", ".join(self.groups))
@@ -151,6 +155,7 @@ VIEW_DESKTOP = "desktop"
 VIEW_OWN = "own"
 VIEW_REMOTE = "remote"
 VIEW_ARCHIVED = "archived"
+VIEW_HIDDEN = "hidden"
 GROUP_VIEW_PREFIX = "group:"
 VIEWS = [
     (VIEW_ALL, "&All Sessions"),
@@ -160,12 +165,13 @@ VIEWS = [
     (VIEW_OWN, "&Chat Place Sessions"),
     (VIEW_REMOTE, "&Remote Control Sessions"),
     (VIEW_ARCHIVED, "Ar&chived"),
+    (VIEW_HIDDEN, "&Hidden"),
 ]
 #: Said and shown in the list's name: "showing needs you or working".
 VIEW_SPOKEN = {VIEW_ALL: "all sessions", VIEW_ACTIVE: "needs you or working",
                VIEW_NEEDS_YOU: "needs you", VIEW_DESKTOP: "desktop app sessions",
                VIEW_OWN: "Chat Place sessions", VIEW_REMOTE: "Remote Control sessions",
-               VIEW_ARCHIVED: "archived sessions"}
+               VIEW_ARCHIVED: "archived sessions", VIEW_HIDDEN: "hidden sessions"}
 
 
 def group_view(name: str) -> str:
@@ -180,7 +186,12 @@ def view_spoken(view: str) -> str:
 
 def in_view(info: SessionInfo, view: str) -> bool:
     """Whether the list shows ``info`` in ``view``. Archived sessions are only
-    in the Archived view (and in a group they were put in)."""
+    in the Archived view (and in a group they were put in). Hidden sessions
+    are only in the Hidden view."""
+    if view == VIEW_HIDDEN:
+        return info.hidden
+    if info.hidden:
+        return False
     if view.startswith(GROUP_VIEW_PREFIX):
         return view[len(GROUP_VIEW_PREFIX):] in info.groups
     if view == VIEW_ARCHIVED:
