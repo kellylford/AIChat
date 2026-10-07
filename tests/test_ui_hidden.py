@@ -2247,6 +2247,9 @@ def test_insert_command_is_for_own_sessions(frame, env):
 
 
 def test_commands_are_fetched_when_an_own_session_loads_and_inserted(frame, env, monkeypatch):
+    # A claude to find, as on Kelly's PC; the fetch itself is faked by the fixture.
+    monkeypatch.setattr(platform_paths, "find_claude",
+                        lambda: platform_paths.ClaudeLookup("claude.exe"))
     from theclaudehub.ui import dialogs
     select(frame, "Hub probe")
     frame.on_open_session()
@@ -2289,6 +2292,9 @@ def _folder_key(cwd):
 
 
 def test_commands_never_open_by_themselves(frame, env, monkeypatch):
+    # A claude to find, as on Kelly's PC; the fetch itself is faked by the fixture.
+    monkeypatch.setattr(platform_paths, "find_claude",
+                        lambda: platform_paths.ClaudeLookup("claude.exe"))
     from theclaudehub.ui import main_frame
     select(frame, "Hub probe")
     frame.on_open_session()
