@@ -118,6 +118,9 @@ def main(argv: Optional[list] = None) -> int:
     # app with hook arguments and expects it to exit, before anything else.
     from . import updater
 
+    # TheClaudeHub's sessions, groups and settings, before anything here
+    # writes to the new folder (#25).
+    platform_paths.carry_over_old_data()
     # Logging before the hooks, so a failed install or update hook is recorded.
     updater.configure_logging()
     updater.bootstrap()

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import sys
 from pathlib import Path
 from typing import List, Optional
@@ -87,6 +88,42 @@ def desktop_sessions_dirs() -> List[Path]:
 def app_data_dir() -> Path:
     """The Chat Place's own settings and session store."""
     return _roaming_dir() / APP_DIR_NAME
+
+
+#: The app was TheClaudeHub until #25; its data folder had that name.
+OLD_APP_DIR_NAME = "TheClaudeHub"
+_CARRIED_OVER = "carried over from TheClaudeHub.txt"
+#: Not worth carrying: logs of the old app.
+_LEFT_BEHIND = {"update.log", "error.log"}
+
+
+def carry_over_old_data(roaming: Optional[Path] = None) -> List[str]:
+    """Once, at first start after the rename: copy TheClaudeHub's sessions,
+    groups, settings and pasted images into The Chat Place's folder. Copied,
+    never moved, and nothing already there is replaced; the old folder stays
+    as it was. The names copied (empty when there was nothing to do)."""
+    roaming = roaming or _roaming_dir()
+    old, new = roaming / OLD_APP_DIR_NAME, roaming / APP_DIR_NAME
+    if not old.is_dir() or (new / _CARRIED_OVER).exists():
+        return []
+    copied = []
+    try:
+        new.mkdir(parents=True, exist_ok=True)
+        for item in old.iterdir():
+            target = new / item.name
+            if item.name in _LEFT_BEHIND or target.exists():
+                continue
+            if item.is_dir():
+                shutil.copytree(item, target)
+            else:
+                shutil.copy2(item, target)
+            copied.append(item.name)
+        (new / _CARRIED_OVER).write_text(
+            f"Copied from {old} at first start: {', '.join(copied) or 'nothing'}.\n",
+            encoding="utf-8")
+    except OSError:
+        pass  # tried again next start: the marker is written only when it worked
+    return copied
 
 
 def default_projects_root() -> Path:
