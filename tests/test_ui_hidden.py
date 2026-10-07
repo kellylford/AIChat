@@ -2510,10 +2510,16 @@ def test_usage_and_context_command(frame, env):
     frame.on_open_session()
     assert pump(lambda: frame._chat_loaded and frame._reader is not None)
     frame.on_usage()
-    assert env["feedback"][-1].startswith(
-        "Quiet one: Context 86% full: 171,000 of 200,000 tokens. Usage limits: not known")
-    # Over 80%: said once, unasked.
-    assert sum("Context 86% full" in s for s in env["spoken"]) == 1
+    # The window isn't known yet: no percentage, and no warning.
+    assert env["feedback"][-1].startswith("Quiet one: Context: 171,000 tokens used; the "
+                                          "window's size isn't known")
+    assert not any("Context" in s for s in env["spoken"])
+    # A turn of ours reported this model's window: now there's a percentage,
+    # and over 80% it's said once, unasked.
+    frame._model_windows["claude-opus-5-5"] = 200_000
+    frame.on_usage()
+    assert env["feedback"][-1].startswith("Quiet one: Context 86% full: 171,000 of 200,000")
+    frame._check_context()
     frame._check_context()
     assert sum("Context 86% full" in s for s in env["spoken"]) == 1
 

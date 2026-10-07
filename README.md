@@ -11,9 +11,10 @@ when a session answers, and switches the desktop app to a session when you need 
 It can also start sessions of its own, which you can read and reply to entirely from here.
 
 It runs on your existing Claude subscription, signed in to Claude Code, and never uses an API
-key. Its own sessions' turns are Claude Code turns in headless mode (`claude -p`), which Claude
-plans count against a monthly Agent SDK credit; if that runs out, turns stop unless you've
-turned on extra usage, which is billed. View, Usage and Context (Ctrl+Shift+U) says where you
+key. Its own sessions' turns are Claude Code turns in headless mode (`claude -p`). Anthropic's
+help article [Use the Claude Agent SDK with your Claude plan](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan)
+says those count against a monthly credit; past it, turns stop unless you've turned on extra
+usage, which is billed. View, Usage and Context (Ctrl+Shift+U) says where you
 stand. Reading the desktop app's sessions costs nothing.
 
 ## What it does
@@ -164,7 +165,9 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   they're sent" (Alt+M), and you hear just "Sent. Hub probe is working."
 - **Usage and Context** (Ctrl+Shift+U, View menu) says how full the loaded session's context is
   ("Context 62% full: 124,000 of 200,000 tokens"), from the token counts of Claude's latest
-  reply, and how much of your plan's limits are used, as the latest turn reported them ("5-hour
+  reply (the percentage only once the window's size is known: Claude Code reports it for a model
+  when one of TheClaudeHub's sessions runs a turn on it, and a session past 200,000 tokens has the
+  1,000,000 window), and how much of your plan's limits are used, as the latest turn reported them ("5-hour
   limit 8% used, resets at 10:00 AM. Weekly limit 34% used, resets on Friday at 9:00 AM.").
   It's said once, unasked, when the loaded session's context passes 80%, when a limit passes
   90% or is reached, and when Claude Code compacts a conversation (the messages list shows

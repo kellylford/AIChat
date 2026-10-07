@@ -130,7 +130,8 @@ class MainFrame(wx.Frame):
         # (they're the account's), each own session's context window, and
         # what's been warned about already, so it's said once.
         self._limits: Optional[dict] = None
-        self._windows: Dict[str, int] = {}
+        self._windows: Dict[str, int] = {}  # by session id
+        self._model_windows: Dict[str, int] = {}  # by model, from any turn of ours
         self._warned: set = set()
         # What Claude is waiting for you to answer, per session, oldest first
         # (#187, #188). The turn is paused until each is answered.
@@ -1278,7 +1279,8 @@ class MainFrame(wx.Frame):
                 or info.key != self._open.key:
             return 0, 0
         transcript = self._reader.transcript
-        reported = self._windows.get(info.cli_session_id, 0) if info.is_own else 0
+        reported = (self._windows.get(info.cli_session_id, 0) if info.is_own else 0) or \
+            self._model_windows.get(transcript.model, 0)
         window = usage.context_window(transcript.model, transcript.context_tokens, reported)
         return transcript.context_tokens, window
 
@@ -1296,8 +1298,12 @@ class MainFrame(wx.Frame):
         """Say once when the loaded session's context passes 80%."""
         info = self._open
         tokens, window = self._context(info)
-        key = ("context", info.cli_session_id if info else "")
-        if info is None or usage.context_share(tokens, window) < usage.CONTEXT_WARNING:
+        if info is None:
+            return
+        compactions = self._reader.transcript.compactions if self._reader else 0
+        # A new key after each compaction, so it can be said again.
+        key = ("context", info.cli_session_id, compactions)
+        if not window or usage.context_share(tokens, window) < usage.CONTEXT_WARNING:
             return
         if key in self._warned:
             return
@@ -1790,7 +1796,6 @@ class MainFrame(wx.Frame):
                 self._say(warning)
             return
         if event.kind == "compacted":
-            self._warned.discard(("context", session_id))
             self._say(f"{title}: Claude Code compacted the conversation to free the context.")
             return
         if event.kind == "denied":
@@ -1816,6 +1821,8 @@ class MainFrame(wx.Frame):
             parser = getattr(self._runners.get(session_id), "parser", None)
             if parser is not None and getattr(parser, "context_window", 0):
                 self._windows[session_id] = parser.context_window
+                if self._reader is not None and self._reader.transcript.model:
+                    self._model_windows[self._reader.transcript.model] = parser.context_window
             if parser is not None and parser.commands:
                 self._commands[_folder_key(self._runners[session_id].cwd)] = \
                     usable_commands(parser.commands)

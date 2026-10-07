@@ -42,12 +42,15 @@ def test_when_reads_naturally():
 
 
 def test_context_windows_and_words():
-    assert usage.context_window("claude-haiku-4-5", 1000) == 200_000
+    assert usage.context_window("claude-haiku-4-5", 1000) == 0  # not known: no guess
     assert usage.context_window("claude-opus-5-5", 895_930) == 1_000_000  # past 200k: large
     assert usage.context_window("claude-sonnet-5[1m]", 10) == 1_000_000
     assert usage.context_window("x", 100, reported=400_000) == 400_000
     assert usage.context_text(124_000, 200_000) == "Context 62% full: 124,000 of 200,000 tokens."
     assert usage.context_text(0, 200_000).startswith("Context: not known")
+    assert usage.context_text(160_000, 0).startswith(
+        "Context: 160,000 tokens used; the window's size isn't known")
+    assert usage.when(NOW - 60, NOW) == "now"
 
 
 def test_usage_limit_errors_in_plain_words():
