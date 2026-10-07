@@ -110,10 +110,48 @@ def describe_age(then_ms: int, now_ms: Optional[int] = None) -> str:
     return f"active {months} month{'s' if months != 1 else ''} ago"
 
 
-def sort_sessions(sessions: Iterable[SessionInfo]) -> List[SessionInfo]:
-    """Needs you first, then working, then everything else; newest first in each."""
-    return sorted(sessions, key=lambda s: (_STATE_ORDER.get(s.state, 3),
-                                           -(s.last_activity_ms or 0), s.key))
+#: How the session list can be ordered (View, Sort Sessions): (value, menu label).
+#: Within the same title or folder, newest comes first.
+SORT_STATUS = "status"
+SORT_NEWEST = "newest"
+SORT_OLDEST = "oldest"
+SORT_TITLE = "title"
+SORT_FOLDER = "folder"
+SORT_ORDERS = [
+    (SORT_STATUS, "By &Status (needs you, then working, then the rest)"),
+    (SORT_NEWEST, "&Newest First"),
+    (SORT_OLDEST, "&Oldest First"),
+    (SORT_TITLE, "By &Title (A to Z)"),
+    (SORT_FOLDER, "By &Folder (A to Z)"),
+]
+SORT_VALUES = [value for value, _label in SORT_ORDERS]
+#: Said after choosing one: "Sessions sorted by title."
+SORT_SPOKEN = {SORT_STATUS: "by status", SORT_NEWEST: "newest first",
+               SORT_OLDEST: "oldest first", SORT_TITLE: "by title",
+               SORT_FOLDER: "by folder"}
+
+
+def sort_sessions(sessions: Iterable[SessionInfo],
+                  order: str = SORT_STATUS) -> List[SessionInfo]:
+    """The list in ``order`` (one of SORT_VALUES; anything else is by status).
+
+    By status: needs you first, then working, then the rest; newest first in
+    each. Title and folder compare without regard to case.
+    """
+    def newest(s: SessionInfo) -> int:
+        return -(s.last_activity_ms or 0)
+
+    if order == SORT_NEWEST:
+        key = lambda s: (newest(s), s.key)  # noqa: E731
+    elif order == SORT_OLDEST:
+        key = lambda s: (-newest(s), s.key)  # noqa: E731
+    elif order == SORT_TITLE:
+        key = lambda s: ((s.title or "").casefold(), newest(s), s.key)  # noqa: E731
+    elif order == SORT_FOLDER:
+        key = lambda s: (s.repo.casefold(), newest(s), s.key)  # noqa: E731
+    else:
+        key = lambda s: (_STATE_ORDER.get(s.state, 3), newest(s), s.key)  # noqa: E731
+    return sorted(sessions, key=key)
 
 
 # ---------------------------------------------------------------------------

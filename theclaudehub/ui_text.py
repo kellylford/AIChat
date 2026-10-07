@@ -30,6 +30,8 @@ SHORTCUTS = [
                          "reply to (the desktop app session isn't changed)"),
         ("F5", "Refresh the list now and put it back in order (it also refreshes itself "
                "every few seconds, without moving rows while you're in it)"),
+        ("Alt+V, O", "Sort Sessions: by status, newest first, oldest first, by title or "
+                     "by folder; the choice is remembered"),
         ("Delete", "Forget the selected TheClaudeHub session (asks first)"),
     ]),
     ("Messages", [

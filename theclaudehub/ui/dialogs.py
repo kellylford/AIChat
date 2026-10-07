@@ -1,6 +1,7 @@
 """TheClaudeHub's dialogs: New Session, Settings, Keyboard Shortcuts."""
 from __future__ import annotations
 
+import dataclasses
 import os
 
 import wx
@@ -175,6 +176,8 @@ class SettingsDialog(wx.Dialog):
     def __init__(self, parent, speech: SpeechSettings, options):
         super().__init__(parent, title="Settings", size=(660, 540))
         self._options = list(options)
+        # Settings kept elsewhere (the session list's sort order) pass through.
+        self._original = speech
         outer = wx.BoxSizer(wx.VERTICAL)
 
         self.level = wx.RadioBox(
@@ -269,12 +272,12 @@ class SettingsDialog(wx.Dialog):
         level_index = self.level.GetSelection()
         level = ANNOUNCE_LEVELS[level_index] if 0 <= level_index < len(ANNOUNCE_LEVELS) \
             else ANNOUNCE_LEVELS[0]
-        return SpeechSettings(announce=level,
-                              announce_all_sessions=self.all_sessions.GetValue(),
-                              announce_own=self.own_messages.GetValue(),
-                              engine=option.engine, voice=option.voice,
-                              rate_preset=preset,
-                              formatted_messages=self.formatted.GetValue())
+        return dataclasses.replace(self._original, announce=level,
+                                   announce_all_sessions=self.all_sessions.GetValue(),
+                                   announce_own=self.own_messages.GetValue(),
+                                   engine=option.engine, voice=option.voice,
+                                   rate_preset=preset,
+                                   formatted_messages=self.formatted.GetValue())
 
 
 class MessageDialog(wx.Dialog):

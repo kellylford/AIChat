@@ -228,3 +228,45 @@ def test_last_reply_from_tail_reads_only_the_end(tmp_path):
     path.write_text("\n".join(filler + tail) + "\n", encoding="utf-8")
     assert hub.last_reply_from_tail(path, max_bytes=2000) == "the reply"
     assert hub.last_reply_from_tail(tmp_path / "missing.jsonl") == ""
+
+
+def _titled(key, title, cwd, state, activity):
+    return SessionInfo(source=DESKTOP, key=key, title=title, cwd=cwd, cli_session_id=key,
+                       state=state, last_activity_ms=activity)
+
+
+SORTABLE = [
+    _titled("a", "zebra notes", "C:\\G\\Quill", IDLE, 5),
+    _titled("b", "Apple pie", "C:\\G\\WeatherFast", NEEDS_YOU, 2),
+    _titled("c", "apple tart", "C:\\G\\quill", WORKING, 9),
+    _titled("d", "Mango", "C:\\G\\Beta", IDLE, 1),
+]
+
+
+@pytest.mark.parametrize("order,expected", [
+    ("status", ["b", "c", "a", "d"]),     # needs you, working, then newest
+    ("newest", ["c", "a", "b", "d"]),
+    ("oldest", ["d", "b", "a", "c"]),
+    ("title", ["b", "c", "d", "a"]),      # case doesn't matter: Apple pie, apple tart
+    ("folder", ["d", "c", "a", "b"]),     # Beta, quill/Quill (newest first), WeatherFast
+    ("nonsense", ["b", "c", "a", "d"]),   # unknown means by status
+])
+def test_sort_orders(order, expected):
+    assert [s.key for s in sort_sessions(SORTABLE, order)] == expected
+
+
+def test_sort_menu_labels_cover_every_order():
+    from theclaudehub.sessions import SORT_ORDERS, SORT_SPOKEN, SORT_VALUES
+    assert SORT_VALUES == ["status", "newest", "oldest", "title", "folder"]
+    assert set(SORT_SPOKEN) == set(SORT_VALUES)
+    assert len({label.split("&")[1][0] for _v, label in SORT_ORDERS}) == len(SORT_ORDERS)
+
+
+def test_session_order_setting_round_trips(tmp_path):
+    from theclaudehub.speech import SpeechSettings
+    path = tmp_path / "speech.json"
+    assert SpeechSettings.load(path).session_order == "status"
+    SpeechSettings(session_order="title").save(path)
+    assert SpeechSettings.load(path).session_order == "title"
+    path.write_text('{"session_order": "sideways"}', encoding="utf-8")
+    assert SpeechSettings.load(path).session_order == "status"
