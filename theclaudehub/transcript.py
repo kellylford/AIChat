@@ -47,6 +47,9 @@ PLAN = "plan"
 ERROR = "error"
 INTERRUPTED = "interrupted"
 TOOL = "tool"
+#: Not from the transcript: a message of yours waiting for the turn to end
+#: (#50), shown at the end of the messages list.
+QUEUED = "queued"
 TOOL_RESULT = "tool_result"
 CONTEXT = "context"
 EVENT = "event"
@@ -61,6 +64,7 @@ LABELS = {
     ERROR: "Error",
     INTERRUPTED: "Interrupted",
     TOOL: "Tool",
+    QUEUED: "Queued",
     TOOL_RESULT: "Tool result",
     CONTEXT: "Context",
     EVENT: "Event",

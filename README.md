@@ -415,8 +415,10 @@ session. Checked with Claude Code 2.1.286: the desktop session's transcript was 
 same afterwards, and Claude knew the earlier conversation. One turn runs at a time
 per session. Send during a turn queues the message: TheClaudeHub says "Queued", and once the
 turn's reply has been announced, it sends the message. More messages sent while one is waiting
-join it, and they go together as one message. Turn status (Ctrl+Shift+T) says when a message is
-queued. If the turn fails, or you press Stop, the queued text goes back in the message box
+join it, and they go together as one message. Each queued message is at the end of the
+messages list as "Queued: …": Delete removes it, and its context menu has Edit Queued Message
+(back into the message box, to change and send again) and Remove Queued Message. Turn status
+(Ctrl+Shift+T) says when a message is queued. If the turn fails, or you press Stop, the queued text goes back in the message box
 instead, ahead of anything typed since, with the cursor left at the end. While one of
 TheClaudeHub's sessions is loaded, Send and Stop are never disabled, so from the message box, Tab
 is always Send and the next Tab is always Stop. When a turn is running, Tab doesn't jump past

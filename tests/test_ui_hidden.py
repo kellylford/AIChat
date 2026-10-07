@@ -1050,7 +1050,7 @@ def test_send_during_a_turn_queues_and_goes_when_it_ends(frame, env, fake_runner
     frame.reply_text.SetValue("second")
     frame.on_send()
     assert frame.reply_text.GetValue() == ""
-    assert frame._queued == {"own-1": "second"}
+    assert frame._queued == {"own-1": ["second"]}
     assert frame.turn_status.GetLabel().endswith("A message is queued.")
     frame.reply_text.SetValue("third")
     frame.on_send()
@@ -1220,7 +1220,7 @@ def test_queued_message_follows_a_renamed_session_id(frame, env, fake_runner):
     frame.reply_text.SetValue("next")
     frame.on_send()
     frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("started", session_id="own-9"))
-    assert frame._queued == {"own-9": "next"}
+    assert frame._queued == {"own-9": ["next"]}
     frame._on_turn_event({"id": "own-9"}, "Hub probe", TurnEvent("finished", text="ok"))
     assert fake_runner.instances[-1].prompt == "next"
     assert fake_runner.instances[-1].command[-2:] == ["--resume", "own-9"]
@@ -2456,7 +2456,7 @@ def test_queued_message_takes_attachments_as_mentions(frame, env):
     frame._add_attachments("own-1", [str(image)])
     frame.reply_text.SetValue("And this")
     frame.on_send()
-    assert frame._queued["own-1"] == f'And this\n\nAttached: @"{image}"'
+    assert frame._queued["own-1"] == [f'And this\n\nAttached: @"{image}"']
     assert frame._attachments == {}
 
 
@@ -3036,3 +3036,38 @@ def test_empty_parts_and_the_update_button_going_away(frame, env):
     run_check(frame, manual=False)
     assert not frame.status_parts.get("update").IsShown()
     assert bar.GetFieldsCount() == len(frame.status_parts.shown())
+
+
+def test_queued_messages_are_in_the_list_to_edit_or_remove(frame, env, fake_runner, monkeypatch):
+    _start(frame, fake_runner)
+    for text in ("second", "third"):
+        frame.reply_text.SetValue(text)
+        frame.on_send()
+    rows = list(frame.chat_list.GetStrings())
+    assert rows[-2:] == ["Queued: second", "Queued: third"]
+    # Delete on a queued row removes it.
+    frame.chat_list.SetSelection(len(rows) - 2)
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.chat_list))
+    event = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
+    event.SetKeyCode(wx.WXK_DELETE)
+    frame._on_char_hook(event)
+    assert frame._queued == {"own-1": ["third"]}
+    assert list(frame.chat_list.GetStrings())[-1] == "Queued: third"
+    assert env["feedback"][-1] == "Queued message removed. 1 still queued."
+    # The context menu offers Edit and Remove for a queued row.
+    frame.chat_list.SetSelection(frame.chat_list.GetCount() - 1)
+    menu = frame._message_menu()
+    labels = [item.GetItemLabelText() for item in menu.GetMenuItems()]
+    assert "Edit Queued Message" in labels and "Remove Queued Message" in labels
+    menu.Destroy()
+    # Edit takes it back into the reply box, ahead of anything typed.
+    frame.reply_text.SetValue("draft")
+    frame.edit_queued()
+    assert frame._queued == {}
+    assert frame.reply_text.GetValue() == "third\n\ndraft"
+    assert not any(r.startswith("Queued:") for r in frame.chat_list.GetStrings())
+    # Delete on an ordinary message does nothing to it.
+    frame.chat_list.SetSelection(0)
+    count = frame.chat_list.GetCount()
+    frame._on_char_hook(event)
+    assert frame.chat_list.GetCount() == count

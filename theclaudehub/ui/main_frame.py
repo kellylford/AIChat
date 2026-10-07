@@ -64,7 +64,8 @@ from ..sessions import (GROUP_VIEW_PREFIX, IDLE, NEEDS_YOU, SORT_ORDERS, SORT_SP
                         VIEW_ALL, VIEW_NEEDS_YOU, VIEWS, WORKING,
                         SessionInfo, group_view, in_view, view_spoken)
 from ..speech import ANNOUNCE_FULL, NOTIFY_ALL, NOTIFY_OFF, SpeechSettings, default_options, list_speech_options, speaker
-from ..transcript import ASSISTANT, ERROR, PLAN, QUESTION, TOOL, ChatMessage, TranscriptReader
+from ..transcript import (ASSISTANT, ERROR, PLAN, QUESTION, QUEUED, TOOL, ChatMessage,
+                          TranscriptReader)
 from ..updater import AVAILABLE, FAILED, CheckResult, UpdateService
 from .a11y import set_accessible_name, set_list_items_accessible
 from .notify import Notifier
@@ -129,7 +130,8 @@ class MainFrame(wx.Frame):
         self._chat_loaded = False
         self._show_activity = False
         self._drafts: Dict[str, str] = {}  # unsent reply text, per session
-        self._queued: Dict[str, str] = {}  # sent during a turn, goes when it ends
+        # Sent during a turn, in order; they go together when it ends (#50).
+        self._queued: Dict[str, List[str]] = {}
         self._attachments: Dict[str, List[str]] = {}  # per session, for its next message
         # Search (#21): text the session list is filtered by, and the last
         # text looked for in the messages.
@@ -1046,8 +1048,10 @@ class MainFrame(wx.Frame):
 
     def _visible_messages(self) -> List[ChatMessage]:
         if self._show_activity:
-            return list(self._chat_messages)
-        return [m for m in self._chat_messages if not m.is_activity]
+            shown = list(self._chat_messages)
+        else:
+            shown = [m for m in self._chat_messages if not m.is_activity]
+        return shown + self._queued_rows()
 
     def _rebuild_chat_list(self, focus_newest: bool = False,
                            keep_key: Optional[str] = None):
@@ -1180,6 +1184,12 @@ class MainFrame(wx.Frame):
         read = menu.Append(wx.ID_ANY, "Read &Full Message\tEnter")
         copy = menu.Append(wx.ID_ANY, "&Copy Message\tCtrl+C")
         message = self._selected_message()
+        if message is not None and message.kind == QUEUED:
+            edit = menu.Append(wx.ID_ANY, "&Edit Queued Message")
+            remove = menu.Append(wx.ID_ANY, "&Remove Queued Message\tDelete")
+            menu.Bind(wx.EVT_MENU, lambda e: self.edit_queued(), edit)
+            menu.Bind(wx.EVT_MENU, lambda e: self.remove_queued(), remove)
+            menu.AppendSeparator()
         has_code = message is not None and bool(find_code_blocks(message.text))
         blocks = menu.Append(wx.ID_ANY, "Code &Blocks...")
         copy_code = menu.Append(wx.ID_ANY, "Copy &Last Code Block\tCtrl+Shift+C")
@@ -1897,15 +1907,15 @@ class MainFrame(wx.Frame):
         if runner is not None:
             # Queue it rather than refuse: the turn's reply comes first, then
             # this goes. More while one waits joins it as one message.
-            waiting = self._queued.get(session_id)
+            waiting = bool(self._queued.get(session_id))
             # Queued text carries attachments as @"path": images included.
             queued_text, _images = attachments.build(message, attached, images_inline=False)
-            self._queued[session_id] = (f"{waiting}\n\n{queued_text}" if waiting
-                                        else queued_text)
+            self._queued.setdefault(session_id, []).append(queued_text)
             self._clear_attachments(session_id)
             self.reply_text.SetValue("")
             self._drafts.pop(session_id, None)
             self._update_send_state()
+            self._rebuild_chat_list()  # the queued message joins the list
             # Only the newly added words are read back, not the whole queue.
             self._feedback(announce.queued_text(info.title, message, self.speech.announce,
                                                 self.speech.announce_own,
@@ -2116,7 +2126,7 @@ class MainFrame(wx.Frame):
                         p for p in waiting_now if p not in attached_back]
                     if is_open:
                         self._show_attachments()
-            queued = self._queued.pop(session_id, None)
+            queued = self._take_queued(session_id)
             if event.kind == "failed" or event.is_error:
                 state, detail = NEEDS_YOU, announce.status_text(event.text or "error", 120)
             elif denials:
@@ -2168,6 +2178,65 @@ class MainFrame(wx.Frame):
             self._update_send_state()
             self.refresh_sessions()
 
+    def _take_queued(self, session_id: str) -> Optional[str]:
+        """All of a session's queued messages, as the one message they're
+        sent as, and the queue emptied."""
+        waiting = self._queued.pop(session_id, None)
+        return "\n\n".join(waiting) if waiting else None
+
+    def _queued_rows(self) -> List[ChatMessage]:
+        """The loaded session's queued messages, as rows after its messages."""
+        info = self._open
+        if info is None or not info.is_own:
+            return []
+        return [ChatMessage(QUEUED, text, key=f"queued:{info.cli_session_id}:{i}")
+                for i, text in enumerate(self._queued.get(info.cli_session_id, []))]
+
+    def _selected_queued(self) -> Optional[int]:
+        """Which queued message is selected in the messages list, if one is."""
+        message = self._selected_message()
+        if message is None or message.kind != QUEUED:
+            return None
+        return int(message.key.rsplit(":", 1)[1])
+
+    def remove_queued(self):
+        """Remove the selected queued message (Delete, or the context menu)."""
+        index = self._selected_queued()
+        info = self._open
+        if index is None or info is None:
+            return
+        waiting = self._queued.get(info.cli_session_id, [])
+        if not 0 <= index < len(waiting):
+            return
+        del waiting[index]
+        if not waiting:
+            self._queued.pop(info.cli_session_id, None)
+        row = self.chat_list.GetSelection()
+        self._rebuild_chat_list()
+        self.chat_list.SetSelection(min(row, self.chat_list.GetCount() - 1))
+        self._update_send_state()
+        self._feedback("Queued message removed. " + (
+            f"{len(waiting)} still queued." if waiting else "Nothing is queued now."))
+
+    def edit_queued(self):
+        """Take the selected queued message back into the reply box, to
+        change it and send it again."""
+        index = self._selected_queued()
+        info = self._open
+        if index is None or info is None:
+            return
+        waiting = self._queued.get(info.cli_session_id, [])
+        if not 0 <= index < len(waiting):
+            return
+        text = waiting.pop(index)
+        if not waiting:
+            self._queued.pop(info.cli_session_id, None)
+        self._rebuild_chat_list()
+        self._give_back(info.cli_session_id, text, True)
+        self._update_send_state()
+        self.reply_text.SetFocus()
+        self._feedback("Queued message back in the message box. Send queues it again.")
+
     def _give_back(self, session_id: str, message: str, is_open: bool):
         """Put ``message`` back in the session's reply box, before anything
         typed since (it was written first), so nothing is lost. The caret
@@ -2189,8 +2258,9 @@ class MainFrame(wx.Frame):
             self._feedback("Nothing is running.")
             return
         runner.cancel()
-        queued = self._queued.pop(info.cli_session_id, None)
+        queued = self._take_queued(info.cli_session_id)
         if queued:
+            self._rebuild_chat_list()
             self._give_back(info.cli_session_id, queued, True)
             self._update_send_state()
             self._feedback("Stopping. Your queued message is back in the message box.")
@@ -2822,6 +2892,10 @@ class MainFrame(wx.Frame):
             return
         if key == wx.WXK_DELETE and focus is self.session_list:
             self.on_forget(None)
+            return
+        if key == wx.WXK_DELETE and focus is self.chat_list \
+                and self._selected_queued() is not None:
+            self.remove_queued()
             return
         if (ctrl and key in (ord("C"), ord("c")) and not event.AltDown()
                 and focus is self.chat_list):
