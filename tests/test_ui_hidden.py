@@ -3130,8 +3130,9 @@ def test_the_desktop_apps_groups_show_in_the_list_and_views(frame, env, monkeypa
     prefs = {"preferences": {"epitaxyPrefs": {"dframe-group-scopes": {"a/o": {
         "groups": [{"id": "cg-1", "name": "IDT"}],
         "assignments": {f"code:{quiet.key}": "cg-1"}}}}}}
-    (env["desktop"].parent / "claude_desktop_config.json").write_text(
-        json.dumps(prefs), encoding="utf-8")
+    (env["desktop"] / "a" / "o").mkdir(parents=True, exist_ok=True)
+    config = env["desktop"].parent / "claude_desktop_config.json"
+    config.write_text(json.dumps(prefs), encoding="utf-8")
     frame.refresh_sessions(force=True)
     assert pump(lambda: "Group: IDT" in [i.GetItemLabelText()
                                           for i in frame.show_menu.GetMenuItems()])
@@ -3156,3 +3157,38 @@ def test_the_desktop_apps_groups_show_in_the_list_and_views(frame, env, monkeypa
     settle(frame)
     assert sorted(r.split(",")[0] for r in frame.session_list.GetStrings()) == [
         "Hub probe", "Quiet one"]
+
+    # Already in it (the desktop app's group): said, nothing made.
+    select(frame, "Quiet one")
+    monkeypatch.setattr(frame, "_choose", lambda title, prompt, choices: next(
+        i for i, c in enumerate(choices) if c.startswith("IDT")))
+    frame.on_add_to_group()
+    assert env["feedback"][-1] == "Quiet one is already in IDT."
+
+
+def test_a_bad_read_of_the_desktop_apps_groups_keeps_your_view(frame, env):
+    quiet = next(s for s in frame._snapshot.sessions if s.title == "Quiet one")
+    (env["desktop"] / "a" / "o").mkdir(parents=True, exist_ok=True)
+    config = env["desktop"].parent / "claude_desktop_config.json"
+    config.write_text(json.dumps({"preferences": {"epitaxyPrefs": {"dframe-group-scopes": {
+        "a/o": {"groups": [{"id": "cg-1", "name": "IDT"}],
+                "assignments": {f"code:{quiet.key}": "cg-1"}}}}}}), encoding="utf-8")
+    frame.refresh_sessions(force=True)
+    assert pump(lambda: "IDT" in frame._snapshot.desktop_groups.names)
+    frame.on_view("group:IDT")
+    config.write_text('{"preferences": {"epit', encoding="utf-8")  # mid-rewrite
+    frame.refresh_sessions(force=True)
+    settle(frame)
+    assert frame.speech.session_view == "group:IDT"
+    assert "IDT" in frame._snapshot.desktop_groups.names  # the last good read kept
+    assert [r.split(",")[0] for r in frame.session_list.GetStrings()] == ["Quiet one"]
+    # Really gone (deleted in the desktop app): the view stays, marked not found.
+    config.write_text(json.dumps({"preferences": {"epitaxyPrefs": {"dframe-group-scopes": {
+        "a/o": {"groups": [], "assignments": {}}}}}}), encoding="utf-8")
+    frame.refresh_sessions(force=True)
+    settle(frame)
+    labels = [i.GetItemLabelText() for i in frame.show_menu.GetMenuItems()]
+    assert "Group: IDT (not found)" in labels
+    checked = [i.GetItemLabelText() for i in frame.show_menu.GetMenuItems()
+               if i.IsCheckable() and i.IsChecked()]
+    assert checked == ["Group: IDT (not found)"]
