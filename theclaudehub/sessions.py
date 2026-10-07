@@ -278,13 +278,16 @@ def load_live_status(directory: Optional[Path] = None,
 
 def _same_process(recorded, actual: Optional[int]) -> bool:
     """Whether the pid file's ``procStart`` is the running process's start.
-    True when either isn't known: then the pid is all there is to go on."""
+    True when either isn't known: then the pid is all there is to go on. A
+    process that isn't yours can't be the Claude Code that wrote the file."""
     try:
-        recorded = int(str(recorded))
-    except (TypeError, ValueError):
+        recorded = int(float(str(recorded)))
+    except (TypeError, ValueError, OverflowError):
         return True
     if actual is None:
         return True
+    if actual == platform_paths.NOT_YOURS:
+        return False
     # The same clock read twice can differ in the last digits: a second apart
     # is still the same process; a reused pid started long after.
     return abs(recorded - actual) < 10_000_000

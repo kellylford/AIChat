@@ -145,10 +145,16 @@ def is_safe_id(value: str) -> bool:
     return bool(value) and bool(_SAFE_ID.match(value))
 
 
+#: ``process_start`` for a process you may not look at: not one of yours,
+#: so not a Claude Code you started (a system service, say).
+NOT_YOURS = -1
+
+
 def process_start(pid: int) -> Optional[int]:
     """When a running process started, as a Windows FILETIME (100 ns since
-    1601): what Claude Code writes as ``procStart`` in its pid files. None
-    when it can't be known (not Windows, no such process, no access)."""
+    1601): what Claude Code writes as ``procStart`` in its pid files.
+    ``NOT_YOURS`` when Windows won't say (access denied); None when it can't
+    be known (not Windows, no such process)."""
     if sys.platform != "win32" or not isinstance(pid, int) or pid <= 0:
         return None
     import ctypes
@@ -162,7 +168,9 @@ def process_start(pid: int) -> Optional[int]:
     kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
     handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
     if not handle:
-        return None
+        # Limited information is granted for all of your own processes,
+        # elevated ones too: access denied means someone else's.
+        return NOT_YOURS if ctypes.get_last_error() == 5 else None
     try:
         times = [wintypes.FILETIME() for _ in range(4)]
         if not kernel32.GetProcessTimes(handle, *[ctypes.byref(t) for t in times]):

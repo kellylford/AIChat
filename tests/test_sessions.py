@@ -284,6 +284,10 @@ def test_a_reused_pid_is_not_the_session(tmp_path):
     live = load_live_status(tmp_path, alive=lambda pid: True, started=starts.get)
     # 200's pid now belongs to a process that started an hour later.
     assert set(live) == {"cli-1", "cli-3"}
+    # Or to a system service you can't look at: not yours, so not Claude Code.
+    starts[200] = platform_paths.NOT_YOURS
+    assert set(load_live_status(tmp_path, alive=lambda pid: True,
+                                started=starts.get)) == {"cli-1", "cli-3"}
     # Not knowing when the process started: the pid is all there is.
     assert set(load_live_status(tmp_path, alive=lambda pid: True,
                                 started=lambda pid: None)) == {"cli-1", "cli-2", "cli-3"}
@@ -292,7 +296,10 @@ def test_a_reused_pid_is_not_the_session(tmp_path):
 def test_process_start_matches_for_this_process():
     import os
     import sys
+    import time
     start = platform_paths.process_start(os.getpid())
     if sys.platform == "win32":
-        assert isinstance(start, int) and start > 130_000_000_000_000_000
+        # FILETIME to Unix time: this test process started in the last hour.
+        unix = start / 10_000_000 - 11_644_473_600
+        assert time.time() - 3600 < unix <= time.time()
     assert platform_paths.process_start(0) is None

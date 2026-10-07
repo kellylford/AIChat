@@ -490,8 +490,8 @@ def test_send_refused_when_busy_elsewhere(frame, env, fake_runner, monkeypatch):
         {"pid": 4242, "sessionId": "own-1", "status": "busy"}))
     original = hub.load_live_status
     monkeypatch.setattr(hub, "load_live_status",
-                        lambda directory=None, alive=None: original(directory,
-                                                                    alive=lambda pid: True))
+                        lambda directory=None, alive=None, started=None: original(
+                            directory, alive=lambda pid: True, started=lambda pid: None))
     frame.refresh_sessions(force=True)
     assert pump(lambda: "own-1" in frame._snapshot.live)
     select(frame, "Hub probe")
@@ -1060,8 +1060,9 @@ def test_queued_message_goes_despite_the_lists_stale_busy_status(frame, env, fak
     claude_running = {"yes": True}
     original = hub.load_live_status
     monkeypatch.setattr(hub, "load_live_status",
-                        lambda directory=None, alive=None: original(
-                            directory, alive=lambda pid: claude_running["yes"]))
+                        lambda directory=None, alive=None, started=None: original(
+                            directory, alive=lambda pid: claude_running["yes"],
+                            started=lambda pid: None))
     frame.refresh_sessions(force=True)
     assert pump(lambda: "own-1" in frame._snapshot.live)
     frame.reply_text.SetValue("second")
