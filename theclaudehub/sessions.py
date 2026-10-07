@@ -236,10 +236,13 @@ class LiveStatus:
 
 
 def load_live_status(directory: Optional[Path] = None,
-                     alive=platform_paths.pid_alive) -> Dict[str, LiveStatus]:
+                     alive=platform_paths.pid_alive,
+                     started=platform_paths.process_start) -> Dict[str, LiveStatus]:
     """Map of session id (both the cli id and the desktop local_ id) -> status.
 
-    A pid file whose process has exited is stale and ignored.
+    A pid file whose process has exited is stale and ignored, and so is one
+    whose pid Windows has since given to another process (#5): its
+    ``procStart`` doesn't match when the running process started.
     """
     directory = directory or platform_paths.live_sessions_dir()
     result: Dict[str, LiveStatus] = {}
@@ -262,6 +265,8 @@ def load_live_status(directory: Optional[Path] = None,
                 continue
         if not alive(pid):
             continue
+        if not _same_process(data.get("procStart"), started(pid)):
+            continue
         status = LiveStatus(status=str(data.get("status") or ""), pid=pid,
                             updated_ms=_int(data.get("statusUpdatedAt") or data.get("updatedAt")))
         for id_field in ("sessionId", "hostSessionId"):
@@ -269,6 +274,20 @@ def load_live_status(directory: Optional[Path] = None,
             if isinstance(value, str) and value:
                 result[value] = status
     return result
+
+
+def _same_process(recorded, actual: Optional[int]) -> bool:
+    """Whether the pid file's ``procStart`` is the running process's start.
+    True when either isn't known: then the pid is all there is to go on."""
+    try:
+        recorded = int(str(recorded))
+    except (TypeError, ValueError):
+        return True
+    if actual is None:
+        return True
+    # The same clock read twice can differ in the last digits: a second apart
+    # is still the same process; a reused pid started long after.
+    return abs(recorded - actual) < 10_000_000
 
 
 # ---------------------------------------------------------------------------

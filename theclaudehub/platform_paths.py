@@ -145,6 +145,34 @@ def is_safe_id(value: str) -> bool:
     return bool(value) and bool(_SAFE_ID.match(value))
 
 
+def process_start(pid: int) -> Optional[int]:
+    """When a running process started, as a Windows FILETIME (100 ns since
+    1601): what Claude Code writes as ``procStart`` in its pid files. None
+    when it can't be known (not Windows, no such process, no access)."""
+    if sys.platform != "win32" or not isinstance(pid, int) or pid <= 0:
+        return None
+    import ctypes
+    from ctypes import wintypes
+
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(wintypes.FILETIME)] * 4
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not handle:
+        return None
+    try:
+        times = [wintypes.FILETIME() for _ in range(4)]
+        if not kernel32.GetProcessTimes(handle, *[ctypes.byref(t) for t in times]):
+            return None
+        created = times[0]
+        return (created.dwHighDateTime << 32) | created.dwLowDateTime
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def pid_alive(pid: int) -> bool:
     """True if a process with this id is running.
 
