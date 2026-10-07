@@ -143,10 +143,13 @@ installed copies find no updates.
 
 ## Run from source (development)
 
-You need Python 3.11 or later.
+You need Python 3.11 or later. The repo's virtual environment is `.venv` (ignored by git);
+`build.cmd` makes it the first time, or make it yourself:
 
 ```
 cd AIChat
+python -m venv .venv
+.venv\Scripts\activate
 pip install -r requirements-dev.txt
 pythonw TheClaudeHub.pyw
 python -m pytest tests
@@ -154,6 +157,25 @@ python -m pytest tests
 
 `python -m theclaudehub` also works. A copy run from source doesn't update itself; Help, Check
 for Updates says so, and names the newest release.
+
+### Build it yourself
+
+Run `build.cmd` from a command prompt (`.\build.cmd` in PowerShell), or double-click it, in
+which case the window stays open at the end so you can read the result. It does what the release workflow
+does, unsigned: makes `.venv` if it isn't there, installs what the build needs into it, runs the
+tests, builds the app, smoke-tests it, and makes the installer and portable zip.
+
+```
+build.cmd                                     build into releases\ and dist\
+build.cmd C:\Users\kelly\OneDrive\thehub      and copy Setup and the zip there
+```
+
+The first run takes a few minutes to set up `.venv`. The results are `releases\` (Setup and the
+portable zip) and `dist\TheClaudeHub\` (the app itself, ready to run). The installer needs the
+Velopack tool, `vpk`; `build.cmd` installs or updates it to the version the workflow uses if the
+.NET SDK is there, and otherwise builds just the app, says why, and exits with an error. A
+relative output folder is taken relative to where you ran `build.cmd`. The build is unsigned, so SmartScreen may warn when you run Setup: More
+info, then Run anyway.
 
 ### Releasing
 

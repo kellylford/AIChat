@@ -132,7 +132,7 @@ jobs:
           endpoint: https://eus.codesigning.azure.net/
           signing-account-name: kellylford
           certificate-profile-name: kellyford-public
-          files-folder: ${{ github.workspace }}\TheClaudeHub\dist\TheClaudeHub
+          files-folder: ${{ github.workspace }}\dist\TheClaudeHub
           files-folder-filter: exe
           files-folder-recurse: false
           file-digest: SHA256
