@@ -128,6 +128,9 @@ class SpeechSettings:
     #: How the session list is sorted (View, Sort Sessions): a value from
     #: ``sessions.SORT_VALUES``. Kept here so the choice survives a restart.
     session_order: str = "status"
+    #: The screen reader reads each message in the messages list whole, not
+    #: just the first line the row shows (#11).
+    full_messages_in_list: bool = True
 
     @property
     def enabled(self) -> bool:
@@ -159,6 +162,7 @@ class SpeechSettings:
         from .sessions import SORT_STATUS, SORT_VALUES
         order = str(raw.get("session_order", SORT_STATUS))
         settings.session_order = order if order in SORT_VALUES else SORT_STATUS
+        settings.full_messages_in_list = bool(raw.get("full_messages_in_list", True))
         return settings
 
     def save(self, path: Optional[Path] = None) -> None:

@@ -59,7 +59,7 @@ from ..sessions import (IDLE, NEEDS_YOU, SORT_ORDERS, SORT_SPOKEN, WORKING,
 from ..speech import SpeechSettings, default_options, list_speech_options, speaker
 from ..transcript import ASSISTANT, ERROR, PLAN, QUESTION, ChatMessage, TranscriptReader
 from ..updater import AVAILABLE, FAILED, CheckResult, UpdateService
-from .a11y import set_accessible_name
+from .a11y import set_accessible_name, set_list_items_accessible
 from ..rendering import html_page, message_page
 from ..ui_text import shortcuts_html
 from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, FormattedMessageDialog,
@@ -224,6 +224,10 @@ class MainFrame(wx.Frame):
         vsizer.Add(self.messages_label, 0, wx.LEFT | wx.TOP, 8)
         self.chat_list = wx.ListBox(root, style=wx.LB_SINGLE, name="Messages")
         set_accessible_name(self.chat_list, "Messages")
+        # Each row shows the first line; the screen reader reads it whole (#11).
+        set_list_items_accessible(self.chat_list, self.chat_list.GetName,
+                                  self._message_item_text)
+        self._spoken: Dict[str, tuple] = {}  # message key -> (text, spoken words)
         vsizer.Add(self.chat_list, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
         self.chat_list.Bind(wx.EVT_CONTEXT_MENU, self._on_message_menu)
         self.chat_list.Bind(wx.EVT_LISTBOX_DCLICK, lambda e: self.on_read_message())
@@ -634,6 +638,7 @@ class MainFrame(wx.Frame):
         self._reader = None
         self._chat_messages = []
         self._chat_keys = []
+        self._spoken.clear()
         self._chat_loaded = False
         self._announce_load = True
         if info.is_own and info.unread:
@@ -659,6 +664,7 @@ class MainFrame(wx.Frame):
     def unload_session(self):
         """Nothing loaded (the loaded session was forgotten)."""
         self._chat_timer.Stop()
+        self._spoken.clear()
         self._open = None
         self._open_generation += 1
         self._reader = None
@@ -878,6 +884,26 @@ class MainFrame(wx.Frame):
             if visible_key in order and order.index(visible_key) <= position:
                 best = row
         return best
+
+    def _message_item_text(self, index: int) -> Optional[str]:
+        """What the screen reader reads for row ``index`` of the messages list
+        (#11): the whole message, as words, with who said it. None (the row's
+        own text) when the setting is off, or for a row that isn't a message
+        ("Loading messages…", "No session loaded…")."""
+        if not self.speech.full_messages_in_list:
+            return None
+        if not (0 <= index < len(self._chat_keys)):
+            return None
+        visible = self._visible_messages()
+        if index >= len(visible) or visible[index].key != self._chat_keys[index]:
+            return None  # the list and the messages are mid-update
+        message = visible[index]
+        cached = self._spoken.get(message.key)
+        if cached is None or cached[0] != message.text:
+            spoken = announce.spoken_markdown(message.text) or message.first_line()
+            cached = (message.text, f"{message.label}: {spoken}")
+            self._spoken[message.key] = cached
+        return cached[1]
 
     def _selected_message(self) -> Optional[ChatMessage]:
         visible = self._visible_messages()
