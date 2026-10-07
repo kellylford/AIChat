@@ -1764,3 +1764,26 @@ def test_ctrl_9_goes_to_the_status_bar(frame, monkeypatch):
     assert "Go to Status &Bar\tCtrl+9" in labels
     frame.focus_status()
     assert focused == [True]
+
+
+def test_tab_and_shift_tab_leave_the_status_bar(frame, monkeypatch):
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.status_text))
+    went = []
+    monkeypatch.setattr(frame, "focus_sessions", lambda: went.append("sessions"))
+    monkeypatch.setattr(frame.refresh_btn, "SetFocus", lambda: went.append("refresh"))
+    for shift in (False, True):
+        event = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
+        event.SetKeyCode(wx.WXK_TAB)
+        event.SetShiftDown(shift)
+        frame._on_char_hook(event)
+    assert went == ["sessions", "refresh"]
+
+
+def test_status_bar_waits_while_you_read_it(frame, monkeypatch):
+    frame._status("First.")
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.status_text))
+    frame._status("Second.")
+    assert frame.status_text.GetValue() == "First."   # caret not moved under you
+    assert frame.GetStatusBar().GetStatusText() == "Second."
+    frame._on_status_focus(wx.FocusEvent(wx.wxEVT_SET_FOCUS))
+    assert frame.status_text.GetValue() == "Second."  # caught up on arriving

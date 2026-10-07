@@ -334,16 +334,31 @@ class MainFrame(wx.Frame):
 
         def fit(event=None):
             rect = bar.GetFieldRect(0)
-            self.status_text.SetSize(rect.x + 2, rect.y + 2, rect.width - 4, rect.height - 4)
+            # Short of the right edge, so the size grip stays visible.
+            grip = bar.GetSize().height
+            self.status_text.SetSize(rect.x + 2, rect.y + 2,
+                                     max(rect.width - 4 - grip, 20), rect.height - 4)
             if event is not None:
                 event.Skip()
         bar.Bind(wx.EVT_SIZE, fit)
         fit()
+        self._status_latest = ""
+        self.status_text.Bind(wx.EVT_SET_FOCUS, self._on_status_focus)
 
     def _status(self, text: str):
         text = announce.status_text(text)
+        self._status_latest = text
         self.SetStatusText(text)
-        self.status_text.ChangeValue(text)
+        # Not while you're reading it: a new value would put the caret back at
+        # the start. It catches up the next time you arrive (and the native
+        # field, and the announcement, have it now).
+        if wx.Window.FindFocus() is not self.status_text:
+            self.status_text.ChangeValue(text)
+
+    def _on_status_focus(self, event):
+        if self.status_text.GetValue() != self._status_latest:
+            self.status_text.ChangeValue(self._status_latest)
+        event.Skip()
 
     def _say(self, text: Optional[str], force: bool = False):
         """Speak an announcement (per the level) and put it in the status bar."""
@@ -1667,6 +1682,15 @@ class MainFrame(wx.Frame):
                 return
         if key == wx.WXK_F6 and not ctrl and not event.AltDown():
             self.cycle_focus(forward=not event.ShiftDown())
+            return
+        if key == wx.WXK_TAB and not ctrl and focus is self.status_text:
+            # The status bar isn't in the panel's Tab order, so wx would leave
+            # Tab nowhere to go. It sits after everything else: Tab wraps to
+            # the session list, Shift+Tab goes back to the last control.
+            if event.ShiftDown():
+                self.refresh_btn.SetFocus()
+            else:
+                self.focus_sessions()
             return
         if key == wx.WXK_ESCAPE and in_session:
             self.focus_sessions()

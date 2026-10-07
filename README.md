@@ -220,7 +220,7 @@ shows it as plain text instead.
 | Anywhere | Ctrl+1, Ctrl+2, Ctrl+3 | Go to the session list, the messages, the reply box |
 | Anywhere | F6, Shift+F6 | Next or previous part: session list, messages, reply box, status bar |
 | Anywhere | Ctrl+9 | Go to the status bar |
-| Messages or reply box | Escape | Back to the session list, on the same session |
+| Messages, reply box or status bar | Escape | Back to the session list, on the same session |
 | Messages | Backspace | Also back to the session list |
 | Session list | Enter | Load that session and move to its messages |
 | Session list | Ctrl+O | Open the selected session in the Claude desktop app |
