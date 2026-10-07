@@ -91,7 +91,8 @@ ExitPlanMode) over stdin. Safety invariants that have tests; keep them:
 **UI (`ui/`).** `main_frame.py` is the large `MainFrame`. Background work (snapshots, chat
 loading, turns, update checks, sign-in, slash-command fetches) runs on threads and returns to the
 UI only through `wx.CallAfter`. Timers drive list and chat refreshes. `a11y.py` gives controls
-MSAA names. `announce.py` decides what is spoken, and `speech.py` plus `speech/*.ps1|*.sh` speak it
+MSAA names, and through `mac_a11y.py` (ctypes, no PyObjC) VoiceOver names too, because wx's
+`SetName` reaches neither. `announce.py` decides what is spoken, and `speech.py` plus `speech/*.ps1|*.sh` speak it
 through the screen reader or a system voice. `ui_text.py` holds UI text that can be tested without wx
 (the `LAYOUT` and `SHORTCUTS` lists, which the Help dialog and the README both show).
 

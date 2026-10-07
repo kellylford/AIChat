@@ -69,6 +69,7 @@ from ..speech import ANNOUNCE_FULL, NOTIFY_ALL, NOTIFY_OFF, SpeechSettings, defa
 from ..transcript import (ASSISTANT, ERROR, PLAN, QUESTION, QUEUED, TOOL, ChatMessage,
                           TranscriptReader)
 from ..updater import AVAILABLE, FAILED, CheckResult, UpdateService
+from . import mac_a11y
 from .a11y import set_accessible_name, set_list_items_accessible
 from .notify import Notifier
 from .statusbar import StatusParts
@@ -303,7 +304,7 @@ class MainFrame(wx.Frame):
         set_list_items_accessible(self.chat_list, self.chat_list.GetName,
                                   self._message_item_text)
         self._spoken: Dict[str, tuple] = {}  # message key -> (text, spoken words)
-        vsizer.Add(self.chat_list, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
+        vsizer.Add(self.chat_list, 2, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
         self.chat_list.Bind(wx.EVT_CONTEXT_MENU, self._on_message_menu)
         self.chat_list.Bind(wx.EVT_LISTBOX_DCLICK, lambda e: self.on_read_message())
 
@@ -318,7 +319,7 @@ class MainFrame(wx.Frame):
         # while a RichEdit takes its name from the label before it.
         self.reply_text = wx.TextCtrl(self.own_reply, style=wx.TE_MULTILINE | wx.TE_RICH2)
         set_accessible_name(self.reply_text, "Your message")
-        self.reply_text.SetMinSize((-1, 90))
+        self.reply_text.SetMinSize((-1, 120))
         osizer.Add(self.reply_text, 1, wx.EXPAND)
         orow = wx.BoxSizer(wx.HORIZONTAL)
         self.send_btn = wx.Button(self.own_reply, label="Sen&d")
@@ -364,7 +365,7 @@ class MainFrame(wx.Frame):
                    "conversation so far, that you can reply to here; the desktop app "
                    "session isn't changed."))
         set_accessible_name(self.desktop_note, "About replying")
-        self.desktop_note.SetMinSize((-1, 90))
+        self.desktop_note.SetMinSize((-1, 120))
         dsizer.Add(self.desktop_note, 1, wx.EXPAND)
         drow = wx.BoxSizer(wx.HORIZONTAL)
         self.reply_claude_btn = wx.Button(self.desktop_reply, label="Open in &Claude")
@@ -376,8 +377,11 @@ class MainFrame(wx.Frame):
         self.reply_claude_btn.Bind(wx.EVT_BUTTON, self.on_open_in_claude)
         self.continue_btn.Bind(wx.EVT_BUTTON, self.on_continue_here)
 
-        vsizer.Add(self.own_reply, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
-        vsizer.Add(self.desktop_reply, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        # The reply area takes a third of the height and grows with the
+        # window: held at its minimum, the reply box was about four lines
+        # however big the window was.
+        vsizer.Add(self.own_reply, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        vsizer.Add(self.desktop_reply, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
 
         crow = wx.BoxSizer(wx.HORIZONTAL)
         self.activity_check = wx.CheckBox(root, label="Show tool &activity")
@@ -1561,6 +1565,7 @@ class MainFrame(wx.Frame):
         modal = next((w for w in wx.GetTopLevelWindows()
                       if isinstance(w, wx.Dialog) and w.IsModal()), None)
         (modal or self).Raise()
+        mac_a11y.activate_app()  # Raise alone leaves a Mac's menu bar with the last app
         if not self._app_is_active():
             self.RequestUserAttention()  # Windows wouldn't let it come forward
         if modal is not None or key is None:

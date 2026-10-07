@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import wx
 
+from . import mac_a11y
+
 
 class _NamedAccessible(wx.Accessible):
     """Give a text control a name that reaches MSAA.
@@ -31,8 +33,12 @@ def set_accessible_name(control: wx.Window, label: str) -> None:
     because their name does not otherwise reach MSAA. List boxes don't get
     one here: the messages list has its own (``set_list_items_accessible``),
     which keeps the list's name and its rows' text.
+
+    On macOS neither reaches VoiceOver, so the name goes on the native view
+    as well (``mac_a11y``).
     """
     control.SetName(label)
+    mac_a11y.set_label(control, label)
     if not isinstance(control, wx.TextCtrl):
         return
     existing = getattr(control, "_hub_accessible", None)

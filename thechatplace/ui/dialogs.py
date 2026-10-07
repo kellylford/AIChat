@@ -1061,6 +1061,7 @@ class ChangesDialog(wx.Dialog):
         row.Add(wx.StaticText(self, label="&Show changes from:"), 0,
                 wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
         self.scope = wx.Choice(self, choices=["Your latest message", "The whole session"])
+        set_accessible_name(self.scope, "Show changes from")
         self.scope.SetSelection(0 if latest else 1)
         row.Add(self.scope, 0)
         sizer.Add(row, 0, wx.LEFT | wx.TOP | wx.RIGHT, 8)

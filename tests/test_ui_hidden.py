@@ -18,7 +18,7 @@ from thechatplace.sessions import NEEDS_YOU  # noqa: E402
 
 from records import (assistant_block, lines, text_block, tool_result, tool_use_block,  # noqa: E402
                      user_text)
-from markers import msaa, windows_paths  # noqa: E402
+from markers import msaa, voiceover, windows_paths  # noqa: E402
 
 
 FAKE_COMMANDS = [
@@ -95,9 +95,13 @@ def env(tmp_path, monkeypatch, app):
         def close(self):
             pass
     monkeypatch.setattr(main_frame, "Notifier", FakeNotifier)
+    # Nor take the Mac's menu bar from the app you're using.
+    activated = []
+    from thechatplace.ui import mac_a11y
+    monkeypatch.setattr(mac_a11y, "activate_app", lambda: activated.append(True) or True)
     return {"desktop": desktop, "projects": projects, "spoken": spoken, "copied": copied,
             "feedback": feedback, "opened": opened, "boxes": boxes, "tmp": tmp_path,
-            "live": live, "notified": notified}
+            "live": live, "notified": notified, "activated": activated}
 
 
 def add_desktop(env, local, cli, title, cwd="C:\\G\\Repo", ago=60_000, **extra):
@@ -2911,6 +2915,8 @@ def test_choosing_a_notification_loads_its_session(frame, env):
     hub_key = next(s.key for s in frame._snapshot.sessions if s.title == "Hub probe")
     frame._go_to_session(hub_key)
     assert frame._open is not None and frame._open.key == hub_key
+    # The app becomes active, not just its window, so VO+M finds its menus.
+    assert env["activated"] == [True]
     frame._go_to_session("gone")  # forgotten since: just comes forward
     assert frame._open.key == hub_key
 
@@ -3441,3 +3447,90 @@ def test_send_now_takes_a_queued_message_into_the_running_turn(frame, env, fake_
     frame.chat_list.SetSelection(frame.chat_list.GetCount() - 1)
     frame.send_queued_now()
     assert frame._queued == {"own-1": ["second"]}
+
+
+# VoiceOver names (macOS). wx's SetName never reaches VoiceOver, so without
+# ui/mac_a11y.py every edit box, list and choice was read with no label.
+
+def _unlabelled(window):
+    """Edit boxes, lists and choices under `window` that VoiceOver can't name."""
+    from thechatplace.ui import mac_a11y
+    missing = []
+    for child in window.GetChildren():
+        if isinstance(child, (wx.TextCtrl, wx.ListBox, wx.Choice, wx.ComboBox)):
+            if not mac_a11y.get_label(child):
+                missing.append(f"{type(child).__name__} {child.GetName()!r}")
+        missing.extend(_unlabelled(child))
+    return missing
+
+
+@voiceover
+def test_voiceover_reads_the_main_window_labels(frame):
+    from thechatplace.ui import mac_a11y
+    assert mac_a11y.get_label(frame.reply_text) == "Your message"
+    assert mac_a11y.get_label(frame.desktop_note) == "About replying"
+    assert mac_a11y.get_label(frame.session_list)
+    assert _unlabelled(frame) == []
+
+
+@voiceover
+def test_voiceover_follows_a_changing_name(frame):
+    from thechatplace.ui import mac_a11y
+    from thechatplace.ui.a11y import set_accessible_name
+    set_accessible_name(frame.chat_list, "Messages, Hub probe, idle")
+    assert mac_a11y.get_label(frame.chat_list) == "Messages, Hub probe, idle"
+
+
+@voiceover
+def test_voiceover_reads_dialog_labels(frame):
+    from thechatplace.ui.dialogs import (BugReportDialog, ChangesDialog, CommandPickerDialog,
+                                         NewSessionDialog, SettingsDialog)
+    dialogs = [
+        NewSessionDialog(frame, "/tmp"),
+        SettingsDialog(frame, speech.SpeechSettings(), speech.default_options()),
+        BugReportDialog(frame, ["The Chat Place: 0.1.0"]),
+        CommandPickerDialog(frame, FAKE_COMMANDS),
+        ChangesDialog(frame, "Hub probe", [], [], str),
+    ]
+    try:
+        for dialog in dialogs:
+            assert _unlabelled(dialog) == [], dialog.GetTitle()
+    finally:
+        for dialog in dialogs:
+            dialog.Destroy()
+
+
+def test_mac_naming_does_nothing_off_macos(monkeypatch):
+    from thechatplace.ui import mac_a11y
+    monkeypatch.setattr(mac_a11y, "IS_MACOS", False)
+    assert mac_a11y.set_label(object(), "Your message") is False
+    assert mac_a11y.get_label(object()) is None
+
+
+def test_a_control_without_a_native_view_is_not_an_error():
+    from thechatplace.ui import mac_a11y
+    assert mac_a11y.set_label(object(), "Your message") is False
+    assert mac_a11y.get_label(object()) is None
+
+
+def test_activating_does_nothing_off_macos(monkeypatch):
+    from thechatplace.ui import mac_a11y
+    monkeypatch.setattr(mac_a11y, "IS_MACOS", False)
+    assert mac_a11y.activate_app() is False
+
+
+def test_the_reply_box_grows_with_the_window(frame):
+    """It was held at its minimum (about four lines) however big the window
+    was, with all the extra height going to the messages list."""
+    def reply_height(size):
+        frame.SetSize(size)
+        frame.Layout()
+        frame.own_reply.Layout()
+        return frame.reply_text.GetSize().height
+
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    small, large = reply_height((1000, 720)), reply_height((1440, 900))
+    assert small >= 120
+    assert large > small + 40
+    assert frame.chat_list.GetSize().height > frame.own_reply.GetSize().height

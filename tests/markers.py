@@ -11,3 +11,6 @@ windows_paths = pytest.mark.skipif(
 
 #: wx.Accessible (MSAA names for JAWS and NVDA) exists only in wxPython on Windows.
 msaa = pytest.mark.skipif(sys.platform != "win32", reason="wx.Accessible is Windows-only")
+
+#: VoiceOver names, read back from the native views (ui/mac_a11y.py).
+voiceover = pytest.mark.skipif(sys.platform != "darwin", reason="VoiceOver names are macOS-only")
