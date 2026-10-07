@@ -49,7 +49,7 @@ def test_own_message_read_back_follows_the_level_and_setting():
     assert announce.queued_text("QM", "and the docs", ANNOUNCE_FULL, True) == \
         "Queued for QM: and the docs."
     assert announce.queued_text("QM", "more", ANNOUNCE_FULL, True, added=True) == \
-        "Added to the queued message for QM: more."
+        "Also queued for QM: more."
     assert announce.queued_text("QM", "more", ANNOUNCE_FULL, False) == \
         "Queued. It will be sent when QM finishes."
 
