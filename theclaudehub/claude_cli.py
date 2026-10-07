@@ -883,3 +883,66 @@ def _decode(raw) -> str:
     if isinstance(raw, bytes):
         return raw.decode("utf-8", errors="replace")
     return str(raw)
+
+
+# ---------------------------------------------------------------------------
+# Slash commands and skills (#23)
+# ---------------------------------------------------------------------------
+
+
+def usable_commands(commands) -> List[dict]:
+    """The commands worth offering, from an ``initialize`` answer: named,
+    not internal ("__..."), yours (skills and custom commands) first, then
+    Claude Code's own, each group by name."""
+    good = [c for c in commands or [] if isinstance(c, dict) and isinstance(c.get("name"), str)
+            and c["name"] and not c["name"].startswith("__")]
+    return sorted(good, key=lambda c: (bool(c.get("builtin")), c["name"].lower()))
+
+
+def fetch_commands(executable: str, cwd: str, timeout: float = 20.0,
+                   popen: Callable[..., subprocess.Popen] = subprocess.Popen) -> List[dict]:
+    """The slash commands and skills Claude Code offers in ``cwd``, without
+    running a turn: ``claude -p`` is sent only the ``initialize`` request,
+    and stdin is closed once it answers, so no session is made and nothing
+    is billed (checked with Claude Code 2.1.286: 1.4 seconds, no transcript).
+    [] if it can't be had."""
+    if not os.path.isdir(cwd):
+        return []
+    command = [executable, "-p", "--input-format", "stream-json", "--output-format",
+               "stream-json", "--verbose", "--permission-prompts", "none"]
+    try:
+        process = popen(command, cwd=cwd, env=child_environment(), stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                        creationflags=platform_paths.hidden_window_flags())
+    except OSError:
+        return []
+    timer = threading.Timer(timeout, lambda: _quietly(process.kill))
+    timer.start()
+    try:
+        process.stdin.write((json.dumps({"type": "control_request", "request_id": INIT_REQUEST_ID,
+                                         "request": {"subtype": "initialize", "hooks": None}})
+                             + "\n").encode("utf-8"))
+        process.stdin.flush()
+        parser = StreamParser()
+        for raw in iter(process.stdout.readline, b""):
+            parser.feed(_decode(raw))
+            if parser.commands:
+                break
+        return usable_commands(parser.commands)
+    except (OSError, ValueError):
+        return []
+    finally:
+        timer.cancel()
+        _quietly(process.stdin.close)
+        try:
+            process.wait(timeout=5)
+        except Exception:  # noqa: BLE001
+            _quietly(process.kill)
+            _quietly(lambda: process.wait(timeout=2))
+
+
+def _quietly(action) -> None:
+    try:
+        action()
+    except Exception:  # noqa: BLE001
+        pass

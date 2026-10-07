@@ -799,6 +799,84 @@ class ManageGroupsDialog(wx.Dialog):
         self.list.SetFocus()
 
 
+class CommandPickerDialog(wx.Dialog):
+    """Session, Insert Command or Skill (#23): Claude Code's slash commands
+    and your skills for this folder, yours first. Type to filter by name or
+    description; Down moves into the list; Enter (or Insert) chooses."""
+
+    def __init__(self, parent, commands):
+        super().__init__(parent, title="Insert Command or Skill", size=(720, 520),
+                         style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+        self._all = list(commands)
+        self._shown = []
+        self.chosen = None
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer.Add(wx.StaticText(self, label="&Search:"), 0, wx.LEFT | wx.TOP, 8)
+        self.search = wx.TextCtrl(self, style=wx.TE_PROCESS_ENTER)
+        set_accessible_name(self.search, "Search commands and skills")
+        sizer.Add(self.search, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        self.list_label = wx.StaticText(self, label="&Commands and skills:")
+        sizer.Add(self.list_label, 0, wx.LEFT | wx.TOP, 8)
+        self.list = wx.ListBox(self, style=wx.LB_SINGLE)
+        set_accessible_name(self.list, "Commands and skills")
+        sizer.Add(self.list, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        row = wx.BoxSizer(wx.HORIZONTAL)
+        insert = wx.Button(self, wx.ID_OK, "&Insert")
+        insert.SetDefault()
+        row.Add(insert, 0, wx.RIGHT, 6)
+        row.Add(wx.Button(self, wx.ID_CANCEL), 0)
+        sizer.Add(row, 0, wx.ALIGN_RIGHT | wx.ALL, 8)
+        self.SetSizer(sizer)
+        self.SetEscapeId(wx.ID_CANCEL)
+        self.search.Bind(wx.EVT_TEXT, lambda e: self._filter())
+        self.search.Bind(wx.EVT_TEXT_ENTER, lambda e: self._choose())
+        self.search.Bind(wx.EVT_KEY_DOWN, self._on_search_key)
+        self.list.Bind(wx.EVT_LISTBOX_DCLICK, lambda e: self._choose())
+        insert.Bind(wx.EVT_BUTTON, lambda e: self._choose())
+        self._filter()
+        wx.CallAfter(self.search.SetFocus)
+
+    @staticmethod
+    def row(command) -> str:
+        name = f"/{command['name']}"
+        hint = str(command.get("argumentHint") or "").strip()
+        text = " ".join(str(command.get("description") or "").split())
+        if len(text) > 200:
+            text = text[:199] + "…"
+        owner = ", Claude Code" if command.get("builtin") else ""
+        return f"{name}{' ' + hint if hint else ''}{owner}: {text}" if text else f"{name}{owner}"
+
+    def _filter(self):
+        words = self.search.GetValue().lower().split()
+        self._shown = [c for c in self._all
+                       if all(w in (c["name"] + " " + str(c.get("description") or "")).lower()
+                              for w in words)]
+        if self._shown:
+            self.list.Set([self.row(c) for c in self._shown])
+            self.list.SetSelection(0)
+        else:
+            self.list.Set(["Nothing matches."])
+            self.list.SetSelection(0)
+        count = len(self._shown)
+        self.list_label.SetLabel(f"&Commands and skills ({count} of {len(self._all)}):")
+        set_accessible_name(self.list, f"Commands and skills, {count} of {len(self._all)}")
+
+    def _on_search_key(self, event):
+        if event.GetKeyCode() in (wx.WXK_DOWN, wx.WXK_UP) and self._shown:
+            # Down lands on the first entry (the top one is already chosen by
+            # default, so Down from the box shouldn't need pressing twice).
+            self.list.SetFocus()
+            self.list.SetSelection(0)
+            return
+        event.Skip()
+
+    def _choose(self):
+        index = self.list.GetSelection()
+        if not self._shown or not (0 <= index < len(self._shown)):
+            wx.Bell()
+            return
+        self.chosen = self._shown[index]
+        self.EndModal(wx.ID_OK)
 class BugReportDialog(wx.Dialog):
     """Help, Report a Bug (#28), as QuickMail's: a summary, what happened,
     what you expected and the steps, then what the report will include, to
