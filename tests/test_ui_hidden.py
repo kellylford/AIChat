@@ -876,7 +876,7 @@ def test_manual_check_with_no_releases_says_so(frame, env):
     from thechatplace.updater import NO_RELEASES, CheckResult
     frame.updates = FakeUpdates(CheckResult(NO_RELEASES, "0.1.0"))
     run_check(frame)
-    assert env["spoken"][-1].startswith("No The Chat Place release has been published yet.")
+    assert env["spoken"][-1].startswith("No release of The Chat Place has been published yet.")
     assert frame._last_announcement == env["spoken"][-1]    # Ctrl+Shift+R repeats it
     assert env["boxes"] == []
 

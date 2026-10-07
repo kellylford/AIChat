@@ -3001,8 +3001,8 @@ class MainFrame(wx.Frame):
 
     def on_about(self, _event=None):
         wx.MessageBox(
-            f"{APP_NAME} version {__version__}\n\nA keyboard and screen reader friendly reader "
-            "for Claude Code sessions, on your existing Claude subscription.",
+            f"{APP_NAME} version {__version__}\n\nA home for your Claude Code chats: keyboard and "
+            "screen reader friendly, on your existing Claude subscription.",
             f"About {APP_NAME}", wx.OK | wx.ICON_INFORMATION, self)
 
     # ------------------------------------------------------------- keyboard

@@ -10,13 +10,11 @@ How it fits together
   found, as a ``CheckResult`` the UI turns into words. Nothing is downloaded
   until Kelly agrees: ``download()`` then ``apply_and_restart()``.
 
-TheWorkBench is a monorepo with other apps' releases in it, so The Chat Place
-publishes to its own Velopack channel, ``thechatplace``: its feed files are
-``releases.thechatplace.json`` and ``assets.thechatplace.json``. Velopack's own
-GitHub source reads only the repo's 10 newest releases, which other apps'
-releases soon push The Chat Place's out of. So the updater finds the newest
-``thechatplace-v*`` release itself and points Velopack at that one release's
-files. Each release carries every package its feed names (the workflow
+The Chat Place publishes on the Velopack channel ``windows``: its feed files
+are ``releases.windows.json`` and ``assets.windows.json``. The updater finds
+the newest ``v*`` release itself, rather than through Velopack's own GitHub
+source (which reads only the repo's 10 newest releases), and points Velopack
+at that one release's files. Each release carries every package its feed names (the workflow
 uploads the previous full package with the new one).
 
 Updating never touches The Chat Place's data. Velopack installs and replaces
@@ -41,10 +39,10 @@ from . import platform_paths
 
 logger = logging.getLogger("thechatplace.updater")
 
-REPO_URL = "https://github.com/kellylford/TheWorkBench"
-RELEASES_API = "https://api.github.com/repos/kellylford/TheWorkBench/releases?per_page=100"
-TAG_PREFIX = "thechatplace-v"
-CHANNEL = "thechatplace"
+REPO_URL = "https://github.com/kellylford/AIChat"
+RELEASES_API = "https://api.github.com/repos/kellylford/AIChat/releases?per_page=100"
+TAG_PREFIX = "v"
+CHANNEL = "windows"
 INCLUDE_PRERELEASES = True
 
 # CheckResult.status values
@@ -123,7 +121,7 @@ class CheckResult:
         if self.status == CURRENT:
             return f"The Chat Place is up to date (version {self.current})."
         if self.status == NO_RELEASES:
-            return (f"No The Chat Place release has been published yet. You have version "
+            return (f"No release of The Chat Place has been published yet. You have version "
                     f"{self.current}.")
         if self.status == NOT_INSTALLED:
             latest = (f" The latest release is {self.version}." if self.version else
@@ -134,7 +132,7 @@ class CheckResult:
 
 
 def latest_published_version(fetch: Optional[Callable[[str], bytes]] = None) -> Optional[str]:
-    """The newest thechatplace-v* release on GitHub, or None if there is none.
+    """The newest v* release on GitHub, or None if there is none.
     Raises on network errors (the caller reports them)."""
     fetch = fetch or _fetch
     releases = json.loads(fetch(RELEASES_API).decode("utf-8"))

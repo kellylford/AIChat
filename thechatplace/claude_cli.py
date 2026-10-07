@@ -136,7 +136,7 @@ def normalize_permission_mode(mode: str) -> str:
 #: ``--model`` at all, leaving it to Claude Code's own setting.
 #:
 #: Fable is left out on purpose. Claude Code's docs: on some plans Fable
-#: bills to usage credits, and in ``-p`` mode (every The Chat Place turn) it
+#: bills to usage credits, and in ``-p`` mode (every turn The Chat Place runs) it
 #: does so without asking. The Chat Place must never cost extra, and the
 #: ``apiKeySource`` check can't catch this (it's still the subscription
 #: login). Add it only once Kelly's plan is known to include it.

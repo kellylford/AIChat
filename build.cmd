@@ -27,7 +27,7 @@ REM Differences: the workflow uses Python 3.12 and needs release notes for the
 REM version; here any Python 3.11+ works and release notes are optional.
 set "PYINSTALLER_VERSION=6.22.3"
 set "VPK_VERSION=1.2.161"
-set "CHANNEL=thechatplace"
+set "CHANNEL=windows"
 set "PY=%~dp0.venv\Scripts\python.exe"
 
 echo ========================================================================

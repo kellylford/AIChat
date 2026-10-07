@@ -1,6 +1,6 @@
 """Check a release tag against the app's version, and print the version.
 
-    python tools/check_version.py thechatplace-v0.1.0   # exits 1 unless they agree
+    python tools/check_version.py v0.1.0   # exits 1 unless they agree
     python tools/check_version.py                       # prints the version
 
 The version lives in one place, ``thechatplace/__init__.py``. The release
@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT))
 
 from thechatplace import __version__  # noqa: E402
 
-TAG_PREFIX = "thechatplace-v"
+TAG_PREFIX = "v"
 
 
 def main(argv: list) -> int:

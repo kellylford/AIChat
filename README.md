@@ -1,5 +1,7 @@
 # The Chat Place
 
+A home for your Claude Code chats.
+
 > **Status: version 0.1.0, ready for its first release.** Used with JAWS on Kelly's PC; the
 > installer, uninstaller and update check have been tested in the vmtest VM. Downloading and
 > installing an update needs two published releases, so it is first tried with 0.1.1. It has not
@@ -232,7 +234,7 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
 You need Windows 10 or 11 and **Claude Code installed with its native installer and signed in**
 to a Claude subscription (the `claude` command, the same login the desktop app uses).
 
-Download `TheChatPlace-thechatplace-Setup.exe` from the newest release on
+Download `TheChatPlace-windows-Setup.exe` from the newest release on
 [the releases page](https://github.com/kellylford/AIChat/releases) and run it.
 It installs for you only, with no administrator rights, adds The Chat Place to the Start menu, and
 starts it. The portable zip from the same release runs without installing, but doesn't update
@@ -259,15 +261,11 @@ data is in `%APPDATA%\TheChatPlace`, a different folder that neither goes near, 
 refuses to run if that were ever not so. What the updater did is logged in
 `%APPDATA%\TheChatPlace\update.log`.
 
-The version is in Help, About. Releases come from tags named `thechatplace-v<version>`, and
-The Chat Place publishes its update feed on its own Velopack channel (`releases.thechatplace.json`).
-The updater finds the newest `thechatplace-v*` release itself and reads the feed from that
-release only.
-
-**The updater still looks in TheWorkBench**, where The Chat Place lived until October 2026
-(`REPO_URL`, `RELEASES_API` and `TAG_PREFIX` in `thechatplace/updater.py`). Pointing it at this
-repository, with a hand-off release for copies already installed, is still to do; until then,
-installed copies find no updates.
+The version is in Help, About. Releases come from tags named `v<version>`, and
+The Chat Place publishes its update feed on the Velopack channel `windows`
+(`releases.windows.json`). The updater finds the newest `v*` release in this repository itself
+and reads the feed from that release only (`REPO_URL`, `RELEASES_API`, `TAG_PREFIX` and `CHANNEL`
+in `thechatplace/updater.py`).
 
 ## Run from source (development)
 
@@ -311,7 +309,7 @@ The version lives in one place, `__version__` in `thechatplace/__init__.py`. To 
 
 1. Set `__version__`, and write `release-notes/v<version>.md` (what it is, what's new, downloads,
    requirements), in one commit on main.
-2. Tag it `thechatplace-v<version>` and push the tag.
+2. Tag it `v<version>` and push the tag.
 
 `.github/workflows/release-thechatplace.yml` then runs the tests, fails if the tag and
 `__version__` disagree, builds the app with PyInstaller, smoke-tests the built exe, signs it with

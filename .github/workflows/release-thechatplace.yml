@@ -1,15 +1,13 @@
 name: Release The Chat Place
 
-# A tag like thechatplace-v0.1.0 tests The Chat Place, builds it with PyInstaller, signs it with
+# A tag like v0.1.0 tests The Chat Place, builds it with PyInstaller, signs it with
 # Azure Artifact Signing, packs the Velopack installer, portable zip and update feed, checks every
-# signature, and publishes a GitHub release. (The tag prefix and the Velopack channel date from
-# when The Chat Place lived in TheWorkBench, a repo of several apps; they stay until the updater is
-# moved over.)
+# signature, and publishes a GitHub release.
 #
 #   (bump __version__ in thechatplace/__init__.py and add
 #    release-notes/v<version>.md in the same commit)
-#   git tag thechatplace-v0.1.0
-#   git push origin thechatplace-v0.1.0
+#   git tag v0.1.0
+#   git push origin v0.1.0
 #
 # Run by hand (Actions, Run workflow) or for a pull request, it tests, builds and packs the same
 # way and publishes nothing; the files are kept as a workflow artifact. A hand run with "sign"
@@ -18,14 +16,13 @@ name: Release The Chat Place
 #
 # Velopack and signing follow GHManage's ghmanage.yml and The-Idea-Place-Projects/signing
 # (lessons.md): sign the program first, then `vpk pack --azureTrustedSignFile` signs Setup, the
-# updater and the launcher stub, and skips the program it finds already signed. The Chat Place uses
-# its own Velopack channel, "thechatplace", so its update feed (releases.thechatplace.json) can't be
-# confused with any other app released from this repository.
+# updater and the launcher stub, and skips the program it finds already signed. The Chat Place
+# publishes on the Velopack channel "windows" (releases.windows.json), the one the updater reads.
 
 on:
   push:
     tags:
-      - 'thechatplace-v*'
+      - 'v*'
   pull_request:
     # "labeled" so adding the sign-build label to a pull request re-runs it signed.
     types: [opened, synchronize, reopened, labeled]
@@ -55,12 +52,12 @@ jobs:
       run:
         shell: pwsh
     env:
-      PUBLISH: ${{ startsWith(github.ref, 'refs/tags/thechatplace-v') }}
+      PUBLISH: ${{ startsWith(github.ref, 'refs/tags/v') }}
       # Signs for a tag; for a hand run with "sign" ticked; and for a pull request labelled
       # sign-build, which proves signing before a workflow change reaches main (a hand run can
       # only start a workflow that is already on main). Nothing but a tag publishes.
-      SIGN: ${{ startsWith(github.ref, 'refs/tags/thechatplace-v') || (github.event_name == 'workflow_dispatch' && inputs.sign) || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'sign-build')) }}
-      CHANNEL: thechatplace
+      SIGN: ${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.sign) || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'sign-build')) }}
+      CHANNEL: windows
     steps:
       # Every action is pinned to a release commit, like thechatplace-tests.yml: checkout v4.4.0,
       # setup-python v5.6.0, azure/login v3.1.0, artifact-signing-action v2.0.0, upload-artifact v4.6.2.
@@ -158,7 +155,7 @@ jobs:
       # The previous release's packages let vpk build a delta update, and its full package goes
       # up with this release so the feed's every file is in one release (the updater reads
       # just that one). Found by tag, not with `vpk download github`, which only looks at the
-      # repo's 10 newest releases, most of them other apps'. None before the first release.
+      # repo's 10 newest releases. None before the first release.
       - name: Download the previous release's packages
         if: env.PUBLISH == 'true'
         continue-on-error: true
@@ -166,7 +163,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $prev = gh release list --repo $env:GITHUB_REPOSITORY --limit 200 --json tagName,isDraft `
-            --jq '[.[] | select(.isDraft | not) | .tagName | select(startswith("thechatplace-v"))] | .[0] // empty'
+            --jq '[.[] | select(.isDraft | not) | .tagName | select(startswith("v"))] | .[0] // empty'
           if (-not $prev) { Write-Host 'No earlier The Chat Place release.'; exit 0 }
           Write-Host "Previous release: $prev"
           vpk download http --url "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$prev/" `
@@ -217,7 +214,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      # The feed files (releases.thechatplace.json, assets.thechatplace.json, RELEASES-thechatplace)
+      # The feed files (releases.windows.json, assets.windows.json, RELEASES-windows)
       # and the full package are what installed copies update from, so they go up with the
       # installer and portable zip. Before 1.0 a release is a pre-release; the updater includes
       # pre-releases.
