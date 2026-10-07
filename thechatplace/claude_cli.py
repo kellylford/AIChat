@@ -832,6 +832,9 @@ class TurnRunner:
         self._lock = threading.Lock()
         self._cancelled = False
         self._stopped_for_key = False
+        #: A message sent with Send Now and not answered yet. The result of
+        #: the work it interrupted (error_during_execution) isn't a failure.
+        self._message_outstanding = False
         #: Stopped by The Chat Place before Claude answered (an API key or an
         #: unchosen Fable): the message goes back to the reply box.
         self.stopped_before_answer = False
@@ -849,6 +852,23 @@ class TurnRunner:
 
     def elapsed(self) -> float:
         return self._clock() - self.started_at
+
+    def send_now(self, prompt: str) -> bool:
+        """Send a message into the running turn at once, as the desktop app's
+        Send Now does: Claude stops what it's doing (``interrupt``) and takes
+        the message next, in this same process. False if the turn is over."""
+        with self._lock:
+            if not self._stdin_open or self._cancelled or self.stopped_before_answer:
+                return False  # over, or being stopped: it would go nowhere
+            ok = self._write_line({"type": "control_request",
+                                   "request_id": f"thechatplace-interrupt-{uuid.uuid4().hex[:8]}",
+                                   "request": {"subtype": "interrupt"}})
+            ok = ok and self._write_raw(message_line(prompt))
+            if ok:
+                # Until it's answered, the turn isn't over, idle or not.
+                self._message_outstanding = True
+                self.last_activity = "starting on your new message"
+            return ok
 
     def respond(self, request_id: str, response: dict) -> bool:
         """Answer a permission request (from the UI thread). False if the turn
@@ -1077,7 +1097,8 @@ class TurnRunner:
                     if event.kind == "state":
                         states_seen = True
                         last_state = event.text
-                        if event.text == "idle" and final is not None:
+                        if event.text == "idle" and final is not None \
+                                and not self._message_outstanding:
                             # Really over: closing stdin lets the CLI exit.
                             disarm_ceiling()
                             self._close_stdin()
@@ -1092,12 +1113,20 @@ class TurnRunner:
                         # more can follow (a background agent's notification
                         # runs as its own result), so the turn waits for idle;
                         # an older Claude Code without them ends here.
+                        if self._message_outstanding:
+                            if event.raw_type == "error_during_execution":
+                                # The work Send Now stopped: not the turn
+                                # failing, and the message is still to come.
+                                event.is_error = False
+                            else:
+                                self._message_outstanding = False
                         if final is not None:
                             event.denials = list(final.denials) + [
                                 d for d in event.denials if d not in final.denials]
                             event.is_error = event.is_error or final.is_error
                         final = event
-                        if not states_seen or last_state == "idle":
+                        if not self._message_outstanding and (
+                                not states_seen or last_state == "idle"):
                             self._close_stdin()
                         else:
                             arm_ceiling()

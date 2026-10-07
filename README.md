@@ -482,7 +482,8 @@ same afterwards, and Claude knew the earlier conversation. One turn runs at a ti
 per session. Send during a turn queues the message: The Chat Place says "Queued", and once the
 turn's reply has been announced, it sends the message. More messages sent while one is waiting
 join it, and they go together as one message. Each queued message is at the end of the
-messages list as "Queued: …": Delete removes it, and its context menu has Edit Queued Message
+messages list as "Queued: …": Delete removes it, and its context menu has Send Now (Ctrl+Enter:
+Claude stops what it's doing and answers it straight away, in the same turn), Edit Queued Message
 (back into the message box, to change and send again) and Remove Queued Message. Turn status
 (Ctrl+Shift+T) says when a message is queued. If the turn fails, or you press Stop, the queued text goes back in the message box
 instead, ahead of anything typed since, with the cursor left at the end. While one of

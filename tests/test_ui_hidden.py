@@ -186,6 +186,10 @@ class FakeRunner:
         self.responses = getattr(self, "responses", []) + [(request_id, response)]
         return not getattr(self, "ended", False)
 
+    def send_now(self, prompt):
+        self.sent_now = getattr(self, "sent_now", []) + [prompt]
+        return not getattr(self, "ended", False)
+
 
 @pytest.fixture
 def fake_runner(monkeypatch):
@@ -3415,3 +3419,25 @@ def test_remote_control_address_copied_and_a_refusal_said_once(frame, env, monke
     frame._on_turn_event({"id": "own-1"}, "Hub probe", refused)
     frame._on_turn_event({"id": "own-1"}, "Hub probe", refused)
     assert len(env["spoken"]) == count + 1
+
+
+def test_send_now_takes_a_queued_message_into_the_running_turn(frame, env, fake_runner):
+    runner = _start(frame, fake_runner)
+    for text in ("second", "third"):
+        frame.reply_text.SetValue(text)
+        frame.on_send()
+    frame.chat_list.SetSelection(frame.chat_list.GetCount() - 1)  # "Queued: third"
+    menu = frame._message_menu()
+    labels = [item.GetItemLabelText() for item in menu.GetMenuItems()]
+    assert "Send Now" in labels
+    menu.Destroy()
+    frame.send_queued_now()
+    assert runner.sent_now == ["third"]
+    assert frame._queued == {"own-1": ["second"]}
+    assert env["feedback"][-1] == ("Sent now. Hub probe is stopping what it was doing to "
+                                   "answer it.")
+    # The turn just ended: it stays queued, to go as usual.
+    runner.ended = True
+    frame.chat_list.SetSelection(frame.chat_list.GetCount() - 1)
+    frame.send_queued_now()
+    assert frame._queued == {"own-1": ["second"]}
