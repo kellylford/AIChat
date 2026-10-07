@@ -20,8 +20,9 @@ SHORTCUTS = [
         ("Ctrl+3", "Go to the reply box (or the note, for a desktop session)"),
         ("F6, Shift+F6", "Next or previous part of the window: session list, messages, "
                          "reply box (when a session is loaded), status bar, and round again"),
-        ("Ctrl+9", "Go to the status bar, to read what was last said by line, word and "
-                   "character; Escape goes back to the session list"),
+        ("Ctrl+9", "Go to the status bar: what was last said, the loaded session, and "
+                   "buttons for how full the context is, sessions that need you and an "
+                   "update; Left and Right move between them, Tab leaves"),
         ("Escape in the messages or the reply box",
          "Back to the session list, on the same session"),
         ("Backspace in the messages", "Also back to the session list"),

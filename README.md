@@ -164,6 +164,11 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   every listed session is announced or just the open one, and the speech route; its Reading
   messages group chooses whether full messages open as a formatted page or plain text.
   Ctrl+Shift+R repeats the last announcement.
+- **The status bar** (F6, or Ctrl+9) has parts, as in QuickMail, and Left and Right move between
+  them: what was last said, then the loaded session and what it's doing (read-only text), then
+  buttons that appear when there's something to act on: how full the context is (Usage and
+  Context), how many sessions need you (goes to the first), and an available update. Tab leaves
+  the status bar. Your screen reader's read-status-bar key reads all the parts.
 - **Answers to what you do are spoken too**, briefly and without cutting off your screen reader:
   "Tool activity shown.", "Message copied.", and so on (unless announcements are set to silent).
 - **Your own message is read back when it's sent**, so you hear what actually went to Claude,
@@ -316,7 +321,7 @@ shows it as plain text instead.
 | Anywhere | Tab, Shift+Tab | Session list, messages, reply box, and back |
 | Anywhere | Ctrl+1, Ctrl+2, Ctrl+3 | Go to the session list, the messages, the reply box |
 | Anywhere | F6, Shift+F6 | Next or previous part: session list, messages, reply box, status bar |
-| Anywhere | Ctrl+9 | Go to the status bar |
+| Anywhere | Ctrl+9 | Go to the status bar; Left and Right move between its parts |
 | Messages, reply box or status bar | Escape | Back to the session list, on the same session |
 | Messages | Backspace | Also back to the session list |
 | Session list | Enter | Load that session and move to its messages |

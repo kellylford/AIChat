@@ -901,8 +901,11 @@ def test_startup_check_announces_an_update_but_never_opens_a_dialog(frame, env):
     frame.updates = FakeUpdates(CheckResult(AVAILABLE, "0.1.0", "0.2.0"))
     run_check(frame, manual=False)
     assert env["spoken"][-1] == ("TheClaudeHub 0.2.0 is available. You have 0.1.0. "
-                                 "Help, Check for Updates installs it.")
+                                 "Help, Check for Updates installs it, or the Update button "
+                                 "on the status bar.")
     assert env["boxes"] == []
+    button = frame.status_parts.get("update")
+    assert button.IsShown() and button.GetLabel() == "Update available: 0.2.0"
     assert frame.updates.calls == ["quiet check"]
 
 
@@ -1784,14 +1787,65 @@ def test_f6_key_and_shift_f6_reach_cycle_focus(frame, monkeypatch):
     assert calls == [True, False]
 
 
-def test_status_bar_text_box_holds_the_same_text(frame):
+def test_status_bar_parts_are_read_only_text_and_buttons(frame):
     frame._status("Hub probe: Claude is using Bash.")
-    assert frame.GetStatusBar().GetStatusText() == "Hub probe: Claude is using Bash."
-    assert frame.status_text.GetValue() == "Hub probe: Claude is using Bash."
-    assert frame.status_text.GetParent() is frame.GetStatusBar()  # never a Tab stop
-    assert frame.status_text.GetName() == "Status bar"
-    assert not frame.status_text.IsEditable()
+    bar = frame.GetStatusBar()
+    assert frame.status_text.GetLabel() == "Hub probe: Claude is using Bash."
+    assert bar.GetStatusText(0) == "Hub probe: Claude is using Bash."  # read-status-bar key
+    # Information: focusable static text, no caret, never a Tab stop.
+    assert frame.status_text.GetParent() is bar
+    assert not isinstance(frame.status_text, wx.TextCtrl)
+    role = frame.status_text.GetAccessible().GetRole(0)
+    assert role == (wx.ACC_OK, wx.ROLE_SYSTEM_STATICTEXT)
+    assert frame.status_text.GetAccessible().GetName(0) == (
+        wx.ACC_OK, "Hub probe: Claude is using Bash.")
     assert frame.status_text not in tab_order(frame)
+    assert frame.status_session.GetAccessible().GetName(0) == (wx.ACC_OK, "No session loaded")
+    # Buttons only when they have something to say.
+    assert not frame.status_parts.get("update").IsShown()
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    assert frame.status_session.GetLabel().startswith("Hub probe: ")
+    assert bar.GetStatusText(1) == frame.status_session.GetLabel()
+
+
+def test_needs_you_button_goes_to_the_session(frame, env, monkeypatch):
+    settle(frame)
+    button = frame.status_parts.get("needs_you")
+    assert button.IsShown() and button.GetLabel() == "1 session needs you"
+    went = []
+    monkeypatch.setattr(frame, "focus_sessions", lambda: went.append(True))
+    frame._go_to_needs_you()
+    assert went == [True]
+    assert frame.session_list.GetStringSelection().startswith("Blocked one")
+    assert frame.status_parts.shown()[2] is button  # message, session, then it
+
+
+def test_arrows_move_between_status_bar_parts(frame, monkeypatch):
+    settle(frame)
+    parts = frame.status_parts.shown()
+    assert len(parts) >= 3
+    focused = {"window": parts[0]}
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: focused["window"]))
+    for part in parts:
+        monkeypatch.setattr(part, "SetFocus", lambda p=part: focused.update(window=p))
+
+    def press(key):
+        event = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
+        event.SetKeyCode(key)
+        frame._on_char_hook(event)
+    press(wx.WXK_RIGHT)
+    assert focused["window"] is parts[1]
+    press(wx.WXK_LEFT)
+    press(wx.WXK_LEFT)  # stops at the first
+    assert focused["window"] is parts[0]
+    press(wx.WXK_END)
+    assert focused["window"] is parts[-1]
+    press(wx.WXK_RIGHT)  # and at the last
+    assert focused["window"] is parts[-1]
+    press(wx.WXK_HOME)
+    assert focused["window"] is parts[0]
+    assert frame._current_pane() == frame.PANE_STATUS
 
 
 def test_ctrl_9_goes_to_the_status_bar(frame, monkeypatch):
@@ -1814,16 +1868,6 @@ def test_tab_and_shift_tab_leave_the_status_bar(frame, monkeypatch):
         event.SetShiftDown(shift)
         frame._on_char_hook(event)
     assert went == ["sessions", "refresh"]
-
-
-def test_status_bar_waits_while_you_read_it(frame, monkeypatch):
-    frame._status("First.")
-    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.status_text))
-    frame._status("Second.")
-    assert frame.status_text.GetValue() == "First."   # caret not moved under you
-    assert frame.GetStatusBar().GetStatusText() == "Second."
-    frame._on_status_focus(wx.FocusEvent(wx.wxEVT_SET_FOCUS))
-    assert frame.status_text.GetValue() == "Second."  # caught up on arriving
 
 
 # -- announcing tool activity (#12) ----------------------------------------------------------
@@ -2958,3 +3002,37 @@ def test_a_different_model_is_said_once(frame, env):
     count = len(env["spoken"])
     frame._check_model("gone", "Gone", "claude-fable-5-1")
     assert len(env["spoken"]) == count
+
+
+def test_enter_presses_a_status_bar_button(frame, monkeypatch):
+    pressed = []
+    monkeypatch.setattr(frame, "check_for_updates", lambda manual=True: pressed.append(manual))
+    frame.status_parts.set("update", "Update available: 0.2.0")
+    button = frame.status_parts.get("update")
+    event = wx.KeyEvent(wx.wxEVT_KEY_DOWN)
+    event.SetKeyCode(wx.WXK_RETURN)
+    button._on_key(event)
+    assert pressed == [True]
+
+
+def test_a_part_you_are_reading_waits_for_you(frame, monkeypatch):
+    frame._status("First.")
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.status_text))
+    frame._status("Second.")
+    assert frame.status_text.GetLabel() == "First."  # not read out under you
+    assert frame.GetStatusBar().GetStatusText(0) == "Second."  # the read key has it
+    frame.status_text._on_focus_change(wx.FocusEvent(wx.wxEVT_KILL_FOCUS))
+    assert frame.status_text.GetLabel() == "Second."  # caught up on leaving
+
+
+def test_empty_parts_and_the_update_button_going_away(frame, env):
+    from theclaudehub.updater import AVAILABLE, CheckResult, CURRENT
+    bar = frame.GetStatusBar()
+    assert bar.GetStatusText(1) == "No session loaded"
+    frame.updates = FakeUpdates(CheckResult(AVAILABLE, "0.1.0", "0.2.0"))
+    run_check(frame, manual=False)
+    assert frame.status_parts.get("update").IsShown()
+    frame.updates = FakeUpdates(CheckResult(CURRENT, "0.2.0", "0.2.0"))
+    run_check(frame, manual=False)
+    assert not frame.status_parts.get("update").IsShown()
+    assert bar.GetFieldsCount() == len(frame.status_parts.shown())
