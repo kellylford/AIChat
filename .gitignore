@@ -5,3 +5,4 @@ dist/
 releases/
 *.spec
 smoke*.json
+.venv-build/
