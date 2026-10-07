@@ -1,4 +1,5 @@
-"""Windows notifications (#20): the Notifier, with a stand-in tray icon."""
+"""Notifications (#20): the Notifier, with a stand-in tray icon (Windows) and a
+stand-in macOS notification."""
 import pytest
 
 pytest.importorskip("wx")
@@ -43,7 +44,7 @@ class FakeIcon:
 def test_one_icon_the_latest_session_and_removed_on_close(app):
     FakeIcon.made = []
     clicked = []
-    notifier = notify.Notifier(clicked.append, "The Chat Place", factory=FakeIcon)
+    notifier = notify.Notifier(clicked.append, "The Chat Place", factory=FakeIcon, mac=False)
     assert notifier.show("Hub probe finished", "All done.", "own:1")
     assert notifier.show("Quiet one needs you", "x" * 400, "local_2")
     assert len(FakeIcon.made) == 1
@@ -61,4 +62,57 @@ def test_one_icon_the_latest_session_and_removed_on_close(app):
 def test_a_failing_notification_is_not_an_error(app):
     def broken():
         raise RuntimeError("no notification area")
-    assert notify.Notifier(lambda key: None, "x", factory=broken).show("t", "m", "k") is False
+    assert notify.Notifier(lambda key: None, "x", factory=broken, mac=False).show("t", "m", "k") \
+        is False
+
+
+class FakeMacNote:
+    made = []
+
+    def __init__(self, title, message):
+        self.title, self.message, self.handlers, self.closed = title, message, {}, False
+        FakeMacNote.made.append(self)
+
+    def Bind(self, binder, handler):
+        self.handlers[binder.typeId] = handler
+
+    def Show(self, timeout):
+        return True
+
+    def Close(self):
+        self.closed = True
+
+    def click(self):
+        self.handlers[wx.adv.wxEVT_NOTIFICATION_MESSAGE_CLICK](None)
+
+
+def test_on_a_mac_each_notification_opens_its_own_session(app):
+    FakeMacNote.made = []
+    clicked = []
+    notifier = notify.Notifier(clicked.append, "The Chat Place", message_factory=FakeMacNote,
+                               mac=True)
+    assert notifier.show("Hub probe finished", "All done.", "own:1")
+    assert notifier.show("Quiet one needs you", "x" * 400, "local_2")
+    first, second = FakeMacNote.made
+    assert len(second.message) == notify.TEXT_LIMIT
+    first.click()   # the older one still knows its session
+    second.click()
+    assert clicked == ["own:1", "local_2"]
+    notifier.close()  # withdrawn from Notification Center as the app closes
+    assert first.closed and second.closed
+
+
+def test_on_a_mac_only_the_latest_notifications_are_kept(app):
+    FakeMacNote.made = []
+    notifier = notify.Notifier(lambda key: None, "x", message_factory=FakeMacNote, mac=True)
+    for n in range(notify.MAC_KEPT + 5):
+        notifier.show("t", "m", f"k{n}")
+    notifier.close()
+    assert sum(note.closed for note in FakeMacNote.made) == notify.MAC_KEPT
+
+
+def test_a_failing_mac_notification_is_not_an_error(app):
+    def broken(title, message):
+        raise RuntimeError("not allowed")
+    assert notify.Notifier(lambda key: None, "x", message_factory=broken, mac=True) \
+        .show("t", "m", "k") is False

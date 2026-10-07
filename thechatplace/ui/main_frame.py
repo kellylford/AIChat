@@ -1532,7 +1532,7 @@ class MainFrame(wx.Frame):
             self._status(text)
 
     def _notify(self, key: str, title: str, text: str, needs_you: bool = False):
-        """A Windows notification (#20), only while you're in another window:
+        """A notification (#20), only while you're in another window:
         here, the announcement already said it."""
         level = self.speech.notifications
         if level == NOTIFY_OFF or (level != NOTIFY_ALL and not needs_you):
