@@ -1915,3 +1915,63 @@ def test_whole_message_setting_round_trips_and_is_in_settings(frame, tmp_path):
         assert not dialog.get_settings().full_messages_in_list
     finally:
         dialog.Destroy()
+
+
+# -- export (#33) ---------------------------------------------------------------------------
+
+
+def _fake_save_dialog(monkeypatch, path, filter_index=0):
+    class Save:
+        def __init__(self, parent, message, defaultDir="", defaultFile="", wildcard="", style=0):
+            Save.default_file = defaultFile
+            Save.wildcard = wildcard
+
+        def ShowModal(self):
+            return wx.ID_OK
+
+        def GetPath(self):
+            return str(path)
+
+        def GetFilterIndex(self):
+            return filter_index
+
+        def Destroy(self):
+            pass
+    monkeypatch.setattr(wx, "FileDialog", Save)
+    return Save
+
+
+def test_export_the_loaded_session_as_markdown(frame, env, monkeypatch):
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [
+        user_text("Check the build"),
+        assistant_block(text_block("## Result\nIt passes."), "m1")])
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    assert pump(lambda: frame._chat_loaded)
+    target = env["tmp"] / "out.md"
+    dialog = _fake_save_dialog(monkeypatch, target)
+    frame.on_export()
+    assert dialog.default_file.startswith("Quiet one ") and dialog.default_file.endswith(".md")
+    assert "Web page (*.html)" in dialog.wildcard
+    text = target.read_text(encoding="utf-8")
+    assert text.startswith("# Quiet one\n")
+    assert "## Claude, " in text and "\n#### Result\nIt passes." in text  # its ## moved down two
+    assert env["feedback"][-1] == "Exported Quiet one, 2 messages, to out.md."
+    assert "Open the folder?" in env["boxes"][-1]
+
+
+def test_export_an_unloaded_session_reads_its_transcript_and_the_extension_wins(frame, env,
+                                                                                monkeypatch):
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [user_text("Hello")])
+    select(frame, "Quiet one")  # selected, not loaded
+    target = env["tmp"] / "page.html"
+    _fake_save_dialog(monkeypatch, target, filter_index=0)  # Markdown chosen, .html typed
+    frame.on_export()
+    assert target.read_text(encoding="utf-8").startswith("<!DOCTYPE html>")
+
+
+def test_export_with_no_transcript_says_so(frame, env, monkeypatch):
+    select(frame, "Quiet one")
+    monkeypatch.setattr(wx, "FileDialog", lambda *a, **k: pytest.fail("no dialog"))
+    frame.on_export()
+    assert "no messages to export" in env["boxes"][-1]

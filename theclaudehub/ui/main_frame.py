@@ -46,7 +46,7 @@ from typing import Dict, List, Optional
 
 import wx
 
-from .. import __version__, announce, hub, platform_paths
+from .. import __version__, announce, export, hub, platform_paths
 from ..claude_cli import (PERMISSION_MODES, PermissionRequest, ResumeRefused, TurnEvent,
                           TurnRunner, allow_response, answer_questions_response,
                           build_fork_command, build_new_command, build_resume_command,
@@ -162,6 +162,7 @@ class MainFrame(wx.Frame):
         self._item(session, "&Refresh\tF5",
                    lambda e: self.refresh_sessions(force=True, resort=True))
         self._item(session, "&Forget TheClaudeHub Session...", self.on_forget)
+        self._item(session, "&Export Session...\tCtrl+E", lambda e: self.on_export())
         session.AppendSeparator()
         self._item(session, "&Settings...\tCtrl+,", self.on_settings, wx.ID_PREFERENCES)
         session.AppendSeparator()
@@ -1064,6 +1065,74 @@ class MainFrame(wx.Frame):
         self._feedback("Tool activity shown." if show else "Tool activity hidden.")
 
     # ------------------------------------------------------- open in Claude
+
+    # --------------------------------------------------------- export (#33)
+
+    def _messages_for_export(self, info: SessionInfo) -> Optional[List[ChatMessage]]:
+        """The session's messages as the list shows them (tool activity only
+        if it's on). The loaded session's are already read; another's are
+        read now. None if there's no transcript."""
+        if self._open is not None and info.key == self._open.key and self._chat_loaded:
+            return self._visible_messages()
+        path = platform_paths.transcript_path(info.cwd, info.cli_session_id) \
+            if info.cli_session_id else None
+        if path is None:
+            return None
+        reader = TranscriptReader(path)
+        reader.refresh()
+        messages = reader.transcript.messages
+        return list(messages) if self._show_activity else \
+            [m for m in messages if not m.is_activity]
+
+    def on_export(self):
+        """Session, Export Session (Ctrl+E): save the conversation as
+        Markdown, a web page or plain text."""
+        info = self._selected_session()
+        if info is None:
+            self._feedback("No session selected.")
+            return
+        messages = self._messages_for_export(info)
+        if not messages:
+            wx.MessageBox(f"{info.title} has no messages to export (its transcript isn't on "
+                          "disk).", APP_NAME, wx.OK | wx.ICON_INFORMATION, self)
+            return
+        documents = os.path.join(os.path.expanduser("~"), "Documents")
+        dialog = wx.FileDialog(
+            self, f"Export {info.title}", defaultDir=documents if os.path.isdir(documents) else "",
+            defaultFile=export.default_filename(info.title),
+            wildcard="|".join(part for _fmt, part in export.FORMATS),
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT)
+        try:
+            if dialog.ShowModal() != wx.ID_OK:
+                return
+            path = dialog.GetPath()
+            fmt = export.FORMATS[max(0, dialog.GetFilterIndex())][0]
+        finally:
+            dialog.Destroy()
+        # The file name's extension wins over the list's choice if they differ.
+        extension = os.path.splitext(path)[1].lower().lstrip(".")
+        if extension in (export.MARKDOWN, export.HTML, export.TEXT):
+            fmt = extension
+        elif extension == "htm":
+            fmt = export.HTML
+        else:
+            path += "." + fmt
+        try:
+            text = export.render(fmt, info.title, messages, folder=info.cwd)
+            with open(path, "w", encoding="utf-8", newline="\n") as handle:
+                handle.write(text)
+        except OSError as exc:
+            wx.MessageBox(f"Couldn't save {path}: {exc}", APP_NAME, wx.OK | wx.ICON_ERROR, self)
+            return
+        count = len(messages)
+        self._feedback(f"Exported {info.title}, {count} message{'s' if count != 1 else ''}, "
+                       f"to {os.path.basename(path)}.")
+        if wx.MessageBox(f"Saved to {path}.\n\nOpen the folder?", "Export Session",
+                         wx.YES_NO | wx.NO_DEFAULT | wx.ICON_INFORMATION, self) == wx.YES:
+            try:
+                platform_paths.open_url(os.path.dirname(path))
+            except OSError:
+                pass
 
     def on_open_in_claude(self, _event=None):
         info = self._selected_session()
