@@ -40,11 +40,11 @@ def test_new_issue_url_is_prefilled_and_cut_to_fit():
 
 
 def test_environment_names_no_people_or_paths():
-    facts = bugreport.environment(SpeechSettings(), {"desktop app": 3, "The Chat Place": 1},
+    facts = bugreport.environment(SpeechSettings(), {"desktop app": 3, "Chat Place": 1},
                                   claude_version="2.1.286 (Claude Code)")
     labels = [label for label, _value in facts]
     assert labels[:5] == ["The Chat Place", "Windows", "Python", "wxPython", "Claude Code"]
-    assert ("Sessions listed", "3 desktop app, 1 The Chat Place") in facts
+    assert ("Sessions listed", "3 desktop app, 1 Chat Place") in facts
     text = " ".join(str(value) for _label, value in facts)
     assert "Users" not in text and "\\" not in text
 

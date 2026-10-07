@@ -2891,7 +2891,7 @@ class MainFrame(wx.Frame):
         about the app, to a GitHub issue (see bugreport.py)."""
         listed = [s for s in self._snapshot.sessions if not s.archived]
         counts = {"desktop app": sum(1 for s in listed if not s.is_own),
-                  "The Chat Place": sum(1 for s in listed if s.is_own)}
+                  "Chat Place": sum(1 for s in listed if s.is_own)}
         facts = bugreport.environment(self.speech, counts,
                                       claude_version=self._claude_version or "checking")
         dialog = BugReportDialog(self, [f"{label}: {value}" for label, value in facts])
