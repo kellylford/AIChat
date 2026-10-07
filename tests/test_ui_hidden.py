@@ -791,6 +791,30 @@ def test_delete_permanently_refuses_while_a_turn_runs(frame, env):
     assert frame.store.get("own-1") is not None and path.exists()
 
 
+def test_delete_transcript_retries_while_windows_holds_it(tmp_path, monkeypatch):
+    from pathlib import Path
+    from thechatplace.ui import main_frame
+    monkeypatch.setattr(main_frame.time, "sleep", lambda s: None)
+    path = tmp_path / "own-1.jsonl"
+    path.write_text("{}\n")
+    real_unlink, refusals = Path.unlink, [1]
+
+    def unlink(self, *a, **k):
+        if refusals:
+            refusals.pop()
+            raise PermissionError("in use")
+        real_unlink(self, *a, **k)
+
+    monkeypatch.setattr(Path, "unlink", unlink)
+    main_frame._delete_transcript(path)  # refused once, then deleted
+    assert not path.exists()
+    path.write_text("{}\n")
+    refusals[:] = [1] * 5
+    with pytest.raises(PermissionError):
+        main_frame._delete_transcript(path)  # refused every time: reported
+    assert path.exists()
+
+
 def test_delete_permanently_the_loaded_session_unloads_it(frame, env):
     path = add_transcript(env, "C:\\G\\Scratch", "own-1", [user_text("hi")])
     (path.with_suffix("") / "subagents").mkdir(parents=True)

@@ -61,6 +61,7 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   Chat Place's own sessions for good, from any view, hidden or not: after you confirm (No is the
   default), its Claude Code transcript is deleted from the PC and it leaves the list, its groups
   and the hidden list. Desktop app sessions can only be hidden; delete those in the desktop app.
+  On a Mac laptop these are Fn+Delete and Fn+Shift+Delete (the forward-delete key).
 - **Find** (Ctrl+F, View, Find). In the session list it asks for some text and shows only
   sessions whose title, folder or "needs you" note contains it, within the current view; the
   list's name says so ("Session list, matching \"build\", 3 of 139") and Escape shows them
