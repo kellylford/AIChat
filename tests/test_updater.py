@@ -271,3 +271,60 @@ def test_mac_app_bundle_is_the_install_folder(tmp_path, monkeypatch):
     support = tmp_path / "Library" / "Application Support" / "TheChatPlace"
     assert updater.data_is_outside_install_dir(support)
     assert not updater.data_is_outside_install_dir(app / "Contents" / "Resources" / "data")
+
+
+def test_mac_app_that_cannot_replace_itself_says_where_to_put_it(tmp_path, monkeypatch):
+    # Run from the mounted disk image: a read-only folder.
+    exe = tmp_path / "The Chat Place.app" / "Contents" / "MacOS" / "TheChatPlace"
+    exe.parent.mkdir(parents=True)
+    exe.write_text("")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(sys, "executable", str(exe))
+    assert updater.mac_update_blocker() == ""
+    monkeypatch.setattr(updater.os, "access", lambda path, mode: False)
+    assert "Applications" in updater.mac_update_blocker()
+    svc = service(FakeManager(Update("0.2.0")))
+    assert svc.can_update is False
+    result = svc.check()
+    assert result.status == NOT_INSTALLED and "0.2.0" in result.describe()
+    assert "Drag The Chat Place to Applications" in result.describe()
+
+
+def test_mac_app_runs_velopack_hooks_but_never_auto_applies_where_it_cannot(monkeypatch):
+    import types
+    applied = []
+
+    class FakeApp:
+        def set_auto_apply_on_startup(self, value):
+            applied.append(value)
+            return self
+
+        def run(self):
+            applied.append("ran")
+    monkeypatch.setitem(sys.modules, "velopack", types.SimpleNamespace(App=FakeApp))
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(updater, "mac_update_blocker", lambda: "")
+    updater.bootstrap()
+    monkeypatch.setattr(updater, "mac_update_blocker", lambda: "read-only")
+    updater.bootstrap()
+    assert applied == [True, "ran", False, "ran"]
+
+
+def test_smoke_test_reports_whether_velopack_finds_the_updater(tmp_path, monkeypatch):
+    from thechatplace import app
+
+    class Manager:
+        def get_current_version(self):
+            return "0.1.0"
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(updater, "_velopack_manager", lambda url: Manager())
+    out = tmp_path / "smoke.json"
+    app.smoke_test(str(out))
+    assert json.loads(out.read_text())["updater"] == "0.1.0"
+
+    def missing(url):
+        raise RuntimeError("UpdateMac does not exist")
+    monkeypatch.setattr(updater, "_velopack_manager", missing)
+    app.smoke_test(str(out))
+    assert json.loads(out.read_text())["updater"].startswith("unavailable: UpdateMac")

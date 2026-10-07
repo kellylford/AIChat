@@ -45,8 +45,9 @@ Applications (or with Spotlight: Cmd+Space, "The Chat Place").
 You need Claude Code installed and signed in to a Claude subscription
 (https://claude.com/claude-code). The Chat Place never uses an API key.
 
-The Chat Place updates itself, wherever you keep it: it says when a new
-version is out, and Help, Check for Updates installs it. Your sessions and
+The Chat Place updates itself wherever you keep it, once it's out of this
+disk image: it says when a new version is out, and Help, Check for Updates
+installs it. Your sessions and
 settings are in ~/Library/Application Support/TheChatPlace and are kept.
 README
 if [ "$SIGNED" != "signed" ]; then

@@ -85,6 +85,22 @@ def configure_logging() -> None:
         pass
 
 
+def mac_update_blocker(executable: Optional[str] = None) -> str:
+    """Why this Mac app can't replace itself where it is, or "" if it can.
+
+    Velopack swaps the whole .app, so it needs to write the bundle and the
+    folder it's in. It can't when the app runs from the mounted disk image,
+    from a quarantined download macOS runs from a read-only copy
+    (AppTranslocation), or from a folder another user owns."""
+    if sys.platform != "darwin" or not getattr(sys, "frozen", False):
+        return ""
+    bundle = Path(executable or sys.executable).resolve().parents[2]
+    if os.access(bundle, os.W_OK) and os.access(bundle.parent, os.W_OK):
+        return ""
+    return ("it can't change the folder it's running from (the disk image, say). Drag The Chat "
+            "Place to Applications and open it from there, and it will update itself")
+
+
 def bootstrap() -> None:
     """Run Velopack's install/update/uninstall hooks. Call first in main()."""
     if not getattr(sys, "frozen", False):
@@ -95,8 +111,9 @@ def bootstrap() -> None:
         return
     try:
         # A package Kelly agreed to, downloaded but not yet applied (say the
-        # restart failed), is applied here before any window appears.
-        velopack.App().set_auto_apply_on_startup(True).run()
+        # restart failed), is applied here before any window appears; never
+        # where it can't be, or every start would try again.
+        velopack.App().set_auto_apply_on_startup(not mac_update_blocker()).run()
     except Exception as exc:  # noqa: BLE001
         logger.error("Velopack bootstrap failed: %s", exc)
 
@@ -141,6 +158,8 @@ class CheckResult:
         if self.status == NOT_INSTALLED:
             latest = (f" The latest release is {self.version}." if self.version else
                       " No release has been published yet.")
+            if self.detail:  # a Mac app that can't replace itself where it is
+                return f"The Chat Place can't update itself here: {self.detail}.{latest}"
             return ("This copy of The Chat Place isn't the installed one (it's running from "
                     f"source or the portable zip), so it can't update itself.{latest}")
         return f"Couldn't check for updates: {self.detail or 'unknown error'}."
@@ -221,7 +240,7 @@ class UpdateService:
     def _make_manager(self, url: str):
         """An UpdateManager for ``url``, or None if this copy can't update itself.
         Making one reads nothing from the network."""
-        if not self._installed():
+        if not self._installed() or mac_update_blocker():
             return None
         try:
             manager = self._factory(url)
@@ -258,7 +277,8 @@ class UpdateService:
                                detail=_short(f"GitHub couldn't be reached ({exc})"))
         manager = self._make_manager(feed_url(latest or self.current_version))
         if manager is None:
-            return CheckResult(NOT_INSTALLED, self.current_version, latest or "")
+            return CheckResult(NOT_INSTALLED, self.current_version, latest or "",
+                               mac_update_blocker())
         if latest is None:
             logger.info("no releases published yet")
             return CheckResult(NO_RELEASES, self.current_version)

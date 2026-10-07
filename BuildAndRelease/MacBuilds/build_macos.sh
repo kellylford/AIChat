@@ -16,6 +16,8 @@
 #   TCP_NOTARIZE=1         also notarize the app and the .dmg; credentials in
 #                          notarize.sh (NOTARY_PROFILE, or the API key variables)
 #   TCP_SIGNING_IDENTITY   which certificate, if there's more than one
+#   TCP_KEYCHAIN           the keychain that holds it (CI uses a throwaway one);
+#                          codesign, notarytool and vpk all use it
 #   TCP_KEEP_RELEASES=1    keep releases/ (CI puts the previous release's
 #                          packages there, for a delta update)
 #
@@ -82,9 +84,11 @@ if [ ! -x "$PY" ]; then
 fi
 "$PY" -m pip install --quiet -r requirements-build.txt || fail "pip install"
 
-# Homebrew's dotnet keeps its runtime here; vpk can't start without it.
-if [ -z "${DOTNET_ROOT:-}" ] && [ -d /opt/homebrew/opt/dotnet/libexec ]; then
-    export DOTNET_ROOT=/opt/homebrew/opt/dotnet/libexec
+# vpk can't start without knowing where .NET is: Homebrew's, or Microsoft's installer's.
+if [ -z "${DOTNET_ROOT:-}" ]; then
+    for root in /opt/homebrew/opt/dotnet/libexec /usr/local/share/dotnet; do
+        if [ -d "$root" ]; then export DOTNET_ROOT="$root"; break; fi
+    done
 fi
 VPK="$(command -v vpk || echo "$HOME/.dotnet/tools/vpk")"
 if [ ! -x "$VPK" ] || ! "$VPK" -h 2>/dev/null | grep -q "$VPK_VERSION"; then
@@ -93,6 +97,7 @@ if [ ! -x "$VPK" ] || ! "$VPK" -h 2>/dev/null | grep -q "$VPK_VERSION"; then
     echo "Installing vpk $VPK_VERSION..."
     dotnet tool update -g vpk --version "$VPK_VERSION" >/dev/null || fail "installing vpk"
     VPK="$HOME/.dotnet/tools/vpk"
+    "$VPK" -h >/dev/null 2>&1 || fail "vpk is installed but won't start: set DOTNET_ROOT to the .NET folder."
 fi
 
 # Signing: on by default when there's a certificate, as IDT's local builds do.
@@ -100,7 +105,7 @@ fi
 # certificates (after a renewal, say) a bare "Developer ID Application" is
 # ambiguous.
 if [ "$SIGN" != "0" ] && [ -z "${TCP_SIGNING_IDENTITY:-}" ]; then
-    TCP_SIGNING_IDENTITY=$(security find-identity -v -p codesigning \
+    TCP_SIGNING_IDENTITY=$(security find-identity -v -p codesigning ${TCP_KEYCHAIN:+"$TCP_KEYCHAIN"} \
         | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/') || true
 fi
 if [ "$SIGN" = "auto" ]; then
@@ -118,7 +123,8 @@ if [ "$NOTARIZE" = "1" ] && [ -z "${NOTARY_PROFILE:-}" ]; then
         || fail "TCP_NOTARIZE=1 needs NOTARY_PROFILE, or NOTARY_KEY_PATH, NOTARY_KEY_ID and NOTARY_ISSUER_ID."
     NOTARY_PROFILE=thechatplace-notary
     xcrun notarytool store-credentials "$NOTARY_PROFILE" --key "$NOTARY_KEY_PATH" \
-        --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" >/dev/null \
+        --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" \
+        ${TCP_KEYCHAIN:+--keychain "$TCP_KEYCHAIN"} >/dev/null \
         || fail "storing the notarytool profile"
     export NOTARY_PROFILE
 fi
@@ -184,7 +190,10 @@ fi
 mkdir -p "$RELEASES"
 VPK_ARGS=(pack --packId TheChatPlace --packVersion "$VERSION" --packDir "$APP"
           --mainExe TheChatPlace --packTitle "The Chat Place" --packAuthors "Kelly Ford"
-          --bundleId "$BUNDLE_ID" --channel "$CHANNEL" --outputDir "$RELEASES")
+          --bundleId "$BUNDLE_ID" --channel "$CHANNEL" --outputDir "$RELEASES"
+          # No Setup.pkg: signing one needs a Developer ID Installer certificate,
+          # and the .dmg holds the same self-updating app (as GHManage ships).
+          --noInst)
 [ -f "release-notes/v$VERSION.md" ] && VPK_ARGS+=(--releaseNotes "release-notes/v$VERSION.md")
 if [ "$SIGN" = "1" ]; then
     # vpk insists on the .entitlements extension.
@@ -192,6 +201,7 @@ if [ "$SIGN" = "1" ]; then
                --signAppIdentity "$TCP_SIGNING_IDENTITY")
 fi
 [ "$NOTARIZE" = "1" ] && VPK_ARGS+=(--notaryProfile "$NOTARY_PROFILE")
+[ -n "${TCP_KEYCHAIN:-}" ] && VPK_ARGS+=(--keychain "$TCP_KEYCHAIN")
 "$VPK" "${VPK_ARGS[@]}" || fail "vpk pack"
 [ -f "$PORTABLE_ZIP" ] || fail "vpk made no $PORTABLE_ZIP"
 
@@ -218,7 +228,8 @@ echo ""
 bash "$HERE/create_dmg.sh" "$PACKED_APP" "$DMG" "$VERSION" "$([ "$SIGN" = "1" ] && echo signed)" \
     || fail "the disk image."
 if [ "$SIGN" = "1" ]; then
-    codesign --force --timestamp --sign "$TCP_SIGNING_IDENTITY" "$DMG" || fail "signing the .dmg"
+    codesign --force --timestamp ${TCP_KEYCHAIN:+--keychain "$TCP_KEYCHAIN"} \
+        --sign "$TCP_SIGNING_IDENTITY" "$DMG" || fail "signing the .dmg"
 fi
 if [ "$NOTARIZE" = "1" ]; then
     bash "$HERE/notarize.sh" "$DMG" || fail "notarizing the .dmg"

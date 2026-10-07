@@ -230,7 +230,7 @@ jobs:
     # Apple Silicon. build_macos.sh refuses anything else.
     # vpk below must match the velopack library in requirements.txt, as on Windows.
     runs-on: macos-latest
-    timeout-minutes: 45
+    timeout-minutes: 75   # two notarizations (the app through vpk, then the .dmg)
     defaults:
       run:
         shell: bash
@@ -284,9 +284,6 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: \
             -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
           security list-keychain -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
-          # The default keychain too: vpk 1.2.161 has no --keychain option, and the notarytool
-          # profile build_macos.sh makes for it is stored in, and read from, the default one.
-          security default-keychain -d user -s "$KEYCHAIN"
           rm -f "$RUNNER_TEMP/certificate.p12"
           echo "$NOTARY_KEY_P8" | base64 --decode > "$RUNNER_TEMP/notary.p8"
           chmod 600 "$RUNNER_TEMP/notary.p8"
@@ -325,6 +322,8 @@ jobs:
           TCP_SIGN_CODE: ${{ env.SIGN == 'true' && '1' || '0' }}
           TCP_NOTARIZE: ${{ env.SIGN == 'true' && '1' || '0' }}
           TCP_SIGNING_IDENTITY: "${{ secrets.MACOS_SIGNING_IDENTITY || 'Developer ID Application: Kelly Ford (P887QF74N8)' }}"
+          # codesign, notarytool's profile (which vpk notarizes with) and vpk all use it.
+          TCP_KEYCHAIN: ${{ runner.temp }}/signing.keychain-db
           NOTARY_KEY_PATH: ${{ runner.temp }}/notary.p8
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
           NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}

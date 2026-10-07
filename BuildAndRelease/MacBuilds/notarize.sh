@@ -20,7 +20,7 @@ if [ -n "${NOTARY_KEY_PATH:-}" ] && [ -n "${NOTARY_KEY_ID:-}" ] && [ -n "${NOTAR
 elif [ -n "${NOTARY_APPLE_ID:-}" ] && [ -n "${NOTARY_PASSWORD:-}" ] && [ -n "${NOTARY_TEAM_ID:-}" ]; then
     CRED_ARGS=(--apple-id "$NOTARY_APPLE_ID" --password "$NOTARY_PASSWORD" --team-id "$NOTARY_TEAM_ID")
 elif [ -n "${NOTARY_PROFILE:-}" ]; then
-    CRED_ARGS=(--keychain-profile "$NOTARY_PROFILE")
+    CRED_ARGS=(--keychain-profile "$NOTARY_PROFILE" ${TCP_KEYCHAIN:+--keychain "$TCP_KEYCHAIN"})
 else
     echo "ERROR: No notarization credentials (see the top of $0)."
     exit 1
