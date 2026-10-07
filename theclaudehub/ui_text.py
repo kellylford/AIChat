@@ -43,12 +43,17 @@ SHORTCUTS = [
         ("Ctrl+G", "Add the selected session to a group (or a new one); Session, Remove "
                    "from Group and Manage Groups are on the Session menu"),
         ("Delete", "Forget the selected TheClaudeHub session (asks first)"),
+        ("Ctrl+F", "Show only sessions whose title, folder or what they need contains some "
+                   "text; Escape in the list shows them all again"),
     ]),
     ("Messages", [
         ("Enter, or Applications key / Shift+F10 then Read Full Message",
          "Read the whole message as a formatted page (move by heading, table, list and "
          "code block); Alt+P reads it as plain text instead; Escape comes back to it"),
         ("Ctrl+C", "Copy the whole message"),
+        ("Ctrl+F, then F3 and Shift+F3", "Find a message containing some text (its whole "
+                                         "text, not just the first line), then the next or "
+                                         "previous one"),
         ("End", "Newest message"),
         ("Ctrl+T", "Show or hide tool activity"),
         ("Ctrl+O", "Open this session in the Claude desktop app"),

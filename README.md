@@ -38,6 +38,12 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   many ("Session list, needs you, 2 of 139"), and the choice is remembered.
   Arrowing doesn't load anything; **Enter loads that session** into the messages list, moves you
   there, and says "Loaded Quiet one, 12 messages."
+- **Find** (Ctrl+F, View, Find). In the session list it asks for some text and shows only
+  sessions whose title, folder or "needs you" note contains it, within the current view; the
+  list's name says so ("Session list, matching \"build\", 3 of 139") and Escape shows them
+  all again. In the messages it finds the next message containing the text, searching each
+  message's whole text, not just the first line you see; F3 and Shift+F3 find the next and
+  previous, going round from the other end when they reach one (and saying so).
 - **Groups**, like groups in Claude on the web: **Ctrl+G** (Session, Add to Group) puts the
   selected session in a group, or a new one; Session, Remove from Group takes it out; Session,
   Manage Groups lists your groups with how many sessions each has, to make, rename or delete
@@ -280,6 +286,8 @@ shows it as plain text instead.
 | Session list | Ctrl+O | Open the selected session in the Claude desktop app |
 | Session list | Ctrl+N | New TheClaudeHub session |
 | Session list | Ctrl+G | Add the selected session to a group |
+| Session list | Ctrl+F | Show only sessions matching some text (Escape shows all) |
+| Messages | Ctrl+F, F3, Shift+F3 | Find a message by its text; next; previous |
 | Anywhere | Ctrl+E | Export the session to a file |
 | Reply box | Ctrl+/ | Insert a slash command or skill |
 | Anywhere | Ctrl+Shift+F | Attach files or images to the next message |

@@ -125,6 +125,10 @@ class MainFrame(wx.Frame):
         self._drafts: Dict[str, str] = {}  # unsent reply text, per session
         self._queued: Dict[str, str] = {}  # sent during a turn, goes when it ends
         self._attachments: Dict[str, List[str]] = {}  # per session, for its next message
+        # Search (#21): text the session list is filtered by, and the last
+        # text looked for in the messages.
+        self._session_filter = ""
+        self._find_text = ""
         # What Claude is waiting for you to answer, per session, oldest first
         # (#187, #188). The turn is paused until each is answered.
         self._pending: Dict[str, List[PermissionRequest]] = {}
@@ -212,6 +216,9 @@ class MainFrame(wx.Frame):
         self._build_show_menu()
         view.AppendSeparator()
         self._item(view, "Read &Full Message", lambda e: self.on_read_message())
+        self._item(view, "F&ind...\tCtrl+F", lambda e: self.on_find())
+        self._item(view, "Find &Next\tF3", lambda e: self.find_again(True))
+        self._item(view, "Find Pre&vious\tShift+F3", lambda e: self.find_again(False))
         self.activity_item = view.AppendCheckItem(wx.ID_ANY, "Show &Tool Activity\tCtrl+T")
         self.Bind(wx.EVT_MENU, self.on_toggle_activity_menu, self.activity_item)
         self._item(view, "Sto&p Running Turn\tCtrl+.", self.on_stop)
@@ -1901,15 +1908,24 @@ class MainFrame(wx.Frame):
         """The sessions the list shows now, each told its groups for its row."""
         for info in sessions:
             info.groups = tuple(self.groups.groups_of(info.key))
-        return [s for s in sessions if in_view(s, self.speech.session_view)]
+        shown = [s for s in sessions if in_view(s, self.speech.session_view)]
+        words = self._session_filter.casefold().split()
+        if words:
+            shown = [s for s in shown
+                     if all(w in f"{s.title} {s.repo} {s.detail}".casefold() for w in words)]
+        return shown
 
     def _update_list_label(self, shown: int):
         """The list's label, and so its name, says what it's showing."""
         view = self.speech.session_view
         rest = ""
-        if view != VIEW_ALL:
+        if view != VIEW_ALL or self._session_filter:
             total = sum(1 for s in self._snapshot.sessions if not s.archived)
-            rest = f", {view_spoken(view)}, {shown} of {total}"
+            what = view_spoken(view) if view != VIEW_ALL else ""
+            if self._session_filter:
+                matching = f'matching "{self._session_filter}"'
+                what = f"{what}, {matching}" if what else matching
+            rest = f", {what}, {shown} of {total}"
         label = "Session list" + rest
         # Alt+L stays on "list" whatever follows it.
         shown_label = "Session &list" + rest.replace("&", "&&") + ":"
@@ -1932,6 +1948,89 @@ class MainFrame(wx.Frame):
         count = "no sessions" if not shown else (
             "1 session" if len(shown) == 1 else f"{len(shown)} sessions")
         self._feedback(f"Showing {view_spoken(view)}: {count}.")
+
+    # ----------------------------------------------------------- search (#21)
+
+    def on_find(self):
+        """Ctrl+F: in the session list, show only sessions matching some text;
+        anywhere else, find text in the loaded session's messages."""
+        if wx.Window.FindFocus() is self.session_list:
+            self._find_sessions()
+        else:
+            self._find_in_messages()
+
+    def _ask_text(self, title: str, prompt: str, value: str) -> Optional[str]:
+        dialog = wx.TextEntryDialog(self, prompt, title, value)
+        try:
+            if dialog.ShowModal() != wx.ID_OK:
+                return None
+            return " ".join(dialog.GetValue().split())
+        finally:
+            dialog.Destroy()
+
+    def _find_sessions(self):
+        text = self._ask_text("Find Sessions", "Show sessions whose title, folder or what they "
+                              "need contains (empty shows them all):", self._session_filter)
+        if text is None:
+            self.session_list.SetFocus()
+            return
+        self._set_session_filter(text)
+
+    def _set_session_filter(self, text: str):
+        self._session_filter = text
+        shown = self._in_current_view(list(self._snapshot.sessions))
+        self._update_session_list(shown)
+        self._update_list_label(len(shown))
+        self.session_list.SetFocus()
+        if not text:
+            self._feedback(f"Showing all {len(shown)} sessions in this view.")
+        elif shown:
+            self._feedback(f'{len(shown)} session{"s" if len(shown) != 1 else ""} matching '
+                           f'"{text}". Escape shows them all.')
+        else:
+            self._feedback(f'No sessions matching "{text}". Escape shows them all.')
+
+    def _find_in_messages(self):
+        if self._open is None:
+            self._feedback("No session loaded. In the session list, Ctrl+F finds sessions.")
+            return
+        text = self._ask_text("Find in Messages", "Find messages containing:", self._find_text)
+        if not text:
+            self.chat_list.SetFocus()
+            return
+        self._find_text = text
+        self.find_again(True, starting=True)
+
+    def find_again(self, forward: bool = True, starting: bool = False):
+        """F3 and Shift+F3: the next or previous message containing the text,
+        searching the whole text of each message, wrapping round."""
+        if not self._find_text:
+            self._find_in_messages()
+            return
+        visible = self._visible_messages()
+        if not visible or not self._chat_keys:
+            self._feedback("No messages to search.")
+            return
+        words = self._find_text.casefold()
+        count = len(visible)
+        current = self.chat_list.GetSelection()
+        if current < 0:
+            current = count - 1
+        step = 1 if forward else -1
+        # From the next one (or, for a new search, from the one you're on).
+        start = current if starting else current + step
+        for offset in range(count):
+            index = (start + step * offset) % count
+            if words in visible[index].full_text().casefold():
+                wrapped = (forward and index < start % count and not starting) or \
+                          (not forward and index > start % count)
+                self.chat_list.SetSelection(index)
+                self.chat_list.SetFocus()
+                note = " Searched round from the other end." if wrapped and offset else ""
+                self._feedback(f"Found in message {index + 1} of {count}: "
+                               f"{visible[index].list_line()}.{note}")
+                return
+        self._feedback(f'No message contains "{self._find_text}".')
 
     def _group_target(self) -> Optional[SessionInfo]:
         info = self._selected_session()
@@ -2372,6 +2471,9 @@ class MainFrame(wx.Frame):
             return
         if key == wx.WXK_ESCAPE and in_session:
             self.focus_sessions()
+            return
+        if key == wx.WXK_ESCAPE and focus is self.session_list and self._session_filter:
+            self._set_session_filter("")
             return
         if key == wx.WXK_BACK and not ctrl and focus is self.chat_list:
             self.focus_sessions()

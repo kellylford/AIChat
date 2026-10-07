@@ -2476,3 +2476,70 @@ def test_shift_insert_pastes_through_the_same_path(frame, monkeypatch):
     event.SetShiftDown(True)
     frame._on_char_hook(event)
     assert pasted == [True]
+
+
+# -- search (#21) -----------------------------------------------------------------------------
+
+
+def test_find_sessions_filters_by_text_and_escape_clears(frame, env, monkeypatch):
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    monkeypatch.setattr(frame, "_ask_text", lambda title, prompt, value: "pick NAME")
+    frame.on_find()
+    assert [s.split(",")[0] for s in frame.session_list.GetStrings()] == ["Blocked one"]
+    assert frame.session_list.GetName() == 'Session list, matching "pick NAME", 1 of 3'
+    assert env["feedback"][-1] == '1 session matching "pick NAME". Escape shows them all.'
+    event = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
+    event.SetKeyCode(wx.WXK_ESCAPE)
+    frame._on_char_hook(event)
+    assert frame.session_list.GetCount() == 3 and frame.session_list.GetName() == "Session list"
+
+
+def test_find_sessions_works_with_a_view_and_says_nothing_found(frame, env, monkeypatch):
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    frame.on_view("desktop")
+    monkeypatch.setattr(frame, "_ask_text", lambda title, prompt, value: "probe")
+    frame.on_find()  # "Hub probe" is a TheClaudeHub session, not in this view
+    assert frame.session_list.GetCount() == 0
+    assert frame.session_list.GetName() == ('Session list, desktop app sessions, '
+                                            'matching "probe", 0 of 3')
+    assert env["feedback"][-1] == 'No sessions matching "probe". Escape shows them all.'
+
+
+def _load_three(frame, env):
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [
+        user_text("First question"),
+        assistant_block(text_block("Short line\nThe word GIRAFFE is hidden here."), "m1"),
+        user_text("Second about giraffe"),
+        assistant_block(text_block("No animals."), "m2")])
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    assert pump(lambda: frame._chat_loaded and frame.chat_list.GetCount() == 4)
+
+
+def test_find_in_messages_searches_whole_text_and_moves_with_f3(frame, env, monkeypatch):
+    _load_three(frame, env)
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.chat_list))
+    monkeypatch.setattr(frame, "_ask_text", lambda title, prompt, value: "giraffe")
+    frame.chat_list.SetSelection(0)
+    frame.on_find()
+    assert frame.chat_list.GetSelection() == 1  # found past the first line
+    assert env["feedback"][-1] == "Found in message 2 of 4: Claude: Short line."
+    frame.find_again(True)
+    assert frame.chat_list.GetSelection() == 2
+    frame.find_again(True)
+    assert frame.chat_list.GetSelection() == 1
+    assert env["feedback"][-1].endswith("Searched round from the other end.")
+    frame.find_again(False)
+    assert frame.chat_list.GetSelection() == 2
+    assert env["feedback"][-1].endswith("Searched round from the other end.")
+    frame.find_again(False)
+    assert frame.chat_list.GetSelection() == 1
+    assert not env["feedback"][-1].endswith("other end.")
+
+
+def test_find_in_messages_says_when_nothing_matches(frame, env, monkeypatch):
+    _load_three(frame, env)
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.chat_list))
+    monkeypatch.setattr(frame, "_ask_text", lambda title, prompt, value: "zebra")
+    frame.on_find()
+    assert env["feedback"][-1] == 'No message contains "zebra".'
