@@ -304,19 +304,27 @@ def build_resume_command(executable: str, session_id: str, permission_mode: str,
 INIT_REQUEST_ID = "thechatplace-init"
 
 
-def stdin_lines(prompt: str, images: Optional[List[dict]] = None) -> bytes:
-    """What starts a turn on stdin: the ``initialize`` control request (its
-    answer lists the slash commands and skills) and the user's message, with
-    any image blocks after its text (#22)."""
-    initialize = {"type": "control_request", "request_id": INIT_REQUEST_ID,
-                  "request": {"subtype": "initialize", "hooks": None}}
+def initialize_line() -> bytes:
+    """The ``initialize`` control request. Its answer lists the slash commands
+    and skills, and the model each model choice resolves to (#58)."""
+    return (json.dumps({"type": "control_request", "request_id": INIT_REQUEST_ID,
+                        "request": {"subtype": "initialize", "hooks": None}})
+            + "\n").encode("utf-8")
+
+
+def message_line(prompt: str, images: Optional[List[dict]] = None) -> bytes:
+    """The user's message, with any image blocks after its text (#22)."""
     content = prompt
     if images:
         content = ([{"type": "text", "text": prompt}] if prompt else []) + list(images)
     message = {"type": "user", "session_id": "", "parent_tool_use_id": None,
                "message": {"role": "user", "content": content}}
-    return (json.dumps(initialize) + "\n" + json.dumps(message, ensure_ascii=False)
-            + "\n").encode("utf-8")
+    return (json.dumps(message, ensure_ascii=False) + "\n").encode("utf-8")
+
+
+def stdin_lines(prompt: str, images: Optional[List[dict]] = None) -> bytes:
+    """Everything that starts a turn on stdin, in order."""
+    return initialize_line() + message_line(prompt, images)
 
 
 QUESTION_TOOL = "AskUserQuestion"
@@ -530,6 +538,9 @@ class StreamParser:
     ``TurnEvent``s. Unknown event types are ignored; bad lines are counted."""
 
     def __init__(self) -> None:
+        self.model = ""  # the model system/init reports (#8, #58)
+        #: Model choice ("default", "opus", …) -> the model it resolves to (#58).
+        self.resolved_models: Dict[str, str] = {}
         self.session_id = ""
         self.api_key_source: Optional[str] = None
         self.bad_lines = 0
@@ -595,6 +606,12 @@ class StreamParser:
                 if isinstance(commands, list):
                     self.commands = [c for c in commands
                                      if isinstance(c, dict) and isinstance(c.get("name"), str)]
+                models = body.get("models")
+                if isinstance(models, list):
+                    self.resolved_models = {
+                        str(m.get("value")): str(m.get("resolvedModel") or "")
+                        for m in models if isinstance(m, dict) and m.get("value")}
+                return [TurnEvent("initialized", session_id=self.session_id)]
             return []
         if etype == "rate_limit_event":
             info = event.get("rate_limit_info")
@@ -607,6 +624,7 @@ class StreamParser:
             source = event.get("apiKeySource")
             self.api_key_source = source if isinstance(source, str) else None
             model = event.get("model")
+            self.model = model if isinstance(model, str) else ""
             # The model actually in use (#8), which may not be the one asked for.
             return [TurnEvent("started", session_id=self.session_id, raw_type="init",
                               text=str(event.get("permissionMode") or ""),
@@ -670,6 +688,40 @@ def api_key_problem(source: Optional[str]) -> Optional[str]:
             "that key from the environment or settings that set it, then try again.")
 
 
+def fable_problem(actual: str, chosen: str, sent: bool = False) -> Optional[str]:
+    """A message if the turn would run on Fable without it having been chosen
+    (#58): Claude Code's default, or its fallback from the chosen model. Some
+    plans bill Fable to usage credits, and in ``-p`` turns without asking.
+    ``sent``: the message had already gone when this was found."""
+    if "fable" not in (actual or "").lower() or "fable" in (chosen or "").lower():
+        return None
+    which = (f"instead of {model_label(chosen)}, the model this session chose" if chosen
+             else "Claude Code's default model")
+    done = ("stopped the turn as soon as it started" if sent
+            else "didn't send your message")
+    return (f"Claude Code would have used Fable, {which}. Some plans bill Fable to usage "
+            f"credits, so The Chat Place {done}. Choose another model with Session, "
+            "Change Model, then send again.")
+
+
+#: How long a turn's message waits for Claude Code to answer initialize.
+INIT_ANSWER_WAIT = 10.0
+
+
+def resolved_model(models: Dict[str, str], chosen: str) -> str:
+    """The model a turn will use, from the ``initialize`` answer: what the
+    chosen value (or "default") resolves to; a full name stands for itself."""
+    return models.get(chosen or "default") or chosen
+
+
+def chosen_model(command: List[str]) -> str:
+    """The ``--model`` a turn's command asks for, "" for Claude Code's default."""
+    try:
+        return command[command.index("--model") + 1]
+    except (ValueError, IndexError):
+        return ""
+
+
 # ---------------------------------------------------------------------------
 # Running a turn
 # ---------------------------------------------------------------------------
@@ -720,6 +772,9 @@ class TurnRunner:
         self._lock = threading.Lock()
         self._cancelled = False
         self._stopped_for_key = False
+        #: Stopped by The Chat Place before Claude answered (an API key or an
+        #: unchosen Fable): the message goes back to the reply box.
+        self.stopped_before_answer = False
         self._thread: Optional[threading.Thread] = None
         self._clock = clock
         self.started_at = clock()
@@ -749,6 +804,18 @@ class TurnRunner:
                     "working" if response.get("behavior") == "allow"
                     else f"carrying on after you refused {request.tool_name}")
             return ok
+
+    def _write_raw(self, data: bytes) -> bool:
+        """Write bytes to the CLI's stdin. Call with ``_lock`` held."""
+        process = self._process
+        if process is None or not self._stdin_open:
+            return False
+        try:
+            process.stdin.write(data)
+            process.stdin.flush()
+            return True
+        except (OSError, ValueError):
+            return False
 
     def _write_line(self, obj: dict) -> bool:
         """Write one JSON line to the CLI's stdin. Call with ``_lock`` held."""
@@ -847,19 +914,63 @@ class TurnRunner:
             err_thread.start()
             with self._lock:
                 try:
-                    process.stdin.write(stdin_lines(self.prompt, self.images))
+                    # Only initialize: its answer says which model the turn
+                    # would use, and the message waits for that (#58).
+                    process.stdin.write(initialize_line())
                     process.stdin.flush()
                     self._stdin_open = True
                 except (OSError, ValueError):
                     pass  # the process died early; its exit code tells us why
+            chosen = chosen_model(self.command)
+            message_sent = False
+            sent_lock = threading.Lock()
+
+            def send_message() -> bool:
+                """Send the message once; False if it already went."""
+                nonlocal message_sent
+                with sent_lock:
+                    if message_sent:
+                        return False
+                    message_sent = True
+                with self._lock:
+                    self._write_raw(message_line(self.prompt, self.images))
+                return True
+
+            # A Claude Code that never answers initialize still gets the
+            # message (the system/init check still stands behind it).
+            unanswered = threading.Timer(INIT_ANSWER_WAIT, send_message)
+            unanswered.daemon = True
+            unanswered.start()
 
             for raw in iter(process.stdout.readline, b""):
                 for event in self.parser.feed(_decode(raw)):
+                    if event.kind == "initialized" and not message_sent:
+                        problem = fable_problem(
+                            resolved_model(self.parser.resolved_models, chosen), chosen)
+                        if problem:
+                            with sent_lock:
+                                stopping = not message_sent
+                                message_sent = True  # and never: the timer can't send it
+                            if stopping:
+                                unanswered.cancel()
+                                self.stopped_before_answer = True
+                                self._kill()
+                                final = TurnEvent("failed", text=problem, is_error=True,
+                                                  session_id=self.parser.session_id)
+                                break
+                    # The answer, or anything else first (an older Claude
+                    # Code): the message goes now.
+                    if send_message():
+                        unanswered.cancel()
+                    if event.kind == "initialized":
+                        continue
                     if event.kind == "started":
                         self.session_started = True
-                        problem = api_key_problem(self.parser.api_key_source)
+                        problem = (api_key_problem(self.parser.api_key_source)
+                                   or fable_problem(self.parser.model, chosen, sent=True))
                         if problem:
                             self._stopped_for_key = True
+                            self.stopped_before_answer = True
                             self._kill()
                             final = TurnEvent("failed", text=problem, is_error=True,
                                               session_id=self.parser.session_id)
@@ -879,7 +990,7 @@ class TurnRunner:
                     else:
                         self._emit(event)
                 self._refuse_unsupported()
-                if self._stopped_for_key:
+                if self.stopped_before_answer:
                     break
             self._close_stdin()
             process.wait()
