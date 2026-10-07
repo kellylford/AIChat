@@ -3265,3 +3265,64 @@ def test_a_turn_stopped_before_claude_answered_gives_the_message_back(frame, env
     frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent(
         "failed", text="Claude Code would have used Fable…", is_error=True))
     assert frame.reply_text.GetValue() == "Fix the build"
+
+
+class _Questions:
+    def questions(self):
+        return [{"header": "One", "question": "First?", "options": [{"label": "Red"},
+                                                                    {"label": "Blue"}]},
+                {"header": "Two", "question": "Second?", "multiSelect": True,
+                 "options": [{"label": "M"}]},
+                {"header": "Three", "question": "Third?", "options": []},
+                {"header": "Four", "question": "Fourth?", "options": [{"label": "S"}]}]
+
+
+def _boxes_and_their_controls(parent):
+    """Each group box with the controls that follow it, in creation order."""
+    groups = []
+    for child in parent.GetChildren():
+        if isinstance(child, wx.StaticBox):
+            groups.append((child, []))
+        elif groups and isinstance(child, (wx.RadioButton, wx.CheckBox, wx.TextCtrl)):
+            groups[-1][1].append(child)
+    return groups
+
+
+def test_each_question_is_a_group_box_its_options_follow(frame):
+    from thechatplace.ui.dialogs import QuestionDialog
+    dialog = QuestionDialog(frame, "Probe", _Questions())
+    try:
+        dialog.Layout()
+        panel = dialog.GetChildren()[0]
+        groups = _boxes_and_their_controls(panel)
+        assert [box.GetLabel() for box, _ in groups] == [
+            "One: First?", "Two: Second?", "Three: Third?", "Four: Fourth?"]
+        for box, controls in groups:
+            # Siblings after the box, inside it: how screen readers find the label.
+            assert controls and all(c.GetParent() is panel for c in controls)
+            assert all(box.GetRect().Contains(c.GetRect()) for c in controls)
+            radios = [c for c in controls if isinstance(c, wx.RadioButton)]
+            if radios:  # one radio group per question
+                assert radios[0].HasFlag(wx.RB_GROUP)
+                assert not any(r.HasFlag(wx.RB_GROUP) for r in radios[1:])
+        # Answers in two questions both stay chosen.
+        first, fourth = groups[0][1][0], groups[3][1][0]
+        first.SetValue(True)
+        fourth.SetValue(True)
+        assert first.GetValue() and fourth.GetValue()
+    finally:
+        dialog.Destroy()
+
+
+def test_settings_reading_messages_options_follow_their_group_box(frame):
+    from thechatplace.ui.dialogs import SettingsDialog
+    dialog = SettingsDialog(frame, speech.SpeechSettings(), speech.default_options())
+    try:
+        dialog.Layout()
+        groups = dict((box.GetLabel(), controls)
+                      for box, controls in _boxes_and_their_controls(dialog))
+        reading = groups["Reading messages"]
+        assert dialog.formatted in reading and dialog.whole_in_list in reading
+        assert all(c.GetParent() is dialog for c in (dialog.formatted, dialog.whole_in_list))
+    finally:
+        dialog.Destroy()

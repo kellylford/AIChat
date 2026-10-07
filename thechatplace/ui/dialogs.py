@@ -201,20 +201,20 @@ class SettingsDialog(wx.Dialog):
         outer.Add(self.own_messages, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 
         # What you read, apart from what's spoken on its own.
-        quiet = wx.LogNull()  # siblings on purpose (see QuestionDialog)
-        messages = wx.StaticBoxSizer(wx.VERTICAL, self, "Reading messages")
-        box = self  # siblings after the group box, so its label is read (see QuestionDialog)
-        self.formatted = wx.CheckBox(
-            box, label="Open full messages as a formatted &page (headings, lists and "
-                       "tables), not plain text")
-        self.formatted.SetValue(speech.formatted_messages)
-        messages.Add(self.formatted, 0, wx.ALL, 6)
-        self.whole_in_list = wx.CheckBox(
-            box, label="Read the &whole message on each item in the messages list "
-                       "(otherwise just its first line)")
-        self.whole_in_list.SetValue(speech.full_messages_in_list)
-        messages.Add(self.whole_in_list, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 6)
-        del quiet
+        # Siblings of the group box on purpose (see QuestionDialog); wx's note
+        # about that is kept out of the log.
+        with wx.LogNull():
+            messages = wx.StaticBoxSizer(wx.VERTICAL, self, "Reading messages")
+            self.formatted = wx.CheckBox(
+                self, label="Open full messages as a formatted &page (headings, lists and "
+                           "tables), not plain text")
+            self.formatted.SetValue(speech.formatted_messages)
+            messages.Add(self.formatted, 0, wx.ALL, 6)
+            self.whole_in_list = wx.CheckBox(
+                self, label="Read the &whole message on each item in the messages list "
+                           "(otherwise just its first line)")
+            self.whole_in_list.SetValue(speech.full_messages_in_list)
+            messages.Add(self.whole_in_list, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 6)
         outer.Add(messages, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 
         grid = wx.FlexGridSizer(rows=2, cols=2, vgap=8, hgap=8)
@@ -537,51 +537,50 @@ class QuestionDialog(wx.Dialog):
         first = None
         # wx logs that a box's controls "should be" its children: on purpose
         # they aren't (see below), so that note is kept out of the log.
-        quiet = wx.LogNull()
-        for number, question in enumerate(self._questions, start=1):
-            header = str(question.get("header") or f"Question {number}")
-            # The question is the group's label. The options are the group
-            # box's siblings, after it and inside its rectangle, as in a
-            # classic Windows dialog: that is how JAWS and NVDA find a
-            # group's label when Tab moves into it. As the box's children,
-            # only the first question was read (the one focus starts in).
-            box = wx.StaticBoxSizer(wx.VERTICAL, panel, f"{header}: {question['question']}")
-            parent_window = panel
-            options = [o for o in question.get("options") or [] if isinstance(o, dict)]
-            multi = bool(question.get("multiSelect"))
-            controls = []
-            for index, option in enumerate(options):
-                label = str(option.get("label") or f"Option {index + 1}")
-                description = str(option.get("description") or "")
-                text = f"{label}: {description}" if description else label
+        with wx.LogNull():
+            for number, question in enumerate(self._questions, start=1):
+                header = str(question.get("header") or f"Question {number}")
+                # The question is the group's label. The options are the group
+                # box's siblings, after it and inside its rectangle, as in a
+                # classic Windows dialog: that is how JAWS and NVDA find a
+                # group's label when Tab moves into it. As the box's children,
+                # only the first question was read (the one focus starts in).
+                box = wx.StaticBoxSizer(wx.VERTICAL, panel, f"{header}: {question['question']}")
+                parent_window = panel
+                options = [o for o in question.get("options") or [] if isinstance(o, dict)]
+                multi = bool(question.get("multiSelect"))
+                controls = []
+                for index, option in enumerate(options):
+                    label = str(option.get("label") or f"Option {index + 1}")
+                    description = str(option.get("description") or "")
+                    text = f"{label}: {description}" if description else label
+                    if multi:
+                        control = wx.CheckBox(parent_window, label=text)
+                    else:
+                        style = wx.RB_GROUP if index == 0 else 0
+                        control = wx.RadioButton(parent_window, label=text, style=style)
+                        control.SetValue(False)
+                    control._hub_label = label
+                    controls.append(control)
+                    box.Add(control, 0, wx.ALL, 4)
+                    first = first or control
                 if multi:
-                    control = wx.CheckBox(parent_window, label=text)
+                    other = wx.CheckBox(parent_window, label=f"{OTHER} (type below)")
                 else:
-                    style = wx.RB_GROUP if index == 0 else 0
-                    control = wx.RadioButton(parent_window, label=text, style=style)
-                    control.SetValue(False)
-                control._hub_label = label
-                controls.append(control)
-                box.Add(control, 0, wx.ALL, 4)
-                first = first or control
-            if multi:
-                other = wx.CheckBox(parent_window, label=f"{OTHER} (type below)")
-            else:
-                other = wx.RadioButton(parent_window, label=f"{OTHER} (type below)",
-                                       style=0 if controls else wx.RB_GROUP)
-                other.SetValue(False)
-            other._hub_label = OTHER
-            controls.append(other)
-            box.Add(other, 0, wx.ALL, 4)
-            other_text = wx.TextCtrl(parent_window)
-            set_accessible_name(other_text, f"{header}: your own answer")
-            box.Add(other_text, 0, wx.EXPAND | wx.ALL, 4)
-            other_text.Bind(wx.EVT_TEXT, lambda e, o=other: o.SetValue(True)
-                            if e.GetString().strip() else None)
-            self._controls.append(("multi" if multi else "single", controls, other_text))
-            sizer.Add(box, 0, wx.EXPAND | wx.ALL, 6)
-            first = first or other
-        del quiet
+                    other = wx.RadioButton(parent_window, label=f"{OTHER} (type below)",
+                                           style=0 if controls else wx.RB_GROUP)
+                    other.SetValue(False)
+                other._hub_label = OTHER
+                controls.append(other)
+                box.Add(other, 0, wx.ALL, 4)
+                other_text = wx.TextCtrl(parent_window)
+                set_accessible_name(other_text, f"{header}: your own answer")
+                box.Add(other_text, 0, wx.EXPAND | wx.ALL, 4)
+                other_text.Bind(wx.EVT_TEXT, lambda e, o=other: o.SetValue(True)
+                                if e.GetString().strip() else None)
+                self._controls.append(("multi" if multi else "single", controls, other_text))
+                sizer.Add(box, 0, wx.EXPAND | wx.ALL, 6)
+                first = first or other
         panel.SetSizer(sizer)
         outer.Add(panel, 1, wx.EXPAND | wx.ALL, 4)
 
@@ -598,8 +597,16 @@ class QuestionDialog(wx.Dialog):
         self.declined = False
         send.Bind(wx.EVT_BUTTON, self._on_send)
         decline.Bind(wx.EVT_BUTTON, self._on_decline)
+        self._first = first
         if first is not None:
-            wx.CallAfter(first.SetFocus)
+            # Set as the dialog starts, before it's shown: wx would otherwise
+            # give the focus to the last group first, and a screen reader
+            # would begin reading the wrong question.
+            self.Bind(wx.EVT_INIT_DIALOG, self._on_init_dialog)
+
+    def _on_init_dialog(self, event):
+        event.Skip()
+        self._first.SetFocus()
 
     def _on_decline(self, _event):
         self.declined = True
