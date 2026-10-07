@@ -1,0 +1,89 @@
+"""Files and images sent with a message (#22).
+
+Checked with Claude Code 2.1.286 in a headless turn:
+
+* An image goes in the message itself, as a base64 image block next to the
+  text: Claude read the words in a test picture exactly, and the transcript
+  keeps it as an image block.
+* Any other file is named in the text as ``@"C:\\path\\file.txt"``. Claude Code
+  reads it into the message before Claude sees it: no tool call, no
+  permission prompt, even outside the session's folder, and quoting works for
+  paths with spaces.
+
+Images bigger than the API takes (5 MB) go as ``@"path"`` too; Claude Code
+then reads them with its own tools. A queued message (sent during a turn)
+carries everything as ``@"path"``, because what's queued is text.
+"""
+from __future__ import annotations
+
+import base64
+import os
+import time
+from pathlib import Path
+from typing import List, Optional, Tuple
+
+from . import platform_paths
+
+IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+               ".gif": "image/gif", ".webp": "image/webp"}
+#: The API's limit for one image, before base64.
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+
+def media_type(path: str) -> Optional[str]:
+    return IMAGE_TYPES.get(os.path.splitext(path)[1].lower())
+
+
+def mention(path: str) -> str:
+    """``@"C:\\a b\\x.txt"``: a file Claude Code reads into the message."""
+    return f'@"{path}"'
+
+
+def describe(paths: List[str]) -> str:
+    """"2 attachments: screenshot.png, log.txt"."""
+    if not paths:
+        return "No attachments"
+    names = ", ".join(os.path.basename(p) for p in paths)
+    return f"{len(paths)} attachment{'s' if len(paths) != 1 else ''}: {names}"
+
+
+def build(text: str, paths: List[str], images_inline: bool = True) -> Tuple[str, List[dict]]:
+    """The message text (with ``@"path"`` lines for files) and the image
+    blocks to send with it. A file that's gone is left out and said."""
+    blocks: List[dict] = []
+    mentions: List[str] = []
+    missing: List[str] = []
+    for path in paths:
+        if not os.path.isfile(path):
+            missing.append(os.path.basename(path))
+            continue
+        kind = media_type(path)
+        if images_inline and kind and os.path.getsize(path) <= MAX_IMAGE_BYTES:
+            with open(path, "rb") as handle:
+                data = base64.b64encode(handle.read()).decode("ascii")
+            blocks.append({"type": "image",
+                           "source": {"type": "base64", "media_type": kind, "data": data}})
+        else:
+            mentions.append(mention(path))
+    lines = [text.rstrip()] if text.strip() else []
+    if mentions:
+        lines += ["", "Attached: " + " ".join(mentions)]
+    if missing:
+        lines += ["", "(Couldn't attach, no longer there: " + ", ".join(missing) + ")"]
+    return "\n".join(lines).strip(), blocks
+
+
+def paste_folder() -> Path:
+    """Where pasted images are kept: TheClaudeHub's own data folder."""
+    return platform_paths.app_data_dir() / "pasted images"
+
+
+def pasted_image_path(when: Optional[float] = None) -> Path:
+    stamp = time.strftime("%Y-%m-%d %H-%M-%S", time.localtime(when or time.time()))
+    folder = paste_folder()
+    path = folder / f"Pasted image {stamp}.png"
+    number = 2
+    while path.exists():
+        path = folder / f"Pasted image {stamp} ({number}).png"
+        number += 1
+    return path
