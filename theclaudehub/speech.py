@@ -97,7 +97,7 @@ NOTIFY_NEEDS_YOU = "needs_you"
 NOTIFY_OFF = "off"
 NOTIFY_LEVELS = [NOTIFY_ALL, NOTIFY_NEEDS_YOU, NOTIFY_OFF]
 NOTIFY_LABELS = {
-    NOTIFY_ALL: "When a turn finishes or a session needs you",
+    NOTIFY_ALL: "When your sessions finish a turn, or any session needs you",
     NOTIFY_NEEDS_YOU: "Only when a session needs you",
     NOTIFY_OFF: "Off",
 }

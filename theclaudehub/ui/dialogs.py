@@ -215,7 +215,7 @@ class SettingsDialog(wx.Dialog):
         messages.Add(self.whole_in_list, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 6)
         outer.Add(messages, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 
-        grid = wx.FlexGridSizer(rows=3, cols=2, vgap=8, hgap=8)
+        grid = wx.FlexGridSizer(rows=2, cols=2, vgap=8, hgap=8)
         grid.AddGrowableCol(1, 1)
         grid.Add(wx.StaticText(self, label="Speech &engine:"), 0, wx.ALIGN_CENTER_VERTICAL)
         self.engine_choice = wx.Choice(self, choices=[o.label for o in self._options])
@@ -226,18 +226,21 @@ class SettingsDialog(wx.Dialog):
             self, choices=[label.capitalize() for label in RATE_PRESET_LABELS])
         set_accessible_name(self.rate_choice, "Speaking rate")
         grid.Add(self.rate_choice, 0)
-        grid.Add(wx.StaticText(self, label="Windows &notifications:"), 0,
-                 wx.ALIGN_CENTER_VERTICAL)
+        outer.Add(grid, 0, wx.EXPAND | wx.ALL, 10)
+
+        self.rate_note = wx.StaticText(self, label="")
+        outer.Add(self.rate_note, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+
+        notify_row = wx.BoxSizer(wx.HORIZONTAL)
+        notify_row.Add(wx.StaticText(self, label="Windows &notifications:"), 0,
+                       wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
         self.notify_choice = wx.Choice(self, choices=[NOTIFY_LABELS[n] for n in NOTIFY_LEVELS])
         set_accessible_name(self.notify_choice, "Windows notifications, while TheClaudeHub "
                                                 "isn't the active window")
         self.notify_choice.SetSelection(NOTIFY_LEVELS.index(speech.notifications)
                                         if speech.notifications in NOTIFY_LEVELS else 0)
-        grid.Add(self.notify_choice, 0)
-        outer.Add(grid, 0, wx.EXPAND | wx.ALL, 10)
-
-        self.rate_note = wx.StaticText(self, label="")
-        outer.Add(self.rate_note, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+        notify_row.Add(self.notify_choice, 0)
+        outer.Add(notify_row, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 
         buttons = wx.StdDialogButtonSizer()
         ok = wx.Button(self, wx.ID_OK)
