@@ -1,6 +1,6 @@
 """Finding code blocks in a message (#17)."""
-from theclaudehub.codeblocks import find_code_blocks, replace_code_blocks
-from theclaudehub.speech import strip_for_speech
+from thechatplace.codeblocks import find_code_blocks, replace_code_blocks
+from thechatplace.speech import strip_for_speech
 
 TICKS = "`" * 3
 

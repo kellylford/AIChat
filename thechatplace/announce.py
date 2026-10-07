@@ -60,7 +60,7 @@ def reply_text(title: str, reply: str, level: str) -> Optional[str]:
 
 
 def turn_end_text(title: str, state: str, detail: str, reply: str, level: str) -> Optional[str]:
-    """A session finished a turn (used for sessions TheClaudeHub only watches)."""
+    """A session finished a turn (used for sessions The Chat Place only watches)."""
     if level == ANNOUNCE_SILENT:
         return None
     head = f"{title} finished"

@@ -3,11 +3,11 @@
 Two sources:
 
 * **Desktop app sessions**, from the Claude desktop app's metadata files
-  (``local_<id>.json``). Read-only, always: TheClaudeHub never writes there.
-* **TheClaudeHub's own sessions**, from its own store (``own_store``).
+  (``local_<id>.json``). Read-only, always: The Chat Place never writes there.
+* **The Chat Place's own sessions**, from its own store (``own_store``).
 
 Live state comes from ``~/.claude/sessions/<pid>.json`` (``status`` busy or
-idle) for desktop sessions, and from TheClaudeHub's own running turns for its
+idle) for desktop sessions, and from The Chat Place's own running turns for its
 own sessions. The desktop app's ``postTurnSummary`` (``status_category``,
 ``needs_action``) decides "needs you" when present. All of it is undocumented,
 so every field is read defensively and a file that will not parse is skipped.
@@ -53,7 +53,7 @@ class SessionInfo:
     archived: bool = False
     #: The desktop app has linked it for Remote Control (claude.ai).
     remote: bool = False
-    #: TheClaudeHub groups it's in (#31), set by the window, read in its row.
+    #: Chat Place groups it's in (#31), set by the window, read in its row.
     groups: tuple = ()
 
     @property
@@ -89,7 +89,7 @@ class SessionInfo:
             parts.append("new reply")
         parts.append(describe_age(self.last_activity_ms, now_ms))
         if self.is_own:
-            parts.append("TheClaudeHub session")
+            parts.append("Chat Place session")
         if self.archived:
             parts.append("archived")
         if self.groups:
@@ -157,14 +157,14 @@ VIEWS = [
     (VIEW_ACTIVE, "Needs You or &Working"),
     (VIEW_NEEDS_YOU, "&Needs You"),
     (VIEW_DESKTOP, "&Desktop App Sessions"),
-    (VIEW_OWN, "&TheClaudeHub Sessions"),
+    (VIEW_OWN, "&Chat Place Sessions"),
     (VIEW_REMOTE, "&Remote Control Sessions"),
     (VIEW_ARCHIVED, "Ar&chived"),
 ]
 #: Said and shown in the list's name: "showing needs you or working".
 VIEW_SPOKEN = {VIEW_ALL: "all sessions", VIEW_ACTIVE: "needs you or working",
                VIEW_NEEDS_YOU: "needs you", VIEW_DESKTOP: "desktop app sessions",
-               VIEW_OWN: "TheClaudeHub sessions", VIEW_REMOTE: "Remote Control sessions",
+               VIEW_OWN: "Chat Place sessions", VIEW_REMOTE: "Remote Control sessions",
                VIEW_ARCHIVED: "archived sessions"}
 
 

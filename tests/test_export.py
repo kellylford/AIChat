@@ -1,8 +1,8 @@
 """Saving a session to a file (#33)."""
 from datetime import datetime
 
-from theclaudehub import export
-from theclaudehub.transcript import ASSISTANT, USER, ChatMessage
+from thechatplace import export
+from thechatplace.transcript import ASSISTANT, USER, ChatMessage
 
 WHEN = datetime(2026, 10, 7, 4, 5)
 MESSAGES = [ChatMessage(USER, "Fix the build", "", "a"),
@@ -11,7 +11,7 @@ MESSAGES = [ChatMessage(USER, "Fix the build", "", "a"),
 
 def test_markdown_has_a_heading_per_message_and_shifts_theirs():
     text = export.to_markdown("Build fix", MESSAGES, "C:\\G\\Repo", WHEN)
-    assert text.startswith("# Build fix\n\nExported from TheClaudeHub on 2026-10-07 at 04:05.")
+    assert text.startswith("# Build fix\n\nExported from The Chat Place on 2026-10-07 at 04:05.")
     assert "Folder: C:\\G\\Repo" in text
     assert "## You\n\nFix the build\n" in text
     assert "## Claude\n\n### Plan\n```\n# not a heading\n```" in text  # code left alone

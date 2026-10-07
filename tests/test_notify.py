@@ -5,7 +5,7 @@ pytest.importorskip("wx")
 import wx  # noqa: E402
 import wx.adv  # noqa: E402
 
-from theclaudehub.ui import notify  # noqa: E402
+from thechatplace.ui import notify  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -43,12 +43,12 @@ class FakeIcon:
 def test_one_icon_the_latest_session_and_removed_on_close(app):
     FakeIcon.made = []
     clicked = []
-    notifier = notify.Notifier(clicked.append, "TheClaudeHub", factory=FakeIcon)
+    notifier = notify.Notifier(clicked.append, "The Chat Place", factory=FakeIcon)
     assert notifier.show("Hub probe finished", "All done.", "own:1")
     assert notifier.show("Quiet one needs you", "x" * 400, "local_2")
     assert len(FakeIcon.made) == 1
     icon = FakeIcon.made[0]
-    assert icon.tooltip == "TheClaudeHub"
+    assert icon.tooltip == "The Chat Place"
     assert len(icon.balloons[1][1]) == notify.TEXT_LIMIT
     icon.fire(wx.adv.EVT_TASKBAR_BALLOON_CLICK)
     icon.fire(wx.adv.EVT_TASKBAR_LEFT_UP)

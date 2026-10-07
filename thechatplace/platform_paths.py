@@ -13,7 +13,7 @@ app (none of this is documented, so every caller treats it as best effort):
   ``%LOCALAPPDATA%\\Packages\\Claude_<id>\\LocalCache\\Roaming\\Claude\\claude-code-sessions``
 * Transcripts: ``%USERPROFILE%\\.claude\\projects\\<encoded cwd>\\<cliSessionId>.jsonl``
 * Live sessions: ``%USERPROFILE%\\.claude\\sessions\\<pid>.json``
-* TheClaudeHub's own files: ``%APPDATA%\\TheClaudeHub\\``
+* The Chat Place's own files: ``%APPDATA%\\TheChatPlace\\``
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-APP_DIR_NAME = "TheClaudeHub"
+APP_DIR_NAME = "TheChatPlace"
 
 
 def claude_home() -> Path:
@@ -85,7 +85,7 @@ def desktop_sessions_dirs() -> List[Path]:
 
 
 def app_data_dir() -> Path:
-    """TheClaudeHub's own settings and session store."""
+    """The Chat Place's own settings and session store."""
     return _roaming_dir() / APP_DIR_NAME
 
 
@@ -271,7 +271,7 @@ def find_claude(which=None, native_candidates=None) -> ClaudeLookup:
     if found:
         return ClaudeLookup(None, (
             f"The claude command on this PC is a script ({found}), from the npm install. "
-            "TheClaudeHub needs the native claude.exe, because a script would let a session "
+            "The Chat Place needs the native claude.exe, because a script would let a session "
             "title be read as a command. Install Claude Code with the native installer "
             "(https://code.claude.com/docs/en/setup), sign in once in a terminal, and try again."))
     return ClaudeLookup(None, (
@@ -291,7 +291,7 @@ class ProcessTree:
     """Lets a child process be killed together with everything it started.
 
     On Windows the child goes into a Job Object with KILL_ON_JOB_CLOSE, so
-    terminating the job, closing it when the turn ends, or TheClaudeHub
+    terminating the job, closing it when the turn ends, or The Chat Place
     exiting ends the whole tree: claude runs tools as child processes, and
     killing only claude.exe would leave a long build or test run going. It
     also means anything Claude started and left running ends with the turn.

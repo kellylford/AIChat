@@ -1,7 +1,7 @@
 import json
 
-from theclaudehub import transcript as t
-from theclaudehub.transcript import (TranscriptParser, TranscriptReader, parse_lines,
+from thechatplace import transcript as t
+from thechatplace.transcript import (TranscriptParser, TranscriptReader, parse_lines,
                                      read_transcript)
 
 from records import (assistant_block, lines, other, text_block, thinking_block,

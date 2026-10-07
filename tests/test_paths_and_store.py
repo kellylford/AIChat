@@ -2,9 +2,9 @@ import json
 
 import pytest
 
-from theclaudehub import platform_paths
-from theclaudehub.own_store import OwnSession, OwnSessionStore
-from theclaudehub.sessions import NEEDS_YOU, load_desktop_sessions
+from thechatplace import platform_paths
+from thechatplace.own_store import OwnSession, OwnSessionStore
+from thechatplace.sessions import NEEDS_YOU, load_desktop_sessions
 
 
 @pytest.mark.parametrize("cwd,expected", [
@@ -49,7 +49,7 @@ def test_claude_home_honours_config_dir(monkeypatch, tmp_path):
 def test_app_dirs_under_appdata(monkeypatch, tmp_path):
     monkeypatch.setattr(platform_paths.sys, "platform", "win32")
     monkeypatch.setenv("APPDATA", str(tmp_path))
-    assert platform_paths.app_data_dir() == tmp_path / "TheClaudeHub"
+    assert platform_paths.app_data_dir() == tmp_path / "TheChatPlace"
     assert platform_paths.desktop_sessions_dir() == tmp_path / "Claude" / "claude-code-sessions"
 
 
@@ -173,7 +173,7 @@ def test_corrupt_store_is_set_aside_not_overwritten(tmp_path, content, why):
 
 
 def test_store_that_cannot_be_set_aside_refuses_to_save(tmp_path, monkeypatch):
-    import theclaudehub.own_store as own_store
+    import thechatplace.own_store as own_store
     path = tmp_path / "sessions.json"
     path.write_text("{broken", encoding="utf-8")
 

@@ -2,9 +2,9 @@
 import json
 import time
 
-from theclaudehub import usage
-from theclaudehub.claude_cli import StreamParser
-from theclaudehub.transcript import TranscriptParser
+from thechatplace import usage
+from thechatplace.claude_cli import StreamParser
+from thechatplace.transcript import TranscriptParser
 
 NOW = time.mktime((2026, 10, 7, 9, 0, 0, 0, 0, -1))  # a Wednesday, 9 AM local
 

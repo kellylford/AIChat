@@ -1,4 +1,4 @@
-"""TheClaudeHub's window: sessions, messages and reply, all in one view.
+"""The Chat Place's window: sessions, messages and reply, all in one view.
 
 Accessibility decisions, and why
 --------------------------------
@@ -79,7 +79,7 @@ from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, ChangesDialog, CodeBl
                       ManageGroupsDialog, QuestionDialog, SettingsDialog, ShortcutsDialog,
                       formatted_view_available)
 
-APP_NAME = "TheClaudeHub"
+APP_NAME = "The Chat Place"
 LIST_REFRESH_MS = 5000
 UPDATE_CHECK_DELAY_MS = 4000
 APPLY_SPEECH_WAIT_S = 4.0
@@ -208,7 +208,7 @@ class MainFrame(wx.Frame):
         self._item(session, "&New Session...\tCtrl+N", self.on_new_session)
         self._item(session, "&Refresh\tF5",
                    lambda e: self.refresh_sessions(force=True, resort=True))
-        self._item(session, "&Forget TheClaudeHub Session...", self.on_forget)
+        self._item(session, "&Forget Chat Place Session...", self.on_forget)
         self._item(session, "&Export Session...\tCtrl+E", lambda e: self.on_export())
         self._item(session, "Insert Command or S&kill...\tCtrl+/",
                    lambda e: self.on_insert_command())
@@ -305,7 +305,7 @@ class MainFrame(wx.Frame):
         self.chat_list.Bind(wx.EVT_CONTEXT_MENU, self._on_message_menu)
         self.chat_list.Bind(wx.EVT_LISTBOX_DCLICK, lambda e: self.on_read_message())
 
-        # Where the reply goes: one panel for TheClaudeHub's sessions, one for
+        # Where the reply goes: one panel for The Chat Place's sessions, one for
         # desktop ones, in the same place so the layout is the same.
         self.own_reply = wx.Panel(root)
         osizer = wx.BoxSizer(wx.VERTICAL)
@@ -355,10 +355,10 @@ class MainFrame(wx.Frame):
         self.desktop_note = wx.TextCtrl(
             self.desktop_reply, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_RICH2,
             value=("This session belongs to the Claude desktop app, so you reply to it "
-                   "in Claude. TheClaudeHub only reads it: sending from here while the "
+                   "in Claude. The Chat Place only reads it: sending from here while the "
                    "desktop app has it open could run two turns at once and tangle "
                    "the conversation. Open in Claude switches the desktop app to it. "
-                   "Continue Here starts a TheClaudeHub copy of it, with the whole "
+                   "Continue Here starts a Chat Place copy of it, with the whole "
                    "conversation so far, that you can reply to here; the desktop app "
                    "session isn't changed."))
         set_accessible_name(self.desktop_note, "About replying")
@@ -506,7 +506,7 @@ class MainFrame(wx.Frame):
             method(*args, **kwargs)
             return True
         except OSError as exc:
-            self._say(f"Couldn't save TheClaudeHub's session list: {exc}")
+            self._say(f"Couldn't save The Chat Place's session list: {exc}")
             return False
 
     def _probe_speech(self):
@@ -594,7 +594,7 @@ class MainFrame(wx.Frame):
         if self._first_snapshot and snap.desktop_groups.read_ok:
             gone = self._view_group_missing()
             if gone is not None:
-                # Deleted while TheClaudeHub was closed: say so, show all.
+                # Deleted while The Chat Place was closed: say so, show all.
                 self.speech.session_view = VIEW_ALL
                 try:
                     self.speech.save()
@@ -748,15 +748,15 @@ class MainFrame(wx.Frame):
             self._feedback("No session selected.")
             return
         if not info.is_own:
-            self._feedback("Only sessions TheClaudeHub started can be forgotten. "
+            self._feedback("Only sessions The Chat Place started can be forgotten. "
                            "Desktop app sessions are managed in Claude.")
             return
         if info.cli_session_id in self._runners:
             self._feedback("A turn is running in that session. Stop it first.")
             return
         answer = wx.MessageBox(
-            f"Remove \"{info.title}\" from TheClaudeHub's list? Its transcript stays on "
-            "disk; this only stops TheClaudeHub listing it.",
+            f"Remove \"{info.title}\" from The Chat Place's list? Its transcript stays on "
+            "disk; this only stops The Chat Place listing it.",
             "Forget Session", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION, self)
         if answer != wx.YES:
             return
@@ -886,7 +886,7 @@ class MainFrame(wx.Frame):
         info = self._open
         if info is None:
             return
-        kind = "TheClaudeHub session" if info.is_own else "Claude desktop app session, read-only"
+        kind = "Chat Place session" if info.is_own else "Claude desktop app session, read-only"
         if info.is_own:
             own = self.store.get(info.cli_session_id)
             if own is not None:
@@ -1034,7 +1034,7 @@ class MainFrame(wx.Frame):
             else:
                 self._status(f"{self._open.title}: new message.")
 
-    # Show Tool Activity on: tool calls (and, in TheClaudeHub's own sessions,
+    # Show Tool Activity on: tool calls (and, in The Chat Place's own sessions,
     # what Claude writes between them) are spoken for the open session (#12).
     # They're gathered for a moment and said together, without cutting off
     # the screen reader, so a run of calls is one announcement ("Using Read 4
@@ -1419,7 +1419,7 @@ class MainFrame(wx.Frame):
             return
         if not info.can_open_in_claude:
             wx.MessageBox(
-                "This session was started by TheClaudeHub, so the Claude desktop app "
+                "This session was started by The Chat Place, so the Claude desktop app "
                 "doesn't list it and it can't be opened there. Read and reply to it "
                 "here.", APP_NAME, wx.OK | wx.ICON_INFORMATION, self)
             return
@@ -1499,7 +1499,7 @@ class MainFrame(wx.Frame):
 
     @staticmethod
     def _describe_changed_file(changed, cwd: str) -> str:
-        """"main_frame.py, 40 lines added, 12 removed, in theclaudehub\\ui"."""
+        """"main_frame.py, 40 lines added, 12 removed, in thechatplace\\ui"."""
         name = os.path.basename(changed.path)
         folder = os.path.dirname(changed.path)
         try:
@@ -1541,12 +1541,12 @@ class MainFrame(wx.Frame):
 
     @staticmethod
     def _app_is_active() -> bool:
-        """Whether you're in TheClaudeHub: the main window or any of its
+        """Whether you're in The Chat Place: the main window or any of its
         dialogs (the frame alone says no while a dialog has the focus)."""
         return wx.GetActiveWindow() is not None
 
     def _go_to_session(self, key: Optional[str]):
-        """A notification was chosen: TheClaudeHub comes forward with that
+        """A notification was chosen: The Chat Place comes forward with that
         session loaded. With one of its dialogs open, the dialog comes
         forward instead, and the session is left as it is."""
         if not self:
@@ -1590,7 +1590,7 @@ class MainFrame(wx.Frame):
         """Say once if Claude Code runs another model than the session chose
         (it falls back to its default when a model isn't allowed, #8), or if
         its own default is Fable, which some plans bill to usage credits in
-        turns like TheClaudeHub's."""
+        turns like The Chat Place's."""
         own = self.store.get(session_id)
         if own is None or not actual:
             return
@@ -1791,7 +1791,7 @@ class MainFrame(wx.Frame):
         """Attach files or images to the next message (Ctrl+Shift+F)."""
         info = self._open
         if info is None or not info.is_own:
-            self._feedback("Attachments are for TheClaudeHub's own sessions: load one first.")
+            self._feedback("Attachments are for The Chat Place's own sessions: load one first.")
             return
         wildcard = ("All files (*.*)|*.*|Images (*.png;*.jpg;*.jpeg;*.gif;*.webp)|"
                     "*.png;*.jpg;*.jpeg;*.gif;*.webp")
@@ -1887,13 +1887,13 @@ class MainFrame(wx.Frame):
             wx.TheClipboard.Close()
 
     def on_continue_here(self, _event=None):
-        """Carry on a desktop app session in TheClaudeHub, as a copy (#189)."""
+        """Carry on a desktop app session in The Chat Place, as a copy (#189)."""
         info = self._selected_session()
         if info is None:
             self._feedback("No session selected.")
             return
         if info.is_own:
-            self._feedback(f"{info.title} is already a TheClaudeHub session; reply to it here.")
+            self._feedback(f"{info.title} is already a Chat Place session; reply to it here.")
             return
         if not info.cli_session_id or platform_paths.transcript_path(
                 info.cwd, info.cli_session_id) is None:
@@ -1990,18 +1990,18 @@ class MainFrame(wx.Frame):
         sent; the caller decides how to say it (a dialog when Kelly pressed
         Send, speech for a queued message going out on its own)."""
         # Read fresh, not from the list's snapshot: up to 5 seconds old, it
-        # still shows TheClaudeHub's own just-finished turn as busy.
+        # still shows The Chat Place's own just-finished turn as busy.
         live = hub.load_live_status().get(session_id)
         if live is not None and live.status == "busy":
             return ("This session is running somewhere else right now, so "
-                    "TheClaudeHub won't send into it.")
+                    "The Chat Place won't send into it.")
         lookup = platform_paths.find_claude()
         if not lookup.path:
             return lookup.problem
         exe = lookup.path
         own = self.store.get(session_id)
         if own is None:
-            return "That session is no longer in TheClaudeHub's list."
+            return "That session is no longer in The Chat Place's list."
         try:
             if self._session_exists(own):
                 command = build_resume_command(
@@ -2324,7 +2324,7 @@ class MainFrame(wx.Frame):
     # ------------------------------------------------- views and groups (#31, #32)
 
     def _group_names(self) -> List[str]:
-        """Every group: TheClaudeHub's own, then the desktop app's (#51). A
+        """Every group: The Chat Place's own, then the desktop app's (#51). A
         desktop group with the name of one of ours (in any case) is the same
         group here."""
         names = list(self.groups.names())
@@ -2563,7 +2563,7 @@ class MainFrame(wx.Frame):
                     self._feedback(f"{info.title} is already in {name}.")
                     return
                 if self.groups.find(name) is None:
-                    # A desktop app group: TheClaudeHub keeps its own of the
+                    # A desktop app group: The Chat Place keeps its own of the
                     # same name, so the two show as one.
                     name = self.groups.create(name)
                     self._build_show_menu()
@@ -2716,18 +2716,18 @@ class MainFrame(wx.Frame):
             return
         # The dialog says it all; the screen reader reads it, so nothing is
         # spoken first. No is the default, so a stray Enter installs nothing.
-        question = (f"{text}\n\nInstall it now? TheClaudeHub downloads it, closes, and "
+        question = (f"{text}\n\nInstall it now? The Chat Place downloads it, closes, and "
                     "starts the new version. Your sessions and settings are kept.")
         if self._unsent_text():
             question += ("\n\nText you haven't sent in a reply box will be lost, so "
                          "you may want to send or copy it first.")
-        answer = wx.MessageBox(question, "Update TheClaudeHub",
+        answer = wx.MessageBox(question, "Update The Chat Place",
                                wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION, self)
         if answer != wx.YES:
             self._feedback("Not now. Help, Check for Updates installs it later.")
             return
         self._update_busy = True
-        self._feedback(f"Downloading TheClaudeHub {result.version}.")
+        self._feedback(f"Downloading The Chat Place {result.version}.")
 
         def work():
             ok = self.updates.download()
@@ -2753,7 +2753,7 @@ class MainFrame(wx.Frame):
         if not self:
             return
         if not ok:
-            self._say(f"Couldn't download TheClaudeHub {result.version}. Try Help, Check for "
+            self._say(f"Couldn't download The Chat Place {result.version}. Try Help, Check for "
                       "Updates again later.", force=True)
             return
         later = self._install_later_text(result)
@@ -2763,13 +2763,13 @@ class MainFrame(wx.Frame):
             return
         if self._unsent_text():
             answer = wx.MessageBox(
-                f"TheClaudeHub {result.version} is downloaded. Restart now to install it? "
+                f"The Chat Place {result.version} is downloaded. Restart now to install it? "
                 "Text you haven't sent in a reply box will be lost.",
-                "Update TheClaudeHub", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION, self)
+                "Update The Chat Place", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION, self)
             if answer != wx.YES or self._runners:
                 self._say(later, force=True)
                 return
-        self._say(f"Installing TheClaudeHub {result.version} and restarting.", force=True)
+        self._say(f"Installing The Chat Place {result.version} and restarting.", force=True)
         self._list_timer.Stop()
         self._chat_timer.Stop()
         self._update_busy = True
@@ -2780,8 +2780,8 @@ class MainFrame(wx.Frame):
 
     @staticmethod
     def _install_later_text(result: CheckResult) -> str:
-        return (f"TheClaudeHub {result.version} is downloaded. It will be installed the "
-                "next time TheClaudeHub starts.")
+        return (f"The Chat Place {result.version} is downloaded. It will be installed the "
+                "next time The Chat Place starts.")
 
     def _restart_timers(self):
         self._list_timer.Start(LIST_REFRESH_MS)
@@ -2805,7 +2805,7 @@ class MainFrame(wx.Frame):
         if not self.updates.apply_and_restart():
             self._restart_timers()
             self._say("Couldn't install the update. It will be tried again the next time "
-                      "TheClaudeHub starts.", force=True)
+                      "The Chat Place starts.", force=True)
 
     # ------------------------------------------- slash commands and skills (#23)
 
@@ -2843,7 +2843,7 @@ class MainFrame(wx.Frame):
         reply box, ready to finish and send."""
         info = self._open
         if info is None or not info.is_own:
-            self._feedback("Commands and skills are for TheClaudeHub's own sessions: load one "
+            self._feedback("Commands and skills are for The Chat Place's own sessions: load one "
                            "first.")
             return
         commands = self._commands.get(_folder_key(info.cwd))
@@ -2891,7 +2891,7 @@ class MainFrame(wx.Frame):
         about the app, to a GitHub issue (see bugreport.py)."""
         listed = [s for s in self._snapshot.sessions if not s.archived]
         counts = {"desktop app": sum(1 for s in listed if not s.is_own),
-                  "TheClaudeHub": sum(1 for s in listed if s.is_own)}
+                  "Chat Place": sum(1 for s in listed if s.is_own)}
         facts = bugreport.environment(self.speech, counts,
                                       claude_version=self._claude_version or "checking")
         dialog = BugReportDialog(self, [f"{label}: {value}" for label, value in facts])
@@ -2989,7 +2989,7 @@ class MainFrame(wx.Frame):
             wx.MessageBox(f"Couldn't start the sign-in: {exc}", APP_NAME,
                           wx.OK | wx.ICON_ERROR, self)
             return
-        self._feedback("Signing in, in a new window. TheClaudeHub checks again when it closes.")
+        self._feedback("Signing in, in a new window. The Chat Place checks again when it closes.")
 
         def wait():
             process.wait()
@@ -3001,8 +3001,8 @@ class MainFrame(wx.Frame):
 
     def on_about(self, _event=None):
         wx.MessageBox(
-            f"{APP_NAME} version {__version__}\n\nA keyboard and screen reader friendly reader "
-            "for Claude Code sessions, on your existing Claude subscription.",
+            f"{APP_NAME} version {__version__}\n\nA home for your Claude Code chats: keyboard and "
+            "screen reader friendly, on your existing Claude subscription.",
             f"About {APP_NAME}", wx.OK | wx.ICON_INFORMATION, self)
 
     # ------------------------------------------------------------- keyboard
@@ -3074,7 +3074,7 @@ class MainFrame(wx.Frame):
         event.Skip()
 
     # F6 and Shift+F6 (#10), as in QuickMail: the window's parts in order,
-    # wrapping round. The reply stop is the reply box for TheClaudeHub's own
+    # wrapping round. The reply stop is the reply box for The Chat Place's own
     # sessions, the "About replying" note for desktop ones, and is skipped
     # when nothing is loaded.
     PANE_SESSIONS, PANE_MESSAGES, PANE_REPLY, PANE_STATUS = range(4)
@@ -3141,7 +3141,7 @@ class MainFrame(wx.Frame):
         if self._runners and event.CanVeto():
             count = len(self._runners)
             answer = wx.MessageBox(
-                f"Claude is working in {count} TheClaudeHub session"
+                f"Claude is working in {count} Chat Place session"
                 f"{'s' if count != 1 else ''}. Quit anyway? The running turn"
                 f"{'s' if count != 1 else ''} will be stopped"
                 f"{', and queued messages will not be sent.' if self._queued else '.'}",

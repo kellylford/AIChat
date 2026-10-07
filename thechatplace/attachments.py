@@ -117,7 +117,7 @@ def remove_old_pastes(days: int = 30, now: Optional[float] = None) -> int:
 
 
 def paste_folder() -> Path:
-    """Where pasted images are kept: TheClaudeHub's own data folder."""
+    """Where pasted images are kept: The Chat Place's own data folder."""
     return platform_paths.app_data_dir() / "pasted images"
 
 

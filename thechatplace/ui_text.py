@@ -30,7 +30,7 @@ SHORTCUTS = [
     ("Session list", [
         ("Enter", "Load that session and move to its messages"),
         ("Ctrl+O", "Open the selected session in the Claude desktop app"),
-        ("Ctrl+N", "New TheClaudeHub session"),
+        ("Ctrl+N", "New Chat Place session"),
         ("Ctrl+Shift+N", "Continue the selected desktop app session here, as a copy you can "
                          "reply to (the desktop app session isn't changed)"),
         ("F5", "Refresh the list now and put it back in order (it also refreshes itself "
@@ -38,12 +38,12 @@ SHORTCUTS = [
         ("Alt+V, O", "Sort Sessions: by status, newest first, oldest first, by title or "
                      "by folder; the choice is remembered"),
         ("Alt+V, H", "Show Sessions: all, needs you or working, needs you, desktop app, "
-                     "TheClaudeHub, Remote Control, archived, or one of your groups"),
+                     "The Chat Place, Remote Control, archived, or one of your groups"),
         ("Ctrl+E", "Export the selected (or loaded) session as Markdown, a web page or "
                    "plain text"),
         ("Ctrl+G", "Add the selected session to a group (or a new one); Session, Remove "
                    "from Group and Manage Groups are on the Session menu"),
-        ("Delete", "Forget the selected TheClaudeHub session (asks first)"),
+        ("Delete", "Forget the selected Chat Place session (asks first)"),
         ("Ctrl+F", "Show only sessions whose title, folder or what they need contains some "
                    "text; Escape in the list shows them all again"),
     ]),
@@ -62,7 +62,7 @@ SHORTCUTS = [
         ("Ctrl+O", "Open this session in the Claude desktop app"),
     ]),
     ("Reply box", [
-        ("Ctrl+Enter", "Send (TheClaudeHub sessions only); you stay in the reply box. "
+        ("Ctrl+Enter", "Send (Chat Place sessions only); you stay in the reply box. "
                        "During a turn it queues the message and sends it when the turn ends"),
         ("Ctrl+Period", "Stop the running turn; a queued message goes back in the reply box"),
         ("Ctrl+/", "Insert a slash command or one of your skills (type to search); it goes at "

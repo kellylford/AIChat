@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-import theclaudehub
-from theclaudehub import updater
-from theclaudehub.updater import (AVAILABLE, CURRENT, FAILED, NO_RELEASES, NOT_INSTALLED,
+import thechatplace
+from thechatplace import updater
+from thechatplace.updater import (AVAILABLE, CURRENT, FAILED, NO_RELEASES, NOT_INSTALLED,
                                   UpdateService, data_is_outside_install_dir,
                                   latest_published_version)
 
@@ -65,10 +65,10 @@ def test_update_available_is_not_downloaded_until_asked():
     svc = service(manager, urls=urls)
     result = svc.check()
     assert result.status == AVAILABLE and result.version == "0.2.0"
-    assert result.describe() == "TheClaudeHub 0.2.0 is available. You have 0.1.0."
+    assert result.describe() == "The Chat Place 0.2.0 is available. You have 0.1.0."
     # Velopack reads the feed from that one release, not the repo's newest 10.
-    assert urls[-1] == ("https://github.com/kellylford/TheWorkBench/releases/download/"
-                        "theclaudehub-v0.2.0/")
+    assert urls[-1] == ("https://github.com/kellylford/AIChat/releases/download/"
+                        "v0.2.0/")
     assert manager.downloaded == []            # nothing happens without a yes
     assert svc.apply_and_restart() is False   # can't apply what isn't downloaded
     assert svc.download() is True
@@ -80,17 +80,17 @@ def test_up_to_date_never_asks_velopack():
     manager = FakeManager(check_error="should not be called")
     result = service(manager, latest="0.1.0").check()
     assert result.status == CURRENT
-    assert result.describe() == "TheClaudeHub is up to date (version 0.1.0)."
+    assert result.describe() == "The Chat Place is up to date (version 0.1.0)."
 
 
 def test_no_releases_yet_is_said_plainly():
     result = service(FakeManager(None), latest=None).check()
     assert result.status == NO_RELEASES
-    assert result.describe().startswith("No TheClaudeHub release has been published yet.")
+    assert result.describe().startswith("No release of The Chat Place has been published yet.")
 
 
 def test_newer_release_whose_feed_offers_nothing_is_a_failure_not_up_to_date():
-    # The bug this design fixes: other apps' releases hid TheClaudeHub's feed
+    # The bug this design fixes: other apps' releases hid The Chat Place's feed
     # and Velopack said "nothing newer" while 0.2.0 was out.
     result = service(FakeManager(None), latest="0.2.0").check()
     assert result.status == FAILED
@@ -165,16 +165,16 @@ def test_download_failure_is_reported():
 def test_latest_published_version_filters_by_prefix():
     releases = [
         {"tag_name": "hyperv-manage-v0.9.2"},
-        {"tag_name": "theclaudehub-v0.1.0"},
-        {"tag_name": "theclaudehub-v0.10.0"},
-        {"tag_name": "theclaudehub-v0.2.0"},
-        {"tag_name": "theclaudehub-v9.0.0", "draft": True},
+        {"tag_name": "v0.1.0"},
+        {"tag_name": "v0.10.0"},
+        {"tag_name": "v0.2.0"},
+        {"tag_name": "v9.0.0", "draft": True},
     ]
     assert latest_published_version(lambda url: json.dumps(releases).encode()) == "0.10.0"
     only_others = [{"tag_name": "hyperv-manage-v0.9.2"}]
     assert latest_published_version(lambda url: json.dumps(only_others).encode()) is None
     assert latest_published_version(lambda url: b"{}") is None
-    odd = [None, "text", {"tag_name": "theclaudehub-v0.3.0"}]
+    odd = [None, "text", {"tag_name": "v0.3.0"}]
     assert latest_published_version(lambda url: json.dumps(odd).encode()) == "0.3.0"
 
 
@@ -186,17 +186,17 @@ def test_data_folder_is_outside_the_folder_velopack_replaces(tmp_path, monkeypat
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "Local"))
     monkeypatch.setattr(updater.platform_paths.sys, "platform", "win32")
     assert data_is_outside_install_dir()
-    assert not data_is_outside_install_dir(tmp_path / "Local" / "TheClaudeHub" / "data",
-                                           tmp_path / "Local" / "TheClaudeHub")
-    assert not data_is_outside_install_dir(tmp_path / "Local" / "TheClaudeHub",
-                                           tmp_path / "Local" / "TheClaudeHub")
+    assert not data_is_outside_install_dir(tmp_path / "Local" / "TheChatPlace" / "data",
+                                           tmp_path / "Local" / "TheChatPlace")
+    assert not data_is_outside_install_dir(tmp_path / "Local" / "TheChatPlace",
+                                           tmp_path / "Local" / "TheChatPlace")
 
 
 def test_installed_copy_checks_the_folder_it_really_runs_from(tmp_path, monkeypatch):
-    root = tmp_path / "Somewhere" / "TheClaudeHub"
+    root = tmp_path / "Somewhere" / "TheChatPlace"
     monkeypatch.setattr(sys, "frozen", True, raising=False)
-    monkeypatch.setattr(sys, "executable", str(root / "current" / "TheClaudeHub.exe"))
-    assert data_is_outside_install_dir(tmp_path / "Roaming" / "TheClaudeHub")
+    monkeypatch.setattr(sys, "executable", str(root / "current" / "TheChatPlace.exe"))
+    assert data_is_outside_install_dir(tmp_path / "Roaming" / "TheChatPlace")
     assert not data_is_outside_install_dir(root / "data")
 
 
@@ -214,24 +214,24 @@ def test_apply_is_refused_if_data_would_be_replaced(monkeypatch):
 
 
 def test_version_is_plain_semver_for_vpk():
-    assert re.fullmatch(r"\d+\.\d+\.\d+", theclaudehub.__version__)
+    assert re.fullmatch(r"\d+\.\d+\.\d+", thechatplace.__version__)
 
 
 def test_release_notes_exist_for_this_version():
     notes = Path(__file__).resolve().parent.parent / "release-notes" / \
-        f"v{theclaudehub.__version__}.md"
+        f"v{thechatplace.__version__}.md"
     assert notes.is_file(), f"write {notes.name} before tagging"
     text = notes.read_text(encoding="utf-8")
     for heading in ("## What's new", "## Downloads", "## Requirements"):
         assert heading in text
 
 
-@pytest.mark.parametrize("tag,ok", [("theclaudehub-v0.1.0", True), ("theclaudehub-v0.1.1", False),
-                                    ("v0.1.0", False)])
+@pytest.mark.parametrize("tag,ok", [("v0.1.0", True), ("v0.1.1", False),
+                                    ("0.1.0", False)])
 def test_tag_check_script(tag, ok):
     import subprocess
     script = Path(__file__).resolve().parent.parent / "tools" / "check_version.py"
-    version = theclaudehub.__version__
+    version = thechatplace.__version__
     tag = tag.replace("0.1.0", version) if ok else tag
     result = subprocess.run([sys.executable, str(script), tag], capture_output=True, text=True)
     assert (result.returncode == 0) is ok, result.stdout + result.stderr

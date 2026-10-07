@@ -2,11 +2,11 @@ import json
 
 import pytest
 
-from theclaudehub import announce
-from theclaudehub.sessions import IDLE, NEEDS_YOU
-from theclaudehub.speech import (ANNOUNCE_FULL, ANNOUNCE_SILENT, ANNOUNCE_SUMMARY,
+from thechatplace import announce
+from thechatplace.sessions import IDLE, NEEDS_YOU
+from thechatplace.speech import (ANNOUNCE_FULL, ANNOUNCE_SILENT, ANNOUNCE_SUMMARY,
                                  SpeechSettings, strip_for_speech)
-from theclaudehub.ui_text import shortcuts_text
+from thechatplace.ui_text import shortcuts_text
 
 
 def test_reply_levels():
@@ -192,12 +192,12 @@ def test_replies_lose_quote_markers_rules_and_unclosed_fences():
     ([("text", "```\ncode only\n```")], "full", "Code block omitted."),
 ])
 def test_activity_text(items, level, said):
-    from theclaudehub.announce import activity_text
+    from thechatplace.announce import activity_text
     assert activity_text(items, level) == said
 
 
 def test_activity_text_cuts_long_details():
-    from theclaudehub.announce import activity_text
+    from thechatplace.announce import activity_text
     said = activity_text([("tool", "Bash: " + "word " * 60)], "full")
     assert said.endswith("…") and len(said) < 140
 
@@ -210,10 +210,10 @@ def test_activity_text_cuts_long_details():
     ([("tool", "mcp__github__create_issue: Fix it")], "summary", "Using github create issue."),
 ])
 def test_activity_text_counts_and_names(items, level, said):
-    from theclaudehub.announce import activity_text
+    from thechatplace.announce import activity_text
     assert activity_text(items, level) == said
 def test_spoken_markdown_reads_a_whole_message():
-    from theclaudehub.announce import spoken_markdown
+    from thechatplace.announce import spoken_markdown
     assert spoken_markdown("## Summary\nThe build **passes**.\n\n- one\n- two\n\n```py\nx=1\n```\nDone") == (
         "Summary. The build passes. one. two. Code block omitted. Done.")
     assert spoken_markdown("") == "" and spoken_markdown("```\nonly code\n```") == "Code block omitted."

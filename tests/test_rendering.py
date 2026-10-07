@@ -1,8 +1,8 @@
 """Messages as formatted pages (#190): structure kept, nothing unsafe let in."""
 import pytest
 
-from theclaudehub.rendering import describe_code_block, markdown_to_html, message_page
-from theclaudehub.speech import SpeechSettings
+from thechatplace.rendering import describe_code_block, markdown_to_html, message_page
+from thechatplace.speech import SpeechSettings
 
 
 def test_headings_lists_and_tables_keep_their_structure():
@@ -56,8 +56,8 @@ def test_formatted_setting_round_trips(tmp_path):
 
 
 def test_shortcuts_page_has_a_heading_and_a_table_per_group():
-    from theclaudehub.rendering import html_page
-    from theclaudehub.ui_text import SHORTCUTS, shortcuts_html
+    from thechatplace.rendering import html_page
+    from thechatplace.ui_text import SHORTCUTS, shortcuts_html
     body = shortcuts_html()
     assert body.startswith("<h1>Keyboard shortcuts</h1>")
     assert body.count("<h2 ") == len(SHORTCUTS) == body.count("<table ")
@@ -73,7 +73,7 @@ def test_shortcuts_page_has_a_heading_and_a_table_per_group():
 
 
 def test_shortcuts_page_escapes_everything(monkeypatch):
-    from theclaudehub import ui_text
+    from thechatplace import ui_text
     monkeypatch.setattr(ui_text, "SHORTCUTS", [("A<b>", [("x&y", '"q" <i>')])])
     monkeypatch.setattr(ui_text, "LAYOUT", "<script>")
     body = ui_text.shortcuts_html()

@@ -41,7 +41,7 @@ class SignIn:
 def check(executable: Optional[str] = None, run=subprocess.run) -> SignIn:
     executable = executable or platform_paths.claude_executable()
     if not executable:
-        return SignIn(False, problem="Claude Code isn't installed, or TheClaudeHub can't find it")
+        return SignIn(False, problem="Claude Code isn't installed, or The Chat Place can't find it")
     try:
         # The environment turns get: an API key or cloud provider set for
         # other tools is removed there, so it mustn't count here either.
@@ -80,7 +80,7 @@ def describe(status: SignIn) -> str:
         how = "an Anthropic API key"
     else:
         how = "something other than your Claude account"
-    return (f"Claude Code is set up to use {how}, not a Claude subscription. TheClaudeHub "
+    return (f"Claude Code is set up to use {how}, not a Claude subscription. The Chat Place "
             "only runs turns on a subscription, so sign in with your Claude account.")
 
 

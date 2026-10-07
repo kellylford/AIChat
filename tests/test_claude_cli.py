@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from theclaudehub import claude_cli as cli
-from theclaudehub import platform_paths
-from theclaudehub.claude_cli import (ResumeRefused, StreamParser, TurnRunner,
+from thechatplace import claude_cli as cli
+from thechatplace import platform_paths
+from thechatplace.claude_cli import (ResumeRefused, StreamParser, TurnRunner,
                                      build_new_command, build_resume_command,
                                      check_resume_allowed, child_environment)
 
@@ -606,7 +606,7 @@ def test_allow_responses():
     bash = cli.PermissionRequest("r2", "Bash", {"command": "git push"}, suggestions=[
         {"type": "addRules", "behavior": "allow", "destination": "localSettings",
          "rules": [{"toolName": "Bash", "ruleContent": "git push:*"}]}])
-    # Always "session": TheClaudeHub never writes Claude Code's settings files.
+    # Always "session": The Chat Place never writes Claude Code's settings files.
     assert cli.allow_response(bash, for_session=True)["updatedPermissions"] == [
         {"type": "addRules", "rules": [{"toolName": "Bash", "ruleContent": "git push:*"}],
          "behavior": "allow", "destination": "session"}]
@@ -734,7 +734,7 @@ def test_fetch_commands_gives_nothing_for_a_missing_folder_or_no_answer(tmp_path
 
 
 def test_init_reports_the_model_in_use():
-    from theclaudehub.claude_cli import model_matches
+    from thechatplace.claude_cli import model_matches
     parser = StreamParser()
     events = parser.feed(ev(type="system", subtype="init", session_id="s1",
                             apiKeySource="none", model="claude-sonnet-5-5"))
@@ -754,7 +754,7 @@ def test_init_reports_the_model_in_use():
 
 
 def test_model_ids_as_words():
-    from theclaudehub.claude_cli import model_spoken
+    from thechatplace.claude_cli import model_spoken
     assert model_spoken("claude-sonnet-5-5") == "Sonnet 5.5"
     assert model_spoken("claude-haiku-4-5-20251001") == "Haiku 4.5"
     assert model_spoken("claude-opus-5-5[1m]") == "Opus 5.5"

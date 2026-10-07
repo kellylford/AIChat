@@ -1,6 +1,6 @@
 """What a turn changed in files (#18)."""
-from theclaudehub.changes import by_file, edit_from_tool, file_text, summary_text
-from theclaudehub.transcript import TranscriptParser, parse_lines
+from thechatplace.changes import by_file, edit_from_tool, file_text, summary_text
+from thechatplace.transcript import TranscriptParser, parse_lines
 
 from records import assistant_block, lines, text_block, tool_result, tool_use_block, user_text
 

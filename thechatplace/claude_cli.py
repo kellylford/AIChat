@@ -1,4 +1,4 @@
-"""Running turns of TheClaudeHub's own sessions through the ``claude`` command.
+"""Running turns of The Chat Place's own sessions through the ``claude`` command.
 
 Why the command line, and how it stays on the subscription
 ---------------------------------------------------------
@@ -9,7 +9,7 @@ stop unless extra usage is on. usage.py reports the limits a turn sees.) The
 things that would move a turn off the subscription are all ruled out here:
 
 * **Never ``--bare``.** Bare mode skips the OAuth login and requires an API key.
-* **A host session's variables don't reach the child.** If TheClaudeHub is
+* **A host session's variables don't reach the child.** If The Chat Place is
   started from inside a Claude Code session (a terminal tab in the desktop app,
   say), it inherits variables that session injected: ``ANTHROPIC_BASE_URL``
   pointing at the desktop app's local proxy, ``CLAUDE_CODE_SDK_HAS_HOST_AUTH_REFRESH``
@@ -21,7 +21,7 @@ things that would move a turn off the subscription are all ruled out here:
   endpoint, Bedrock/Vertex/Foundry). Everything else is kept, including
   settings the user chose such as ``CLAUDE_CODE_GIT_BASH_PATH``,
   ``CLAUDE_CONFIG_DIR``, proxies and timeouts.
-* **Permission prompts come to TheClaudeHub** (issues #187, #188), over the
+* **Permission prompts come to The Chat Place** (issues #187, #188), over the
   same pipes, with the control protocol the Agent SDK uses:
   ``--input-format stream-json --permission-prompts host
   --permission-prompt-tool stdio``. Anything that would ask arrives as a
@@ -39,7 +39,7 @@ things that would move a turn off the subscription are all ruled out here:
 Never into a desktop session
 ----------------------------
 Two clients resuming one session interleave their turns into one transcript.
-So ``--resume`` is only ever built for a session in TheClaudeHub's own store,
+So ``--resume`` is only ever built for a session in The Chat Place's own store,
 and is refused for any id the desktop app knows about or any ``local_`` id
 (``ResumeRefused``). That check lives in ``build_resume_command`` so no caller
 can skip it.
@@ -116,7 +116,7 @@ SESSION_INJECTED_PREFIXES = ("CLAUDE_CODE_SDK_", "CLAUDE_CODE_HOST_",
 
 
 class ResumeRefused(ValueError):
-    """--resume was asked for a session TheClaudeHub does not own."""
+    """--resume was asked for a session The Chat Place does not own."""
 
 
 def child_environment(base: Optional[Dict[str, str]] = None) -> Dict[str, str]:
@@ -136,8 +136,8 @@ def normalize_permission_mode(mode: str) -> str:
 #: ``--model`` at all, leaving it to Claude Code's own setting.
 #:
 #: Fable is left out on purpose. Claude Code's docs: on some plans Fable
-#: bills to usage credits, and in ``-p`` mode (every TheClaudeHub turn) it
-#: does so without asking. TheClaudeHub must never cost extra, and the
+#: bills to usage credits, and in ``-p`` mode (every turn The Chat Place runs) it
+#: does so without asking. The Chat Place must never cost extra, and the
 #: ``apiKeySource`` check can't catch this (it's still the subscription
 #: login). Add it only once Kelly's plan is known to include it.
 MODELS = [
@@ -246,26 +246,26 @@ def build_new_command(executable: str, session_id: str, title: str,
 
 def check_resume_allowed(session_id: str, own_ids: Collection[str],
                          desktop_ids: Collection[str]) -> None:
-    """Raise ResumeRefused unless ``session_id`` is one of TheClaudeHub's own."""
+    """Raise ResumeRefused unless ``session_id`` is one of The Chat Place's own."""
     if not session_id or not platform_paths.is_safe_id(session_id):
         raise ResumeRefused("That is not a valid session id.")
     if session_id.startswith("local_"):
         raise ResumeRefused(
             "That is a Claude desktop app session id. Desktop sessions are read-only "
-            "in TheClaudeHub; reply to them in Claude.")
+            "in The Chat Place; reply to them in Claude.")
     if session_id in desktop_ids:
         raise ResumeRefused(
             "That session belongs to the Claude desktop app. Sending into it from here "
             "could run two turns at once and tangle its transcript; reply in Claude.")
     if session_id not in own_ids:
-        raise ResumeRefused("TheClaudeHub only sends messages to sessions it started.")
+        raise ResumeRefused("The Chat Place only sends messages to sessions it started.")
 
 
 def build_fork_command(executable: str, source_id: str, new_id: str, title: str,
                        permission_mode: str, model: str = "",
                        taken_ids: Collection[str] = ()) -> List[str]:
     """Command for the first turn of a copy of another session (#189), such
-    as a desktop app session, to carry on in TheClaudeHub.
+    as a desktop app session, to carry on in The Chat Place.
 
     ``--resume <source> --fork-session --session-id <new>``: Claude Code reads
     the source's history and writes only to the new session. Checked with
@@ -290,7 +290,7 @@ def build_resume_command(executable: str, session_id: str, permission_mode: str,
                          own_ids: Collection[str],
                          desktop_ids: Collection[str], model: str = "",
                          allowed_tools: Collection[str] = ()) -> List[str]:
-    """Command for a later turn. Refuses anything but TheClaudeHub's own sessions."""
+    """Command for a later turn. Refuses anything but The Chat Place's own sessions."""
     check_resume_allowed(session_id, own_ids, desktop_ids)
     return [executable, *_common_flags(permission_mode, model, allowed_tools),
             "--resume", session_id]
@@ -301,7 +301,7 @@ def build_resume_command(executable: str, session_id: str, permission_mode: str,
 # ---------------------------------------------------------------------------
 
 
-INIT_REQUEST_ID = "theclaudehub-init"
+INIT_REQUEST_ID = "thechatplace-init"
 
 
 def stdin_lines(prompt: str, images: Optional[List[dict]] = None) -> bytes:
@@ -362,7 +362,7 @@ def describe_denial(denial: dict) -> str:
 
 @dataclass
 class PermissionRequest:
-    """Claude Code asking TheClaudeHub before a tool runs (a ``can_use_tool``
+    """Claude Code asking The Chat Place before a tool runs (a ``can_use_tool``
     control request). Claude's questions and plans come this way too."""
 
     request_id: str
@@ -537,7 +537,7 @@ class StreamParser:
         #: Slash commands and skills, from the answer to ``initialize``:
         #: dicts with ``name``, ``description`` and ``argumentHint``.
         self.commands: List[dict] = []
-        #: Control requests TheClaudeHub can't answer (not ``can_use_tool``);
+        #: Control requests The Chat Place can't answer (not ``can_use_tool``);
         #: the runner refuses them so the CLI doesn't wait.
         self.unsupported_requests: List[str] = []
         #: The model's context window, from the result's modelUsage (#19).
@@ -666,7 +666,7 @@ def api_key_problem(source: Optional[str]) -> Optional[str]:
     if source is None or source in ("", "none"):
         return None
     return (f"Claude would have used an API key ({source}) instead of your subscription "
-            "login, so TheClaudeHub stopped the turn before anything was sent. Remove "
+            "login, so The Chat Place stopped the turn before anything was sent. Remove "
             "that key from the environment or settings that set it, then try again.")
 
 
@@ -913,14 +913,14 @@ class TurnRunner:
 
     def _refuse_unsupported(self) -> None:
         """Control requests other than permission checks (hooks, MCP
-        messages): TheClaudeHub registers none, so say so at once rather than
+        messages): The Chat Place registers none, so say so at once rather than
         leave the CLI waiting."""
         while self.parser.unsupported_requests:
             request_id = self.parser.unsupported_requests.pop(0)
             with self._lock:
                 self._write_line({"type": "control_response", "response": {
                     "subtype": "error", "request_id": request_id,
-                    "error": "TheClaudeHub doesn't support this request."}})
+                    "error": "The Chat Place doesn't support this request."}})
 
 
 class _Cancelled(Exception):
