@@ -2934,12 +2934,14 @@ class MainFrame(wx.Frame):
         report = bugreport.BugReport(summary, happened, expected, steps, facts)
         copied = self._copy_text(f"{summary}\n\n{bugreport.report_text(report)}")
         if action == "copy":
-            self._feedback("Report copied." if copied else "Couldn't copy the report.")
+            self._feedback("Report copied. Email it to support@theideaplace.net." if copied
+                           else "Couldn't copy the report.")
             return
         try:
             platform_paths.open_url(bugreport.new_issue_url(report))
         except OSError as exc:
-            wx.MessageBox(f"Couldn't open the browser: {exc}. The report is on your clipboard.",
+            wx.MessageBox(f"Couldn't open the browser: {exc}. The report is on your clipboard: "
+                          "email it to support@theideaplace.net.",
                           APP_NAME, wx.OK | wx.ICON_WARNING, self)
             return
         self._feedback("Opened GitHub's new issue page with your report filled in"
@@ -3031,7 +3033,8 @@ class MainFrame(wx.Frame):
     def on_about(self, _event=None):
         wx.MessageBox(
             f"{APP_NAME} version {__version__}\n\nA home for your Claude Code chats: keyboard and "
-            "screen reader friendly, on your existing Claude subscription.",
+            "screen reader friendly, on your existing Claude subscription.\n\n"
+            "Questions and bug reports: support@theideaplace.net",
             f"About {APP_NAME}", wx.OK | wx.ICON_INFORMATION, self)
 
     # ------------------------------------------------------------- keyboard

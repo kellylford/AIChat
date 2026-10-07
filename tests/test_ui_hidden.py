@@ -2271,7 +2271,7 @@ def test_copy_report_only_copies(frame, env, monkeypatch):
     _fake_bug_dialog(monkeypatch, "copy", ("Sort resets", "It went back.", "", ""))
     frame.on_report_bug()
     assert env["opened"] == []
-    assert env["feedback"][-1] == "Report copied."
+    assert env["feedback"][-1] == "Report copied. Email it to support@theideaplace.net."
     assert env["copied"][-1].startswith("Sort resets\n\n### What happened\nIt went back.")
 
 
