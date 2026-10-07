@@ -2446,3 +2446,33 @@ def test_attachments_are_for_own_sessions_and_follow_the_session(frame, env):
     select(frame, "Hub probe")
     frame.on_open_session()
     assert frame.attach_list.IsShown()  # still waiting for this session's next message
+
+
+def test_a_turn_that_never_starts_gives_back_your_words_and_attachments(frame, env, fake_runner):
+    image, note = _files(env)
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame._add_attachments("own-1", [str(image), str(note)])
+    frame.reply_text.SetValue("Why does this fail?")
+    frame.on_send()
+    assert frame._attachments == {}
+    runner = fake_runner.instances[-1]
+    runner.session_started = False
+    frame._on_turn_event({"id": "own-1"}, "Hub probe",
+                         TurnEvent("failed", text="Not signed in.", is_error=True))
+    assert frame.reply_text.GetValue() == "Why does this fail?"  # as typed, no Attached: line
+    assert frame._attachments["own-1"] == [str(image), str(note)]  # the image too
+    assert frame.attach_list.IsShown()
+
+
+def test_shift_insert_pastes_through_the_same_path(frame, monkeypatch):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    pasted = []
+    monkeypatch.setattr(frame.reply_text, "Paste", lambda: pasted.append(True))
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.reply_text))
+    event = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
+    event.SetKeyCode(wx.WXK_INSERT)
+    event.SetShiftDown(True)
+    frame._on_char_hook(event)
+    assert pasted == [True]

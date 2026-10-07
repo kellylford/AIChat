@@ -155,6 +155,7 @@ class MainFrame(wx.Frame):
                          wx.OK | wx.ICON_WARNING, self)
         self.refresh_sessions()
         self._check_claude_version()
+        self._pool.submit(attachments.remove_old_pastes)  # pasted pictures over 30 days old
         self.session_list.SetFocus()
         if check_updates_at_start:
             # A few seconds in, so the list is read first.
@@ -663,6 +664,7 @@ class MainFrame(wx.Frame):
             return
         try:
             self.groups.forget(info.key)
+            self._attachments.pop(info.cli_session_id, None)
         except OSError:
             pass  # a gone session in a group is harmless; it isn't listed
         if self._open is not None and self._open.key == info.key:
@@ -1476,13 +1478,13 @@ class MainFrame(wx.Frame):
         if not (0 <= index < len(paths)):
             return
         gone = paths.pop(index)
+        if not paths:
+            self.reply_text.SetFocus()  # before the list hides, never after
         self._show_attachments()
         self._feedback(f"Removed {os.path.basename(gone)}. {attachments.describe(paths)}.")
         if paths:
             self.attach_list.SetSelection(min(index, len(paths) - 1))
             self.attach_list.SetFocus()
-        else:
-            self.reply_text.SetFocus()
 
     def _on_reply_paste(self, event):
         """Ctrl+V with a picture on the clipboard (a screenshot from
@@ -1604,7 +1606,8 @@ class MainFrame(wx.Frame):
             self.reply_text.SetFocus()
             return
         prompt, images = attachments.build(message, attached)
-        problem = self._send_now(session_id, prompt, images=images, spoken=message)
+        problem = self._send_now(session_id, prompt, images=images, spoken=message,
+                                 attached=attached)
         if problem:
             wx.MessageBox(problem, APP_NAME, wx.OK | wx.ICON_WARNING, self)
             return
@@ -1615,8 +1618,8 @@ class MainFrame(wx.Frame):
         self.reply_text.SetFocus()
 
     def _send_now(self, session_id: str, message: str, queued: bool = False,
-                  images: Optional[List[dict]] = None,
-                  spoken: Optional[str] = None) -> Optional[str]:
+                  images: Optional[List[dict]] = None, spoken: Optional[str] = None,
+                  attached: Optional[List[str]] = None) -> Optional[str]:
         """Start a turn with ``message``. Returns why it can't, or None once
         sent; the caller decides how to say it (a dialog when Kelly pressed
         Send, speech for a queued message going out on its own)."""
@@ -1658,7 +1661,7 @@ class MainFrame(wx.Frame):
         except (ResumeRefused, ValueError) as exc:
             return str(exc)
         self._start_turn(own.cli_session_id, command, own.cwd, message, own.title,
-                         queued=queued, images=images, spoken=spoken)
+                         queued=queued, images=images, spoken=spoken, attached=attached)
         return None
 
     def _session_exists(self, own: OwnSession) -> bool:
@@ -1668,7 +1671,7 @@ class MainFrame(wx.Frame):
 
     def _start_turn(self, session_id: str, command, cwd: str, prompt: str, title: str,
                     queued: bool = False, images: Optional[List[dict]] = None,
-                    spoken: Optional[str] = None):
+                    spoken: Optional[str] = None, attached: Optional[List[str]] = None):
         """``spoken`` is what's read back (what you typed, without the
         attachment lines added to ``prompt``)."""
         holder = {"id": session_id}
@@ -1677,6 +1680,9 @@ class MainFrame(wx.Frame):
             wx.CallAfter(self._on_turn_event, holder, title, event)
 
         runner = TurnRunner(command, cwd, prompt, on_event, images=images)
+        # What you typed and attached, to give back if the turn never starts.
+        runner.typed = spoken if spoken is not None else prompt
+        runner.attached = list(attached or [])
         self._runners[session_id] = runner
         self._denials[session_id] = []
         runner.start()
@@ -1773,7 +1779,17 @@ class MainFrame(wx.Frame):
             unsent = []
             if (event.kind == "failed" and runner is not None
                     and not runner.session_started and not runner.cancelled):
-                unsent.append(runner.prompt)
+                typed = getattr(runner, "typed", runner.prompt)
+                if typed:
+                    unsent.append(typed)
+                attached_back = getattr(runner, "attached", [])
+                if attached_back:
+                    # Images lived only in the turn: put them all back.
+                    waiting_now = self._attachments.get(session_id, [])
+                    self._attachments[session_id] = attached_back + [
+                        p for p in waiting_now if p not in attached_back]
+                    if is_open:
+                        self._show_attachments()
             queued = self._queued.pop(session_id, None)
             if event.kind == "failed" or event.is_error:
                 state, detail = NEEDS_YOU, announce.status_text(event.text or "error", 120)
@@ -2336,6 +2352,12 @@ class MainFrame(wx.Frame):
             if not ctrl and focus is self.chat_list:
                 self.on_read_message()
                 return
+        if (key == wx.WXK_INSERT and event.ShiftDown() and not ctrl
+                and focus is self.reply_text):
+            # Shift+Insert pastes like Ctrl+V, so a picture is attached
+            # rather than dropped into the text.
+            self.reply_text.Paste()
+            return
         if key == wx.WXK_F6 and not ctrl and not event.AltDown():
             self.cycle_focus(forward=not event.ShiftDown())
             return

@@ -26,12 +26,38 @@ from . import platform_paths
 
 IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
                ".gif": "image/gif", ".webp": "image/webp"}
-#: The API's limit for one image, before base64.
+#: The API's limit for one image, which applies to the base64 data: a file
+#: up to about 3.75 MB once encoded.
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
+#: The first bytes of each image type the API takes.
+_SIGNATURES = [(b"\x89PNG\r\n\x1a\n", "image/png"), (b"\xff\xd8\xff", "image/jpeg"),
+               (b"GIF87a", "image/gif"), (b"GIF89a", "image/gif")]
 
 
 def media_type(path: str) -> Optional[str]:
+    """The image type by extension (for choosing which files to look at)."""
     return IMAGE_TYPES.get(os.path.splitext(path)[1].lower())
+
+
+def sniffed_type(path: str) -> Optional[str]:
+    """The image type from the file's first bytes, whatever its extension
+    says; None if it isn't an image the API takes."""
+    try:
+        with open(path, "rb") as handle:
+            head = handle.read(16)
+    except OSError:
+        return None
+    for signature, kind in _SIGNATURES:
+        if head.startswith(signature):
+            return kind
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
+def fits_inline(size: int) -> bool:
+    """Whether a file this size is within the limit once base64-encoded."""
+    return 4 * ((size + 2) // 3) <= MAX_IMAGE_BYTES
 
 
 def mention(path: str) -> str:
@@ -57,8 +83,8 @@ def build(text: str, paths: List[str], images_inline: bool = True) -> Tuple[str,
         if not os.path.isfile(path):
             missing.append(os.path.basename(path))
             continue
-        kind = media_type(path)
-        if images_inline and kind and os.path.getsize(path) <= MAX_IMAGE_BYTES:
+        kind = sniffed_type(path) if media_type(path) else None
+        if images_inline and kind and fits_inline(os.path.getsize(path)):
             with open(path, "rb") as handle:
                 data = base64.b64encode(handle.read()).decode("ascii")
             blocks.append({"type": "image",
@@ -71,6 +97,23 @@ def build(text: str, paths: List[str], images_inline: bool = True) -> Tuple[str,
     if missing:
         lines += ["", "(Couldn't attach, no longer there: " + ", ".join(missing) + ")"]
     return "\n".join(lines).strip(), blocks
+
+
+def remove_old_pastes(days: int = 30, now: Optional[float] = None) -> int:
+    """Delete pasted pictures older than ``days``; how many went."""
+    cutoff = (now if now is not None else time.time()) - days * 86400
+    removed = 0
+    try:
+        for path in paste_folder().glob("Pasted image *.png"):
+            try:
+                if path.stat().st_mtime < cutoff:
+                    path.unlink()
+                    removed += 1
+            except OSError:
+                pass
+    except OSError:
+        pass
+    return removed
 
 
 def paste_folder() -> Path:

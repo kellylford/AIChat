@@ -58,3 +58,35 @@ def test_the_message_carries_image_blocks_after_its_text():
     message = json.loads(lines[1])["message"]
     assert message["content"] == [{"type": "text", "text": "Describe"}, block]
     assert json.loads(stdin_lines("plain").decode().splitlines()[1])["message"]["content"] == "plain"
+
+
+def test_image_type_comes_from_the_file_not_its_name(tmp_path):
+    jpeg_named_png = tmp_path / "photo.png"
+    jpeg_named_png.write_bytes(b"\xff\xd8\xff\xe0" + b"0" * 20)
+    text_named_png = tmp_path / "not really.png"
+    text_named_png.write_text("hello", encoding="utf-8")
+    text, blocks = attachments.build("", [str(jpeg_named_png), str(text_named_png)])
+    assert [b["source"]["media_type"] for b in blocks] == ["image/jpeg"]
+    assert text == f'Attached: @"{text_named_png}"'  # not an image: Claude Code reads it
+
+
+def test_the_limit_counts_the_encoded_size():
+    assert attachments.fits_inline(3 * 1024 * 1024)
+    assert not attachments.fits_inline(4 * 1024 * 1024)  # under 5 MB raw, over once encoded
+    assert attachments.fits_inline(attachments.MAX_IMAGE_BYTES * 3 // 4)
+
+
+def test_old_pasted_pictures_are_removed(tmp_path, monkeypatch):
+    import os
+    monkeypatch.setattr(platform_paths, "app_data_dir", lambda: tmp_path)
+    folder = attachments.paste_folder()
+    folder.mkdir(parents=True)
+    old = folder / "Pasted image old.png"
+    new = folder / "Pasted image new.png"
+    keep = folder / "mine.png"  # not ours by name: left alone
+    for path in (old, new, keep):
+        path.write_bytes(PNG)
+    os.utime(old, (1, 1))
+    os.utime(keep, (1, 1))
+    assert attachments.remove_old_pastes(days=30) == 1
+    assert not old.exists() and new.exists() and keep.exists()
