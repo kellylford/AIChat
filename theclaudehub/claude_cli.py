@@ -165,10 +165,24 @@ def model_matches(chosen: str, actual: str) -> bool:
     when nothing was chosen, or Claude Code didn't say."""
     if not chosen or not actual:
         return True
-    chosen, actual = chosen.lower(), actual.lower()
+    chosen = chosen.lower()
+    actual = re.sub(r"\[[^\]]*\]$", "", actual.lower())  # "[1m]": the same model
     if chosen in MODEL_LABELS:
         return chosen in actual
     return actual == chosen or actual.startswith(chosen + "-")
+
+
+_MODEL_ID = re.compile(r"claude-([a-z]+)-(\d{1,2}(?:-\d{1,2})*)(?:-\d{8})?(?:\[[^\]]*\])?")
+
+
+def model_spoken(model_id: str) -> str:
+    """A model id as words: "claude-sonnet-5-5" is "Sonnet 5.5",
+    "claude-haiku-4-5-20251001" "Haiku 4.5". Anything else as it is."""
+    match = _MODEL_ID.fullmatch((model_id or "").lower())
+    if not match:
+        return model_id
+    family, version = match.groups()
+    return f"{family.capitalize()} {version.replace('-', '.')}"
 
 
 def model_label(model: str) -> str:

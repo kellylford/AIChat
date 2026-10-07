@@ -55,7 +55,8 @@ from ..claude_cli import (PERMISSION_MODES, PermissionRequest, ResumeRefused, Tu
                           TurnRunner, allow_response, answer_questions_response,
                           build_fork_command, build_new_command, build_resume_command,
                           deny_response, fetch_commands, usable_commands,
-                          describe_elapsed, model_label, model_matches, new_session_id)
+                          describe_elapsed, model_label, model_matches, model_spoken,
+                          new_session_id)
 from ..hub import Snapshot, collect, finished_turns, last_reply_from_tail
 from ..own_store import OwnSession, OwnSessionStore
 from ..groups import GroupStore
@@ -1505,13 +1506,15 @@ class MainFrame(wx.Frame):
         key = ("model", session_id, actual)
         if key in self._warned:
             return
+        fable = "fable" in actual.lower()
+        credits = (" On some plans, Fable is billed to usage credits. Choose another model "
+                   "in New Session to avoid this.") if fable else ""
+        spoken = model_spoken(actual)
         if own.model and not model_matches(own.model, actual):
-            text = (f"{title} is running on {actual}, not {model_label(own.model)}: Claude "
-                    "Code didn't use the model this session chose.")
-        elif not own.model and "fable" in actual.lower():
-            text = (f"{title} is running on {actual}, Claude Code's default. On some plans "
-                    "Fable is billed to usage credits; to be sure, start sessions with a "
-                    "model chosen in New Session.")
+            text = (f"{title} is using {spoken} instead of {model_label(own.model)}, the "
+                    f"model this session chose.{credits}")
+        elif not own.model and fable:
+            text = f"{title} is using {spoken}, Claude Code's default model.{credits}"
         else:
             return
         self._warned.add(key)
@@ -1972,7 +1975,6 @@ class MainFrame(wx.Frame):
             return
         session_id = holder["id"]
         if event.kind == "started":
-            self._check_model(session_id, title, (event.data or {}).get("model", ""))
             reported = event.session_id
             if reported and reported != session_id and session_id in self._runners:
                 # Claude chose a different id than the one we asked for.
@@ -1995,6 +1997,7 @@ class MainFrame(wx.Frame):
                     self._chat_loaded = False
                 holder["id"] = reported
                 session_id = reported
+            self._check_model(session_id, title, (event.data or {}).get("model", ""))
             own = self.store.get(session_id)
             if own is not None and not own.started:
                 self._store_write(self.store.update, session_id, started=True)
