@@ -59,6 +59,12 @@ SIGN="${TCP_SIGN_CODE:-auto}"
 
 fail() { echo ""; echo "BUILD FAILED: $*"; exit 1; }
 
+# CI names its throwaway keychain whether or not this run signs, but only makes
+# it when it does; vpk refuses a --keychain that doesn't exist.
+if [ -n "${TCP_KEYCHAIN:-}" ] && [ ! -f "$TCP_KEYCHAIN" ]; then
+    unset TCP_KEYCHAIN
+fi
+
 # The built app imports everything and checks its data files, without opening
 # a window. Run at each stage: the hardened runtime can refuse what ran fine
 # ad-hoc signed, and vpk changes the bundle.
