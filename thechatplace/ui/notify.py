@@ -1,4 +1,9 @@
-"""Windows notifications (#20), for when The Chat Place isn't the window you're in.
+"""Notifications (#20), for when The Chat Place isn't the window you're in.
+
+On a Mac each one is a macOS notification (wx's NotificationMessage, which
+macOS shows under The Chat Place's name, or Python's from source) that
+carries its own session: choosing any of them opens that session. macOS asks
+once whether the app may send them. The rest of this describes Windows.
 
 One notification-area icon, The Chat Place's own, created with the first
 notification and removed when the app closes. Windows shows its balloons as
@@ -14,7 +19,8 @@ click to the wrong notification.
 """
 from __future__ import annotations
 
-from typing import Callable, Optional
+import sys
+from typing import Callable, List, Optional
 
 import wx
 import wx.adv
@@ -22,6 +28,14 @@ import wx.adv
 #: Windows' own limits for a balloon's title and text.
 TITLE_LIMIT = 63
 TEXT_LIMIT = 255
+#: How many Mac notifications are kept, so choosing an older one still works.
+MAC_KEPT = 20
+
+#: What Settings calls them, and its label (N is the access key either way).
+SETTING_NAME = "Notifications" if sys.platform == "darwin" else "Windows notifications"
+SETTING_LABEL = "&Notifications:" if sys.platform == "darwin" else "Windows &notifications:"
+
+_CLICK = wx.PyEventBinder(wx.adv.wxEVT_NOTIFICATION_MESSAGE_CLICK)
 
 
 def _fit(text: str, limit: int) -> str:
@@ -31,14 +45,19 @@ def _fit(text: str, limit: int) -> str:
 
 class Notifier:
     def __init__(self, on_click: Callable[[Optional[str]], None], tooltip: str,
-                 factory=None):
+                 factory=None, message_factory=None, mac: Optional[bool] = None):
         self._on_click = on_click
         self._tooltip = tooltip
         self._factory = factory or wx.adv.TaskBarIcon
         self._icon = None
         self._key: Optional[str] = None  # the latest notification's session
+        self._mac = sys.platform == "darwin" if mac is None else mac
+        self._message_factory = message_factory or wx.adv.NotificationMessage
+        self._messages: List = []  # the Mac notifications shown, newest last
 
     def show(self, title: str, message: str, key: str) -> bool:
+        if self._mac:
+            return self._show_mac(title, message, key)
         try:
             icon = self._ensure_icon()
             shown = bool(icon.ShowBalloon(_fit(title, TITLE_LIMIT),
@@ -50,9 +69,30 @@ class Notifier:
             self._key = key
         return shown
 
+    def _show_mac(self, title: str, message: str, key: str) -> bool:
+        try:
+            note = self._message_factory(_fit(title, TITLE_LIMIT),
+                                         _fit(message or title, TEXT_LIMIT))
+            note.Bind(_CLICK, lambda event, key=key: self._on_click(key))
+            shown = bool(note.Show(wx.adv.NotificationMessage.Timeout_Auto))
+        except Exception:  # noqa: BLE001 - a notification must never break the app
+            return False
+        if shown:
+            # Kept, or the object (and its click) goes when Python collects it.
+            self._messages = (self._messages + [note])[-MAC_KEPT:]
+        return shown
+
     def close(self):
         """Remove the icon, and with it our notifications: the app is
-        closing, and an icon left behind would keep it running."""
+        closing, and an icon left behind would keep it running. On a Mac,
+        withdraw ours from Notification Center, where choosing one would
+        start the app again with nothing to show."""
+        messages, self._messages = self._messages, []
+        for note in messages:
+            try:
+                note.Close()
+            except Exception:  # noqa: BLE001
+                pass
         icon, self._icon, self._key = self._icon, None, None
         if icon is None:
             return

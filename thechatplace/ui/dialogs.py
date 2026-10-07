@@ -12,6 +12,7 @@ from ..speech import (ANNOUNCE_LABELS, ANNOUNCE_LEVELS, NOTIFY_LABELS, NOTIFY_LE
                       SpeechSettings)
 from ..ui_text import shortcuts_text
 from .a11y import set_accessible_name
+from .notify import SETTING_LABEL as NOTIFY_SETTING_LABEL, SETTING_NAME as NOTIFY_SETTING_NAME
 
 
 class ShortcutsDialog(wx.Dialog):
@@ -234,10 +235,10 @@ class SettingsDialog(wx.Dialog):
         outer.Add(self.rate_note, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 
         notify_row = wx.BoxSizer(wx.HORIZONTAL)
-        notify_row.Add(wx.StaticText(self, label="Windows &notifications:"), 0,
+        notify_row.Add(wx.StaticText(self, label=NOTIFY_SETTING_LABEL), 0,
                        wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
         self.notify_choice = wx.Choice(self, choices=[NOTIFY_LABELS[n] for n in NOTIFY_LEVELS])
-        set_accessible_name(self.notify_choice, "Windows notifications, while The Chat Place "
+        set_accessible_name(self.notify_choice, f"{NOTIFY_SETTING_NAME}, while The Chat Place "
                                                 "isn't the active window")
         self.notify_choice.SetSelection(NOTIFY_LEVELS.index(speech.notifications)
                                         if speech.notifications in NOTIFY_LEVELS else 0)

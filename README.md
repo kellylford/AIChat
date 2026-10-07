@@ -198,15 +198,20 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   Markdown is read as words: a code block is "Code block omitted", and headings and list items
   are read as separate sentences. Turn it off in Settings with "Read your own messages back when
   they're sent" (Alt+M), and you hear just "Sent. Hub probe is working."
-- **Windows notifications** while you're in another window: when one of The Chat Place's own
+- **Notifications** while you're in another window: when one of The Chat Place's own
   sessions finishes a turn, fails or needs you (a permission or a question), when a desktop app
   session starts needing you, and when the loaded session finishes. Choosing one brings
-  The Chat Place forward with that session loaded. Settings, Windows notifications chooses every
-  finished turn of its own sessions (the default), only when a session needs you, or off. They're
-  ordinary Windows notifications from The Chat Place's icon in the notification area: read by your
-  screen reader, and quiet under Do Not Disturb. Choosing the icon itself brings The Chat Place
-  forward. While you're in The Chat Place (or one of its dialogs), the announcement is enough and
-  none are shown.
+  The Chat Place forward with that session loaded. Settings, Windows notifications (on a Mac,
+  Notifications) chooses every finished turn of its own sessions (the default), only when a
+  session needs you, or off. While you're in The Chat Place (or one of its dialogs), the
+  announcement is enough and none are shown.
+  - On Windows they're ordinary Windows notifications from The Chat Place's icon in the
+    notification area: read by your screen reader, and quiet under Do Not Disturb. Choosing the
+    icon itself brings The Chat Place forward.
+  - On a Mac they're macOS notifications, in Notification Center and under Focus like any other.
+    macOS asks once whether The Chat Place may send them (System Settings, Notifications changes
+    that). Each one remembers its own session, so choosing an older one still opens the right
+    session.
 - **Changed Files** (Ctrl+Shift+D, View menu) lists the files Claude changed since your latest
   message, or in the whole session, each with its line counts ("main_frame.py, 40 lines added, 12
   removed, in thechatplace\ui"). Enter on a file reads its changes in a text box, a line at a

@@ -14,7 +14,9 @@ Results: `dist/` (the app) and `releases/` (Mac: `TheChatPlace-macos-arm64.dmg` 
 update feed; Windows: Setup, the portable zip and the `windows` update feed).
 
 `MacBuilds/` also holds the Mac build's parts: `sign.sh` (inside-out Developer ID signing),
-`notarize.sh`, `create_dmg.sh` and `TheChatPlace.entitlements`.
+`notarize.sh`, `create_dmg.sh` and `TheChatPlace.entitlements`. To make the disk image again from
+the last build without rebuilding, double-click `create_dmg.command`: it uses the app in
+`releases/TheChatPlace-osx-Portable.zip` and signs the image if that app is signed.
 
 ## Releasing
 
