@@ -3,7 +3,7 @@
 # Notarize and staple a signed .dmg (from Image Description Toolkit's
 # notarize_macos.sh)
 # ============================================================================
-#   bash macos/notarize.sh releases/TheChatPlace-macos-arm64.dmg
+#   bash BuildAndRelease/MacBuilds/notarize.sh releases/TheChatPlace-macos-arm64.dmg
 #
 # Credentials, either:
 #   NOTARY_KEY_PATH + NOTARY_KEY_ID + NOTARY_ISSUER_ID   App Store Connect API key (CI)
@@ -20,7 +20,7 @@ if [ -n "${NOTARY_KEY_PATH:-}" ] && [ -n "${NOTARY_KEY_ID:-}" ] && [ -n "${NOTAR
 elif [ -n "${NOTARY_APPLE_ID:-}" ] && [ -n "${NOTARY_PASSWORD:-}" ] && [ -n "${NOTARY_TEAM_ID:-}" ]; then
     CRED_ARGS=(--apple-id "$NOTARY_APPLE_ID" --password "$NOTARY_PASSWORD" --team-id "$NOTARY_TEAM_ID")
 elif [ -n "${NOTARY_PROFILE:-}" ]; then
-    CRED_ARGS=(--keychain-profile "$NOTARY_PROFILE")
+    CRED_ARGS=(--keychain-profile "$NOTARY_PROFILE" ${TCP_KEYCHAIN:+--keychain "$TCP_KEYCHAIN"})
 else
     echo "ERROR: No notarization credentials (see the top of $0)."
     exit 1

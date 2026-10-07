@@ -1,4 +1,5 @@
 """Reporting a bug (#28)."""
+import sys
 import urllib.parse
 
 from thechatplace import bugreport
@@ -43,7 +44,8 @@ def test_environment_names_no_people_or_paths():
     facts = bugreport.environment(SpeechSettings(), {"desktop app": 3, "Chat Place": 1},
                                   claude_version="2.1.286 (Claude Code)")
     labels = [label for label, _value in facts]
-    assert labels[:5] == ["The Chat Place", "Windows", "Python", "wxPython", "Claude Code"]
+    system = {"win32": "Windows", "darwin": "macOS"}.get(sys.platform, "System")
+    assert labels[:5] == ["The Chat Place", system, "Python", "wxPython", "Claude Code"]
     assert ("Sessions listed", "3 desktop app, 1 Chat Place") in facts
     text = " ".join(str(value) for _label, value in facts)
     assert "Users" not in text and "\\" not in text
@@ -61,3 +63,9 @@ def test_only_a_version_number_is_kept(monkeypatch):
                           ("", "unknown")):
         monkeypatch.setattr(subprocess, "run", lambda *a, **k: Out(printed))
         assert bugreport.claude_code_version() == kept
+
+
+def test_a_mac_report_says_macos_not_windows(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
+    facts = dict(bugreport.environment(SpeechSettings(), {}, claude_version="2.1.292 (Claude Code)"))
+    assert "macOS" in facts and "Windows" not in facts

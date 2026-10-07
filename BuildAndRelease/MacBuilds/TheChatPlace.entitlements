@@ -5,7 +5,7 @@
 
     Notarization requires the hardened runtime, which breaks CPython unless
     some exceptions are granted. The first four are Image Description
-    Toolkit's proven set (BuildAndRelease/MacBuilds/entitlements.plist there);
+    Toolkit's proven set (its BuildAndRelease/MacBuilds/entitlements.plist);
     don't trim them without testing a notarized build on a Mac that has never
     run the app.
 

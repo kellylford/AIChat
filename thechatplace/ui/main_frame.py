@@ -68,7 +68,7 @@ from ..sessions import (GROUP_VIEW_PREFIX, IDLE, NEEDS_YOU, SORT_ORDERS, SORT_SP
 from ..speech import ANNOUNCE_FULL, NOTIFY_ALL, NOTIFY_OFF, SpeechSettings, default_options, list_speech_options, speaker
 from ..transcript import (ASSISTANT, ERROR, PLAN, QUESTION, QUEUED, TOOL, ChatMessage,
                           TranscriptReader)
-from ..updater import AVAILABLE, DOWNLOAD, FAILED, CheckResult, UpdateService, release_page_url
+from ..updater import AVAILABLE, FAILED, CheckResult, UpdateService
 from .a11y import set_accessible_name, set_list_items_accessible
 from .notify import Notifier
 from .statusbar import StatusParts
@@ -2816,9 +2816,6 @@ class MainFrame(wx.Frame):
         if not self:
             return
         text = result.describe()
-        if result.status == DOWNLOAD:
-            self._offer_download(result, manual)
-            return
         if result.status != AVAILABLE:
             self.status_parts.set("update", "")
             if manual:
@@ -2855,25 +2852,6 @@ class MainFrame(wx.Frame):
             wx.CallAfter(self._on_update_downloaded, result, ok)
 
         self._pool.submit(work)
-
-    def _offer_download(self, result: CheckResult, manual: bool):
-        """A Mac app updates by downloading the new disk image: say so at
-        start, and from Help offer to open the release page. No is the default."""
-        self.status_parts.set("update", f"Update available: {result.version}")
-        text = result.describe()
-        if not manual:
-            self._say(f"{text} Help, Check for Updates opens it.")
-            return
-        answer = wx.MessageBox(
-            f"{text}\n\nOpen the release page in your browser? Download the disk image, "
-            "quit The Chat Place, and drag the new app over the old one. Your sessions and "
-            "settings are kept.", "Update The Chat Place",
-            wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION, self)
-        if answer != wx.YES:
-            self._feedback("Not now. Help, Check for Updates opens it later.")
-            return
-        platform_paths.open_url(release_page_url(result.version))
-        self._feedback(f"Opened the release page for The Chat Place {result.version}.")
 
     def _unsent_text(self) -> bool:
         self._save_draft()

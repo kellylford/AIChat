@@ -59,6 +59,11 @@ def claude_code_version() -> str:
     return first if _VERSION.match(first) else "unknown"
 
 
+def _system_name() -> str:
+    """The label for the operating system line."""
+    return {"win32": "Windows", "darwin": "macOS"}.get(sys.platform, "System")
+
+
 def environment(speech, counts: Dict[str, int], claude_version: Optional[str] = None) -> List[tuple]:
     """Facts for the report. ``speech`` is the SpeechSettings; ``counts`` how
     many sessions of each kind are listed. No names, titles or paths."""
@@ -70,7 +75,7 @@ def environment(speech, counts: Dict[str, int], claude_version: Optional[str] = 
     frozen = bool(getattr(sys, "frozen", False))
     facts = [
         ("The Chat Place", f"{__version__} ({'installed build' if frozen else 'run from source'})"),
-        ("Windows", platform.platform()),
+        (_system_name(), platform.platform()),
         ("Python", platform.python_version()),
         ("wxPython", wx_version),
         ("Claude Code", claude_version if claude_version is not None else claude_code_version()),

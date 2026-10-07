@@ -257,8 +257,8 @@ itself.
 The app is built for x64; Arm PCs run it under Windows's x64 emulation.
 
 **Mac.** Download `TheChatPlace-macos-arm64.dmg` from the same release, open it, and drag
-TheChatPlace.app onto Applications. The disk image is signed and notarized, so it opens without
-a warning. The first time speech goes through VoiceOver, macOS asks whether The Chat Place may
+The Chat Place onto Applications (or anywhere you like: it updates itself wherever it is). The
+disk image is signed and notarized, so it opens without a warning. The first time speech goes through VoiceOver, macOS asks whether The Chat Place may
 control VoiceOver; allow it, and turn on "Allow VoiceOver to be controlled with AppleScript" in
 VoiceOver Utility, General. Your sessions and settings are in
 `~/Library/Application Support/TheChatPlace`.
@@ -270,25 +270,25 @@ Help, Check for Updates. At start it only speaks up when there is a new version,
 says so: it never opens a dialog you didn't ask for. From Help it always says what it found ("up to
 date", "no release has been published yet", or an error), even with announcements set to silent.
 
-On a Mac, a new version is offered the same way, but as a link: Yes opens its release page,
-where you download the new disk image and drag the app over the old one. The rest of this section
-is about Windows.
-
 From Help, a new version is offered in a Yes/No dialog where No is the default. If you choose Yes,
 it downloads the update, closes, and starts the new version. It won't install while Claude is
 working in one of its sessions, and it warns you if a reply box holds text you haven't sent. If a
 turn starts, a dialog opens, or you type a reply while it downloads, it asks again or leaves the
 update to be installed the next time The Chat Place starts.
 
-**Updating never touches your sessions or settings.** The app lives in
-`%LOCALAPPDATA%\TheChatPlace`, which Velopack replaces on update and removes on uninstall. Your
-data is in `%APPDATA%\TheChatPlace`, a different folder that neither goes near, and the updater
-refuses to run if that were ever not so. What the updater did is logged in
-`%APPDATA%\TheChatPlace\update.log`.
+The Mac app updates the same way. Velopack's updater is inside the app itself, so it works
+wherever you keep it.
+
+**Updating never touches your sessions or settings.** On Windows the app lives in
+`%LOCALAPPDATA%\TheChatPlace`, which Velopack replaces on update and removes on uninstall, and
+your data is in `%APPDATA%\TheChatPlace`. On a Mac, Velopack replaces the app itself, and your
+data is in `~/Library/Application Support/TheChatPlace`. The updater refuses to run if the data
+were ever inside what it replaces. What the updater did is logged in `update.log` in the data
+folder.
 
 The version is in Help, About. Releases come from tags named `v<version>`, and
-The Chat Place publishes its update feed on the Velopack channel `windows`
-(`releases.windows.json`). The updater finds the newest `v*` release in this repository itself
+each release carries two Velopack update feeds, `windows` (`releases.windows.json`) and `osx`
+(`releases.osx.json`). The updater finds the newest `v*` release in this repository itself
 and reads the feed from that release only (`REPO_URL`, `RELEASES_API`, `TAG_PREFIX` and `CHANNEL`
 in `thechatplace/updater.py`).
 
@@ -309,38 +309,41 @@ for Updates says so, and names the newest release.
 
 ### Build it yourself
 
-**Windows.** Run `build.cmd` from a command prompt (`.\build.cmd` in PowerShell), or double-click it, in
-which case the window stays open at the end so you can read the result. It does what the release workflow
-does, unsigned: makes `.venv` if it isn't there, installs what the build needs into it, runs the
-tests, builds the app, smoke-tests it, and makes the installer and portable zip.
+The build scripts are in `BuildAndRelease/`, laid out as in Image Description Toolkit:
+`MacBuilds/` and `WinBuilds/`. Each does what the release workflow's job for that platform does:
+makes `.venv` if it isn't there, runs the tests, builds the app with PyInstaller, smoke-tests it,
+and packs it with Velopack, whose tool `vpk` needs the .NET SDK (the scripts install `vpk` at the
+version the workflow uses). Results go in `releases\` and `dist\`; give a folder to copy the
+installer or disk image there too, relative to where you ran the script.
+
+**Windows.** `BuildAndRelease\WinBuilds\build_windows.cmd`, from a command prompt or by
+double-clicking (the window then stays open to read the result). It makes the installer and
+portable zip, **unsigned**: Windows signing is Azure Artifact Signing, which only the workflow
+does, so SmartScreen may warn when you run Setup (More info, then Run anyway). Without the .NET SDK
+it builds just the app, says why, and exits with an error.
 
 ```
-build.cmd                                     build into releases\ and dist\
-build.cmd C:\Users\kelly\OneDrive\thehub      and copy Setup and the zip there
+BuildAndRelease\WinBuilds\build_windows.cmd
+BuildAndRelease\WinBuilds\build_windows.cmd C:\Users\kelly\OneDrive\thehub
 ```
 
-The first run takes a few minutes to set up `.venv`. The results are `releases\` (Setup and the
-portable zip) and `dist\TheChatPlace\` (the app itself, ready to run). The installer needs the
-Velopack tool, `vpk`; `build.cmd` installs or updates it to the version the workflow uses if the
-.NET SDK is there, and otherwise builds just the app, says why, and exits with an error. A
-relative output folder is taken relative to where you ran `build.cmd`. The build is unsigned, so SmartScreen may warn when you run Setup: More
-info, then Run anyway.
-
-**Mac.** Run `./build_macos.sh`, or double-click `build_macos.command`. It does what the
-release workflow's macOS job does: makes `.venv` with `macsetup.sh` if it isn't there, runs the
-tests, builds `dist/TheChatPlace.app` with PyInstaller, smoke-tests it, and makes
-`releases/TheChatPlace-macos-arm64.dmg`. It builds for Apple silicon only.
+**Mac.** `BuildAndRelease/MacBuilds/build_macos.sh`, or double-click `build_macos.command`. It
+makes `releases/TheChatPlace-macos-arm64.dmg` and the `osx` update feed, for Apple silicon. Like
+IDT's, a local Mac build is **signed** with your Developer ID Application certificate when the
+keychain has one; notarizing is up to you. The .NET SDK comes from `brew install dotnet`.
 
 ```
-./build_macos.sh                       build into dist/ and releases/
-./build_macos.sh ~/Desktop/builds      and copy the .dmg there
-TCP_SIGN_CODE=1 ./build_macos.sh       signed with your Developer ID Application certificate
-TCP_NOTARIZE=1 ./build_macos.sh        signed and notarized (credentials: macos/notarize.sh)
+BuildAndRelease/MacBuilds/build_macos.sh                    signed if you have the certificate
+BuildAndRelease/MacBuilds/build_macos.sh ~/Desktop/builds   and copy the .dmg there
+TCP_SIGN_CODE=0 BuildAndRelease/MacBuilds/build_macos.sh    unsigned
+TCP_NOTARIZE=1 BuildAndRelease/MacBuilds/build_macos.sh     signed and notarized (credentials: notarize.sh)
 ```
 
-Unsigned, macOS won't open it until you choose Open Anyway in System Settings, Privacy &
-Security; the README.txt in the disk image says so. The signing, notarizing and disk image steps
-are in `macos/`, adapted from Image Description Toolkit's.
+The Mac build follows GHManage's: the app is signed inside-out (`sign.sh`), `vpk pack` adds
+Velopack's updater (`UpdateMac`) and signs that and the bundle, and the disk image is made from
+the packed app, never from `dist/`. An app without `UpdateMac` runs perfectly and never updates
+again, so the build checks that Velopack inside the packed app finds its updater. An unsigned
+disk image's README.txt says how to open it (System Settings, Privacy & Security, Open Anyway).
 
 ### Releasing
 
@@ -358,10 +361,11 @@ publishes one GitHub release (a pre-release before 1.0) only if both succeed:
   installer, portable zip and update feed (signing Setup, the updater and the launcher too), and
   checks every signature.
 - **Mac:** runs `build_macos.sh` with the Developer ID certificate in a throwaway keychain, so the
-  app is signed, the disk image notarized and stapled, and Gatekeeper's verdict checked. It needs
-  the repository secrets `MACOS_CERTIFICATE_P12`, `MACOS_CERTIFICATE_PASSWORD`, `NOTARY_KEY_P8`,
-  `NOTARY_KEY_ID` and `NOTARY_ISSUER_ID` (the same ones Image Description Toolkit uses); a tag
-  fails without them rather than publish an unsigned app.
+  app is signed, packed with its updater and notarized, the disk image notarized and stapled, and
+  Gatekeeper's verdict checked. It needs the repository secrets `MACOS_CERTIFICATE_P12`,
+  `MACOS_CERTIFICATE_PASSWORD`, `NOTARY_KEY_P8`, `NOTARY_KEY_ID` and `NOTARY_ISSUER_ID`, which
+  `The-Idea-Place-Projects/signing/sync-secrets.py` sets from the signing kit; a tag fails without
+  them rather than publish an unsigned app.
 
 Run by hand or for a pull request, it does everything but publish, and keeps the files as
 workflow artifacts; tick "sign" on a hand run, or label a pull request `sign-build`, to sign (and
@@ -552,7 +556,7 @@ Checked with Claude Code 2.1.286 (issues #187 and #188):
 | `tools/check_version.py` | Prints the version; checks a release tag against it |
 | `tools/make_version_info.py` | The Windows version resource for the built exe |
 | `winsetup.bat`, `macsetup.sh` (`.command`) | Set up `.venv` on Windows or a Mac |
-| `build.cmd`, `build_macos.sh` (`.command`) | Build on Windows or a Mac |
-| `macos/` | Mac signing, notarizing, entitlements and the disk image |
+| `BuildAndRelease/WinBuilds/build_windows.cmd` | Build on Windows (unsigned) |
+| `BuildAndRelease/MacBuilds/` | Build on a Mac (`build_macos.sh`, `.command`), and its signing, notarizing, entitlements and disk image |
 | `requirements-build.txt` | Everything a build needs; pins PyInstaller |
 | `release-notes/` | One file per release, used as the GitHub release's notes and the update's notes |

@@ -100,9 +100,18 @@ def smoke_test(out_path: str) -> int:
         report["velopack"] = True
     except Exception as exc:  # noqa: BLE001
         report["velopack"] = False
-        # Only Windows installs its own updates; the Mac app doesn't bundle it.
-        if report["frozen"] and sys.platform == "win32":
+        if report["frozen"]:  # every built copy updates through it
             problems.append(f"velopack: {exc}")
+    if report["frozen"] and report["velopack"]:
+        # Informational: whether Velopack finds this copy's updater. Only a
+        # packed app has one (on a Mac, Contents/MacOS/UpdateMac), so a
+        # PyInstaller build that isn't packed yet says why not; build_macos.sh
+        # requires a version here for the app that goes in the disk image.
+        try:
+            manager = updater._velopack_manager(updater.feed_url(__version__))
+            report["updater"] = str(manager.get_current_version())
+        except Exception as exc:  # noqa: BLE001
+            report["updater"] = f"unavailable: {exc}"
     scripts = speech._script_dir()
     extension = "ps1" if sys.platform == "win32" else "sh"
     for name in (f"speak-engine.{extension}", f"speak-voices.{extension}"):

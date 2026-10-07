@@ -9,7 +9,7 @@
 # it puts the app's entitlements on every library and skips code it doesn't
 # recognise.
 #
-#   bash macos/sign.sh dist/TheChatPlace.app
+#   bash BuildAndRelease/MacBuilds/sign.sh dist/TheChatPlace.app
 #
 # Environment:
 #   TCP_SIGNING_IDENTITY  "Developer ID Application: Name (TEAMID)"; if unset,
@@ -19,7 +19,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ENTITLEMENTS="$SCRIPT_DIR/entitlements.plist"
+ENTITLEMENTS="$SCRIPT_DIR/TheChatPlace.entitlements"
 APP="${1:?Usage: $0 <path-to-.app>}"
 [ -d "$APP" ] || { echo "ERROR: not found: $APP"; exit 1; }
 

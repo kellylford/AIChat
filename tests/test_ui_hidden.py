@@ -874,21 +874,6 @@ def run_check(frame, manual=True):
     assert pump(lambda: not frame._update_busy)
 
 
-def test_mac_app_offers_the_release_page_and_never_downloads(frame, env, monkeypatch):
-    from thechatplace.updater import DOWNLOAD, CheckResult
-    frame.updates = FakeUpdates(CheckResult(DOWNLOAD, "0.1.0", "0.2.0"))
-    run_check(frame, manual=False)  # at start: said, never asked
-    assert "0.2.0 is available" in env["spoken"][-1] and env["boxes"] == []
-    asked = []
-    monkeypatch.setattr(wx, "MessageBox", lambda text, *a, **k: asked.append(text) or wx.NO)
-    run_check(frame)
-    assert "Open the release page" in asked[-1] and env["opened"] == []
-    monkeypatch.setattr(wx, "MessageBox", lambda *a, **k: wx.YES)
-    run_check(frame)
-    assert env["opened"] == ["https://github.com/kellylford/AIChat/releases/tag/v0.2.0"]
-    assert "download" not in frame.updates.calls
-
-
 def test_manual_check_with_no_releases_says_so(frame, env):
     from thechatplace.updater import NO_RELEASES, CheckResult
     frame.updates = FakeUpdates(CheckResult(NO_RELEASES, "0.1.0"))

@@ -11,9 +11,9 @@ REM   winsetup.bat /y       the same, without the two pauses
 REM
 REM Then:
 REM   .venv\Scripts\pythonw TheChatPlace.pyw     run the app from source
-REM   build.cmd                                  build the installer and zip
+REM   BuildAndRelease\WinBuilds\build_windows.cmd   build the installer and zip
 REM
-REM Error checks are flat ("if errorlevel 1 goto"), as in build.cmd.
+REM Error checks are flat ("if errorlevel 1 goto"), as in build_windows.cmd.
 REM ============================================================================
 setlocal
 cd /d "%~dp0"
@@ -73,7 +73,7 @@ for %%m in (wx wx.html2 markdown velopack truststore PyInstaller pytest) do (
 echo.
 echo Other things The Chat Place and its build use:
 where claude >nul 2>nul && echo   ok       claude (Claude Code) || echo   missing  claude: install Claude Code with its native installer and sign in
-where dotnet >nul 2>nul && echo   ok       .NET SDK (build.cmd installs vpk with it) || echo   missing  .NET SDK: needed only for the installer; https://dotnet.microsoft.com/download
+where dotnet >nul 2>nul && echo   ok       .NET SDK (build_windows.cmd installs vpk with it) || echo   missing  .NET SDK: needed only for the installer; https://dotnet.microsoft.com/download
 
 echo.
 echo ========================================================================
@@ -82,7 +82,7 @@ echo SETUP COMPLETE
 echo ========================================================================
 echo   Run from source:  .venv\Scripts\pythonw TheChatPlace.pyw
 echo   Run the tests:    .venv\Scripts\python -m pytest -q tests
-echo   Build the app:    build.cmd
+echo   Build the app:    BuildAndRelease\WinBuilds\build_windows.cmd
 set "RESULT=0"
 goto :end
 
