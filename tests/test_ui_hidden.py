@@ -2605,3 +2605,52 @@ def test_compaction_is_said(frame, env):
     frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("compacted"))
     assert env["spoken"][-1] == ("Hub probe: Claude Code compacted the conversation to "
                                  "free the context.")
+
+
+def test_find_says_when_it_goes_round_at_either_end(frame, env, monkeypatch):
+    _load_three(frame, env)  # matches at rows 1 and 2 (of 0-3)
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.chat_list))
+    frame._find_text = "giraffe"
+    frame.chat_list.SetSelection(3)  # the last message
+    frame.find_again(True)
+    assert frame.chat_list.GetSelection() == 1
+    assert env["feedback"][-1].endswith("Searched round from the other end.")
+    frame.chat_list.SetSelection(0)  # the first message
+    frame.find_again(False)
+    assert frame.chat_list.GetSelection() == 2
+    assert env["feedback"][-1].endswith("Searched round from the other end.")
+    frame.chat_list.SetSelection(3)
+    monkeypatch.setattr(frame, "_ask_text", lambda title, prompt, value: "giraffe")
+    frame.on_find()  # a new search from the last message goes round too
+    assert frame.chat_list.GetSelection() == 1
+    assert env["feedback"][-1].endswith("Searched round from the other end.")
+
+
+def test_find_with_a_single_match_says_so_both_ways(frame, env, monkeypatch):
+    _load_three(frame, env)
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.chat_list))
+    frame._find_text = "No animals"
+    frame.chat_list.SetSelection(3)
+    frame.find_again(True)
+    assert frame.chat_list.GetSelection() == 3
+    assert env["feedback"][-1].endswith("It's the only message that matches.")
+    frame.find_again(False)
+    assert env["feedback"][-1].endswith("It's the only message that matches.")
+
+
+def test_shift_f3_with_nothing_selected_starts_from_the_last(frame, env, monkeypatch):
+    _load_three(frame, env)
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.chat_list))
+    frame._find_text = "No animals"  # the last message
+    frame.chat_list.SetSelection(wx.NOT_FOUND)
+    frame.find_again(False)
+    assert frame.chat_list.GetSelection() == 3
+    assert not env["feedback"][-1].endswith("other end.")
+
+
+def test_f5_mentions_the_filter(frame, env, monkeypatch):
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    frame._set_session_filter("quiet")
+    frame.refresh_sessions(force=True, resort=True)
+    settle(frame)
+    assert env["feedback"][-1].endswith('Showing sessions matching "quiet": 1.')

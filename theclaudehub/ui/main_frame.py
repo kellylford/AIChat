@@ -580,8 +580,12 @@ class MainFrame(wx.Frame):
             working = sum(1 for s in current if s.state == WORKING)
             text = (f"{len(current)} sessions: {waiting} need you, "
                     f"{working} working.")
-            if self.speech.session_view != VIEW_ALL:
-                text += f" Showing {view_spoken(self.speech.session_view)}: {len(shown)}."
+            if self.speech.session_view != VIEW_ALL or self._session_filter:
+                what = view_spoken(self.speech.session_view) \
+                    if self.speech.session_view != VIEW_ALL else "sessions"
+                if self._session_filter:
+                    what += f' matching "{self._session_filter}"'
+                text += f" Showing {what}: {len(shown)}."
             if snap.unreadable_files:
                 text += f" Couldn't read {snap.unreadable_files} session files."
             if force and not first:
@@ -2057,42 +2061,53 @@ class MainFrame(wx.Frame):
         if self._open is None:
             self._feedback("No session loaded. In the session list, Ctrl+F finds sessions.")
             return
+        returning_to = wx.Window.FindFocus()
         text = self._ask_text("Find in Messages", "Find messages containing:", self._find_text)
         if not text:
-            self.chat_list.SetFocus()
+            (returning_to or self.chat_list).SetFocus()
             return
         self._find_text = text
         self.find_again(True, starting=True)
 
     def find_again(self, forward: bool = True, starting: bool = False):
         """F3 and Shift+F3: the next or previous message containing the text,
-        searching the whole text of each message, wrapping round."""
+        searching the whole text of each message, going round from the other
+        end (and saying so). A new search (``starting``) begins with the
+        message you're on."""
         if not self._find_text:
             self._find_in_messages()
             return
         visible = self._visible_messages()
-        if not visible or not self._chat_keys:
+        keys = self._chat_keys
+        # The rows the list shows, and only while they match the messages.
+        if not keys or len(visible) < len(keys) or any(
+                visible[i].key != key for i, key in enumerate(keys)):
             self._feedback("No messages to search.")
             return
+        count = len(keys)
         words = self._find_text.casefold()
-        count = len(visible)
         current = self.chat_list.GetSelection()
-        if current < 0:
-            current = count - 1
+        if not 0 <= current < count:
+            # Nothing selected: start from the end you're searching from.
+            current = -1 if forward else count
+            starting = False
         step = 1 if forward else -1
-        # From the next one (or, for a new search, from the one you're on).
-        start = current if starting else current + step
+        first = current if starting else current + step
         for offset in range(count):
-            index = (start + step * offset) % count
-            if words in visible[index].full_text().casefold():
-                wrapped = (forward and index < start % count and not starting) or \
-                          (not forward and index > start % count)
-                self.chat_list.SetSelection(index)
-                self.chat_list.SetFocus()
-                note = " Searched round from the other end." if wrapped and offset else ""
-                self._feedback(f"Found in message {index + 1} of {count}: "
-                               f"{visible[index].list_line()}.{note}")
-                return
+            index = (first + step * offset) % count
+            if words not in visible[index].full_text().casefold():
+                continue
+            if not starting and index == current:
+                note = " It's the only message that matches."
+            elif (forward and index < first) or (not forward and index > first):
+                note = " Searched round from the other end."
+            else:
+                note = ""
+            self.chat_list.SetSelection(index)
+            self.chat_list.SetFocus()
+            self._feedback(f"Found in message {index + 1} of {count}: "
+                           f"{visible[index].list_line()}.{note}")
+            return
         self._feedback(f'No message contains "{self._find_text}".')
 
     def _group_target(self) -> Optional[SessionInfo]:
