@@ -1,8 +1,12 @@
 # The Chat Place
 
-A home for your Claude Code chats.
+A home for your Claude Code chats: an accessible companion for Claude Code.
 
-> **Status: version 0.1.0, ready for its first release.** Used with JAWS on Kelly's PC; the
+The Chat Place is an independent project by Kelly Ford. It works with Claude Code and the
+Claude desktop app, but it isn't made, sponsored or endorsed by Anthropic, and isn't affiliated
+with it. Claude and Claude Code are trademarks of Anthropic.
+
+> **Status: version 0.1.1, a pre-release** (0.1.0, the first release, came out on 7 October 2026). Used with JAWS on Kelly's PC; the
 > installer, uninstaller and update check have been tested in the vmtest VM. Downloading and
 > installing an update needs two published releases, so it is first tried with 0.1.1. It has not
 > yet had a pass with NVDA. The Mac build is new: built, smoke-tested and Developer ID signed on

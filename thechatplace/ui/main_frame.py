@@ -3255,6 +3255,9 @@ class MainFrame(wx.Frame):
         wx.MessageBox(
             f"{APP_NAME} version {__version__}\n\nA home for your Claude Code chats: keyboard and "
             "screen reader friendly, on your existing Claude subscription.\n\n"
+            "An independent project by Kelly Ford. It works with Claude Code but isn't made, "
+            "sponsored or endorsed by Anthropic. Claude and Claude Code are trademarks of "
+            "Anthropic.\n\n"
             "Questions and bug reports: support@theideaplace.net",
             f"About {APP_NAME}", wx.OK | wx.ICON_INFORMATION, self)
 
