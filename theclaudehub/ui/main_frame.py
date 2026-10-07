@@ -59,7 +59,8 @@ from ..speech import SpeechSettings, default_options, list_speech_options, speak
 from ..transcript import ASSISTANT, ERROR, PLAN, QUESTION, ChatMessage, TranscriptReader
 from ..updater import AVAILABLE, FAILED, CheckResult, UpdateService
 from .a11y import set_accessible_name
-from ..rendering import message_page
+from ..rendering import html_page, message_page
+from ..ui_text import shortcuts_html
 from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, FormattedMessageDialog,
                       MessageDialog, NewSessionDialog, PermissionDialog, PlanDialog,
                       QuestionDialog, SettingsDialog, ShortcutsDialog,
@@ -175,8 +176,7 @@ class MainFrame(wx.Frame):
         bar.Append(view, "&View")
 
         help_menu = wx.Menu()
-        self._item(help_menu, "&Keyboard Shortcuts\tF1",
-                   lambda e: self._modal(ShortcutsDialog(self)))
+        self._item(help_menu, "&Keyboard Shortcuts\tF1", self.on_shortcuts)
         self._item(help_menu, "Check for &Updates...", lambda e: self.check_for_updates(True))
         self._item(help_menu, "&About", self.on_about, wx.ID_ABOUT)
         bar.Append(help_menu, "&Help")
@@ -852,12 +852,27 @@ class MainFrame(wx.Frame):
         """The message as a formatted page (#190). False when that can't be
         shown, or Kelly chose Read as Plain Text: the caller opens the text
         box instead."""
-        if not formatted_view_available():
-            return False
         title = (f"Message from {message.label}" if message.label in ("Claude", "You")
                  else message.label)
+        return self._show_page(title, message_page(title, message.text))
+
+    def on_shortcuts(self, _event=None):
+        """The keyboard shortcuts as a page: a heading and a table per group.
+        The text box when the page can't be shown, or on Read as Plain Text.
+        Deliberately not tied to the "formatted page" setting, which is about
+        Claude's messages: the shortcuts read best as tables either way."""
+        if self._show_page("Keyboard Shortcuts",
+                           html_page("Keyboard Shortcuts", shortcuts_html())):
+            return
+        self._modal(ShortcutsDialog(self))
+
+    def _show_page(self, title: str, page: str) -> bool:
+        """Show ``page`` in the formatted view. False when it can't be shown,
+        or Kelly chose Read as Plain Text."""
+        if not formatted_view_available():
+            return False
         try:
-            dialog = FormattedMessageDialog(self, title, message_page(title, message.text))
+            dialog = FormattedMessageDialog(self, title, page)
         except RuntimeError as exc:
             self._status(str(exc))
             return False

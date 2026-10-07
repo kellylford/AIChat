@@ -98,11 +98,17 @@ def markdown_to_html(text: str) -> str:
     return _HREF.sub(link, _CODE.sub(code_region, body))
 
 
-def message_page(title: str, text: str) -> str:
-    """A whole page: ``title`` is the window's and the page's name."""
+def html_page(title: str, body_html: str) -> str:
+    """A whole page around ``body_html``, which must already be safe HTML.
+    ``title`` is the window's and the page's name."""
     name = html.escape(title, quote=True)
     return ("<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\">"
             "<meta http-equiv=\"Content-Security-Policy\" "
             "content=\"default-src 'none'; style-src 'unsafe-inline'\">"
             f"<title>{name}</title><style>{_STYLE}</style></head>"
-            f"<body><main aria-label=\"{name}\">{markdown_to_html(text)}</main></body></html>")
+            f"<body><main aria-label=\"{name}\">{body_html}</main></body></html>")
+
+
+def message_page(title: str, text: str) -> str:
+    """A message's markdown as a whole page."""
+    return html_page(title, markdown_to_html(text))

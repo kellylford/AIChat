@@ -60,6 +60,27 @@ SHORTCUTS = [
 ]
 
 
+def shortcuts_html() -> str:
+    """The same list as a page body: a heading and a table per group, with
+    the keys as row headers, so a screen reader moves by heading (H) and
+    reads each key with what it does as it moves through a table."""
+    import html
+
+    parts = ["<h1>Keyboard shortcuts</h1>", f"<p>{html.escape(LAYOUT)}</p>"]
+    for number, (group, items) in enumerate(SHORTCUTS, start=1):
+        # The table takes its name from the heading above it, so the group
+        # is named once, not as a heading and again as a separate label.
+        parts.append(f'<h2 id="group{number}">{html.escape(group)}</h2>')
+        parts.append(f'<table aria-labelledby="group{number}">'
+                     '<thead><tr><th scope="col">Keys</th><th scope="col">What it does</th>'
+                     "</tr></thead><tbody>")
+        for key, action in items:
+            parts.append(f'<tr><th scope="row">{html.escape(key)}</th>'
+                         f"<td>{html.escape(action)}</td></tr>")
+        parts.append("</tbody></table>")
+    return "\n".join(parts)
+
+
 def shortcuts_text() -> str:
     lines: List[str] = [LAYOUT, ""]
     for group, items in SHORTCUTS:
