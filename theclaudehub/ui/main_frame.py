@@ -664,6 +664,7 @@ class MainFrame(wx.Frame):
     def unload_session(self):
         """Nothing loaded (the loaded session was forgotten)."""
         self._chat_timer.Stop()
+        self._spoken.clear()
         self._open = None
         self._open_generation += 1
         self._reader = None

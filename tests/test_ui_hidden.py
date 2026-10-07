@@ -1805,15 +1805,16 @@ def test_screen_reader_reads_whole_messages_in_the_list(frame, env):
     assert accessible.GetName(2) == (wx.ACC_OK, "Claude: Result. It passes. tests: 352. "
                                                 "Code block omitted. Ship it.")
     assert accessible.GetName(0) == (wx.ACC_OK, "Messages in Quiet one (idle, read-only)")
-    assert accessible.GetName(9)[0] == wx.ACC_NOT_IMPLEMENTED  # no such row
+    # The row's own text: the name must still be a string, or MSAA errors.
+    assert accessible.GetName(9) == (wx.ACC_NOT_IMPLEMENTED, "")  # no such row
     frame.speech.full_messages_in_list = False
-    assert accessible.GetName(2)[0] == wx.ACC_NOT_IMPLEMENTED  # the row's own text
+    assert accessible.GetName(2) == (wx.ACC_NOT_IMPLEMENTED, "")
 
 
 def test_rows_that_are_not_messages_read_as_shown(frame):
     accessible = frame.chat_list._hub_accessible
     assert frame.chat_list.GetString(0).startswith("No session loaded")
-    assert accessible.GetName(1)[0] == wx.ACC_NOT_IMPLEMENTED
+    assert accessible.GetName(1) == (wx.ACC_NOT_IMPLEMENTED, "")
 
 
 def test_whole_message_setting_round_trips_and_is_in_settings(frame, tmp_path):

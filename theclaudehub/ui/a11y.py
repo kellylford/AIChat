@@ -20,7 +20,7 @@ class _NamedAccessible(wx.Accessible):
 
     def GetName(self, childId):
         if childId:
-            return (wx.ACC_NOT_IMPLEMENTED, None)
+            return (wx.ACC_NOT_IMPLEMENTED, "")
         return (wx.ACC_OK, self._label)
 
 
@@ -28,9 +28,9 @@ def set_accessible_name(control: wx.Window, label: str) -> None:
     """Name a control for JAWS and NVDA.
 
     ``SetName`` covers most controls. Text controls also get a wx.Accessible,
-    because their name does not otherwise reach MSAA. Item-bearing controls
-    (ListBox) deliberately do not: a custom accessible there risks masking
-    the item text, which is the whole point of using a ListBox.
+    because their name does not otherwise reach MSAA. List boxes don't get
+    one here: the messages list has its own (``set_list_items_accessible``),
+    which keeps the list's name and its rows' text.
     """
     control.SetName(label)
     if not isinstance(control, wx.TextCtrl):
@@ -72,7 +72,11 @@ class ListItemsAccessible(wx.Accessible):
             text = None
         if text:
             return (wx.ACC_OK, text)
-        return (wx.ACC_NOT_IMPLEMENTED, None)
+        # The row's own text. The name must be a string even here: with None,
+        # wxPython can't build the answer and the screen reader gets an error
+        # (0x80010105) instead of the row, found reading it from another
+        # process the way JAWS and NVDA do.
+        return (wx.ACC_NOT_IMPLEMENTED, "")
 
 
 def set_list_items_accessible(listbox: wx.ListBox, name, item_text) -> None:
