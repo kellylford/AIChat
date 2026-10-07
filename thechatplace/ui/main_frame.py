@@ -1234,8 +1234,10 @@ class MainFrame(wx.Frame):
         copy = menu.Append(wx.ID_ANY, "&Copy Message\tCtrl+C")
         message = self._selected_message()
         if message is not None and message.kind == QUEUED:
+            now = menu.Append(wx.ID_ANY, "Send &Now (Claude stops what it's doing)")
             edit = menu.Append(wx.ID_ANY, "&Edit Queued Message")
             remove = menu.Append(wx.ID_ANY, "&Remove Queued Message\tDelete")
+            menu.Bind(wx.EVT_MENU, lambda e: self.send_queued_now(), now)
             menu.Bind(wx.EVT_MENU, lambda e: self.edit_queued(), edit)
             menu.Bind(wx.EVT_MENU, lambda e: self.remove_queued(), remove)
             menu.AppendSeparator()
@@ -2383,6 +2385,29 @@ class MainFrame(wx.Frame):
         self._update_send_state()
         self._feedback("Queued message removed. " + (
             f"{len(waiting)} still queued." if waiting else "Nothing is queued now."))
+
+    def send_queued_now(self):
+        """Send the selected queued message now: Claude stops what it's doing
+        and takes it straight away, in the same turn, as the desktop app's
+        Send Now does."""
+        index = self._selected_queued()
+        info = self._open
+        if index is None or info is None:
+            return
+        runner = self._runners.get(info.cli_session_id)
+        waiting = self._queued.get(info.cli_session_id, [])
+        if runner is None or not 0 <= index < len(waiting):
+            return
+        text = waiting[index]
+        if not runner.send_now(text):
+            self._feedback("The turn just ended: the queued message goes now anyway.")
+            return
+        del waiting[index]
+        if not waiting:
+            self._queued.pop(info.cli_session_id, None)
+        self._rebuild_chat_list()
+        self._update_send_state()
+        self._feedback(f"Sent now. {info.title} stopped what it was doing to answer it.")
 
     def edit_queued(self):
         """Take the selected queued message back into the reply box, to

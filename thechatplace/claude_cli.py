@@ -832,6 +832,9 @@ class TurnRunner:
         self._lock = threading.Lock()
         self._cancelled = False
         self._stopped_for_key = False
+        #: Send Now interrupted the work: the result that ends it isn't a
+        #: failure of the turn.
+        self._interrupted_for_message = False
         #: Stopped by The Chat Place before Claude answered (an API key or an
         #: unchosen Fable): the message goes back to the reply box.
         self.stopped_before_answer = False
@@ -849,6 +852,22 @@ class TurnRunner:
 
     def elapsed(self) -> float:
         return self._clock() - self.started_at
+
+    def send_now(self, prompt: str) -> bool:
+        """Send a message into the running turn at once, as the desktop app's
+        Send Now does: Claude stops what it's doing (``interrupt``) and takes
+        the message next, in this same process. False if the turn is over."""
+        with self._lock:
+            if not self._stdin_open:
+                return False
+            self._interrupted_for_message = True
+            ok = self._write_line({"type": "control_request",
+                                   "request_id": f"thechatplace-interrupt-{uuid.uuid4().hex[:8]}",
+                                   "request": {"subtype": "interrupt"}})
+            ok = ok and self._write_raw(message_line(prompt))
+            if ok:
+                self.last_activity = "starting on your new message"
+            return ok
 
     def respond(self, request_id: str, response: dict) -> bool:
         """Answer a permission request (from the UI thread). False if the turn
@@ -1092,6 +1111,10 @@ class TurnRunner:
                         # more can follow (a background agent's notification
                         # runs as its own result), so the turn waits for idle;
                         # an older Claude Code without them ends here.
+                        if self._interrupted_for_message and event.is_error:
+                            # The work Send Now stopped: not the turn failing.
+                            self._interrupted_for_message = False
+                            event.is_error = False
                         if final is not None:
                             event.denials = list(final.denials) + [
                                 d for d in event.denials if d not in final.denials]

@@ -979,3 +979,33 @@ def test_a_permission_answered_elsewhere_is_dropped(tmp_path):
     kinds = [e.kind for e in events]
     assert kinds.index("permission") < kinds.index("permission_cancelled")
     assert runner.pending == {}
+
+
+def test_send_now_interrupts_and_the_stopped_work_is_not_a_failure(tmp_path):
+    from thechatplace.claude_cli import TurnRunner
+    process = FakeProcess([
+        ev(type="system", subtype="session_state_changed", state="running"),
+        ev(type="system", subtype="init", session_id="s1", apiKeySource="none"),
+        ev(type="result", subtype="error_during_execution", is_error=True, result=""),
+        ev(type="assistant", message={"content": [{"type": "text", "text": "hi"}]}),
+        ev(type="result", subtype="success", result="hi"),
+        ev(type="system", subtype="session_state_changed", state="idle"),
+    ])
+    events, done = [], threading.Event()
+    box = {}
+
+    def on_event(event):
+        events.append(event)
+        if event.kind == "started" and "sent" not in box:
+            box["sent"] = box["runner"].send_now("Instead, say hi")
+        if event.kind in ("finished", "failed"):
+            done.set()
+    runner = TurnRunner(["claude", "-p"], str(tmp_path), "Write an essay", on_event,
+                        popen=lambda cmd, **k: process, env={"PATH": "x"})
+    box["runner"] = runner
+    runner.start()
+    assert done.wait(5)
+    assert box["sent"] is True
+    assert events[-1].kind == "finished" and not events[-1].is_error
+    written = process.written.decode("utf-8")
+    assert '"subtype": "interrupt"' in written and "Instead, say hi" in written
