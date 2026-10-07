@@ -746,12 +746,62 @@ def test_shift_delete_in_the_list_deletes_permanently(frame, env, monkeypatch):
     monkeypatch.setattr(frame, "on_delete_permanently", lambda: calls.append("delete"))
     monkeypatch.setattr(frame, "on_hide", lambda: calls.append("hide"))
     monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
-    for shift in (True, False):
+    for shift, ctrl in ((True, False), (False, False), (False, True)):
         event = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
         event.SetKeyCode(wx.WXK_DELETE)
         event.SetShiftDown(shift)
+        event.SetControlDown(ctrl)
         frame._on_char_hook(event)
-    assert calls == ["delete", "hide"]
+    assert calls == ["delete", "hide"]  # Ctrl+Delete does neither
+
+
+def test_no_menu_accelerator_takes_delete(frame):
+    # As accelerators, Delete and Shift+Delete fired from every control:
+    # Delete in the attachments list hid the loaded session, and Shift+Delete
+    # in the messages asked to delete it. The session list's char hook owns them.
+    def items(menu):
+        for item in menu.GetMenuItems():
+            yield item
+            if item.GetSubMenu():
+                yield from items(item.GetSubMenu())
+
+    bar = frame.GetMenuBar()
+    for i in range(bar.GetMenuCount()):
+        for item in items(bar.GetMenu(i)):
+            accel = item.GetAccel()
+            assert accel is None or accel.GetKeyCode() != wx.WXK_DELETE, item.GetItemLabel()
+
+
+def test_delete_permanently_defaults_to_no(frame, env, monkeypatch):
+    from thechatplace.ui import main_frame
+    styles = []
+    monkeypatch.setattr(main_frame.wx, "MessageBox",
+                        lambda message, caption, style, *a: styles.append(style) or wx.NO)
+    select(frame, "Hub probe")
+    frame.on_delete_permanently()
+    assert styles and styles[0] & wx.NO_DEFAULT
+
+
+def test_delete_permanently_refuses_while_a_turn_runs(frame, env):
+    path = add_transcript(env, "C:\\G\\Scratch", "own-1", [user_text("hi")])
+    frame._runners["own-1"] = FakeRunner([], "", "", None)
+    select(frame, "Hub probe")
+    frame.on_delete_permanently()
+    assert env["feedback"][-1] == "A turn is running in that session. Stop it first."
+    assert frame.store.get("own-1") is not None and path.exists()
+
+
+def test_delete_permanently_the_loaded_session_unloads_it(frame, env):
+    path = add_transcript(env, "C:\\G\\Scratch", "own-1", [user_text("hi")])
+    (path.with_suffix("") / "subagents").mkdir(parents=True)
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    assert frame._open is not None and frame._open.key == "own:own-1"
+    select(frame, "Hub probe")
+    frame.on_delete_permanently()
+    assert frame._open is None
+    assert not path.exists() and not path.with_suffix("").exists()
+    assert frame.session_list.GetSelection() != wx.NOT_FOUND
 
 
 def test_new_session_view_says_claude_is_starting(frame, env, fake_runner, monkeypatch):

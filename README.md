@@ -50,8 +50,9 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   **View, Show Sessions** (Alt+V, H) chooses which sessions are listed: all, needs you or
   working, needs you, desktop app sessions, The Chat Place's own, Remote Control sessions (ones
   the desktop app has linked for Remote Control), archived (the desktop app's archived
-  sessions, otherwise hidden), hidden (the ones you've hidden), or one of your groups. The list's name says what it shows and how
-  many ("Session list, needs you, 2 of 139"), and the choice is remembered.
+  sessions, otherwise hidden), hidden (the ones you've hidden), or one of your groups. The
+  list's name says what it shows and how many ("Session list, needs you, 2 of 139"), and the
+  choice is remembered.
   Arrowing doesn't load anything; **Enter loads that session** into the messages list, moves you
   there, and says "Loaded Quiet one, 12 messages."
 - **Hide or delete a session.** **Delete** (File, Hide Session) takes the selected session out of

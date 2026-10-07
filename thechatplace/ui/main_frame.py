@@ -225,9 +225,13 @@ class MainFrame(wx.Frame):
         self._item(session, "Rem&ote Control...", lambda e: self.on_remote_control())
         self._item(session, "&Refresh\tF5",
                    lambda e: self.refresh_sessions(force=True, resort=True))
-        self._item(session, "H&ide Session\tDelete", lambda e: self.on_hide())
+        # Delete and Shift+Delete belong to the session list (its char hook):
+        # as menu accelerators they were window-wide, so Delete in the
+        # attachments list hid the loaded session instead of removing the file.
+        # The keys are in the labels, without a tab, so they're still read out.
+        self._item(session, "H&ide Session (Delete)", lambda e: self.on_hide())
         self._item(session, "&Bring Back Session", lambda e: self.on_unhide())
-        self._item(session, "Delete Session &Permanently...\tShift+Delete",
+        self._item(session, "Delete Session &Permanently (Shift+Delete)...",
                    lambda e: self.on_delete_permanently())
         self._item(session, "&Export Session...\tCtrl+E", lambda e: self.on_export())
         self._item(session, "Insert Command or S&kill...\tCtrl+/",
@@ -847,21 +851,27 @@ class MainFrame(wx.Frame):
         # Out of The Chat Place first: if that can't be saved, nothing is lost.
         if not self._store_write(self.store.remove, info.cli_session_id):
             return
+        if self._open is not None and self._open.key == info.key:
+            # Stop reading it before deleting it: Windows won't delete a file
+            # a background read has open.
+            self.unload_session()
+            self.session_list.SetFocus()
         try:
-            if path is not None and path.exists():
-                path.unlink()
-            folder = path.with_suffix("") if path is not None else None
-            if folder is not None and folder.is_dir():
-                shutil.rmtree(folder)  # its subagents' transcripts and tool output
+            _delete_transcript(path)
         except OSError as exc:
             wx.MessageBox(f"{info.title} is gone from The Chat Place, but its files "
                           f"couldn't all be deleted ({path}): {exc}", APP_NAME,
                           wx.OK | wx.ICON_WARNING, self)
+        # A deleted session left in a group or the hidden list is harmless.
         try:
             self.groups.forget(info.key)
-            self.hidden.show(info.key)
         except OSError:
-            pass  # a deleted session in a group or the hidden list is harmless
+            pass
+        if info.key in self.hidden:
+            try:
+                self.hidden.show(info.key)
+            except OSError:
+                pass
         self._attachments.pop(info.cli_session_id, None)
         self._leave_list(info)
         self._feedback(f"Deleted {info.title} permanently.")
@@ -3315,8 +3325,9 @@ class MainFrame(wx.Frame):
         if key == wx.WXK_BACK and not ctrl and focus is self.chat_list:
             self.focus_sessions()
             return
-        if key == wx.WXK_DELETE and focus is self.session_list:
-            if event.ShiftDown() and not ctrl and not event.AltDown():
+        if (key == wx.WXK_DELETE and focus is self.session_list
+                and not ctrl and not event.AltDown()):
+            if event.ShiftDown():
                 self.on_delete_permanently()  # as Shift+Delete is in Explorer
             else:
                 self.on_hide()
@@ -3439,6 +3450,27 @@ def _fitting_size(width: int, height: int):
         return (min(width, area.width - 40), min(height, area.height - 40))
     except Exception:  # noqa: BLE001
         return (width, height)
+
+
+def _delete_transcript(path, tries: int = 5) -> None:
+    """Delete a transcript and its folder (its subagents' transcripts and tool
+    output). A background read that was already under way when the session
+    was unloaded can hold the file open for a moment, and Windows won't delete
+    an open file, so a refusal is tried again briefly before it's reported."""
+    if path is None:
+        return
+    folder = path.with_suffix("")
+    for attempt in range(tries):
+        try:
+            if path.exists():
+                path.unlink()
+            if folder.is_dir():
+                shutil.rmtree(folder)
+            return
+        except PermissionError:
+            if attempt == tries - 1:
+                raise
+            time.sleep(0.1)
 
 
 def _same_but_age(old: str, new: str) -> bool:
