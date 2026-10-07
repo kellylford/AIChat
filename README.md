@@ -143,10 +143,12 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
 - **Open in Claude** (Ctrl+O) switches the desktop app to the session, for approving a permission
   prompt or answering a question card in a desktop app session.
 - **Cowork sessions.** The desktop app's Cowork sessions are listed too, read-only, as desktop app
-  sessions are. Each row ends "Cowork session", and View, Show Sessions, Cowork Sessions lists
-  only them. Enter reads the conversation, the list says when one is working, a finished turn is
-  announced, and Open in Claude switches the desktop app to it. They can't be continued here (see
-  Limitations). The desktop app's Chat conversations are kept on Anthropic's servers rather than
+  sessions are. Each row says "Cowork session", and in place of a repo folder it names the folder
+  you gave Cowork to work on, or says "Cowork" if there isn't one. View, Show Sessions, Cowork
+  Sessions lists only them. Enter reads the conversation, and Open in Claude switches the desktop
+  app to it. Whether the list can tell that a Cowork session is working (and so announce its
+  finished turn) depends on the version of Claude Code the desktop app runs it with: older ones
+  don't record it. They can't be continued here (see Limitations). The desktop app's Chat conversations are kept on Anthropic's servers rather than
   on your PC, so they aren't listed.
 - **Continue Here** (Ctrl+Shift+N, or the button beside Open in Claude) carries a desktop app
   session on in The Chat Place, as a copy: a new Chat Place session in the same folder, with the

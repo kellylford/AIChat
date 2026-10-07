@@ -288,6 +288,13 @@ def test_a_reused_pid_is_not_the_session(tmp_path):
     starts[200] = platform_paths.NOT_YOURS
     assert set(load_live_status(tmp_path, alive=lambda pid: True,
                                 started=starts.get)) == {"cli-1", "cli-3"}
+    # A procStart on another clock (.NET ticks, from Cowork's Claude Code,
+    # #91) can't be compared, so the pid is all there is.
+    (tmp_path / "400.json").write_text(json.dumps(
+        {"pid": 400, "sessionId": "cli-4", "status": "busy", "procStart": "639192376598308390"}))
+    starts[400] = started
+    assert "cli-4" in load_live_status(tmp_path, alive=lambda pid: True, started=starts.get)
+    (tmp_path / "400.json").unlink()
     # Not knowing when the process started: the pid is all there is.
     assert set(load_live_status(tmp_path, alive=lambda pid: True,
                                 started=lambda pid: None)) == {"cli-1", "cli-2", "cli-3"}

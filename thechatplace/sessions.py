@@ -19,7 +19,7 @@ import json
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Set
+from typing import Callable, Dict, Iterable, List, Optional, Set
 
 from . import platform_paths
 
@@ -63,6 +63,9 @@ class SessionInfo:
     #: The Claude Code home its transcript is under, when it isn't
     #: ``~/.claude`` (each Cowork session has its own).
     claude_home: Optional[Path] = None
+    #: The folder a Cowork session was given to work on ("" if none): its
+    #: cwd is always its own "outputs" folder, which says nothing.
+    cowork_folder: str = ""
 
     @property
     def is_own(self) -> bool:
@@ -70,6 +73,9 @@ class SessionInfo:
 
     @property
     def repo(self) -> str:
+        if self.cowork:
+            name = self.cowork_folder.rstrip("\\/").replace("\\", "/").split("/")[-1]
+            return name or "Cowork"
         cwd = (self.cwd or "").rstrip("\\/")
         if not cwd:
             return "unknown folder"
@@ -307,6 +313,11 @@ def load_live_status(directory: Optional[Path] = None,
     return result
 
 
+#: A ``procStart`` that is a Windows FILETIME falls between these: 2000 and 2200.
+_FILETIME_FROM = 125_911_584_000_000_000
+_FILETIME_TO = 189_025_920_000_000_000
+
+
 def _same_process(recorded, actual: Optional[int]) -> bool:
     """Whether the pid file's ``procStart`` is the running process's start.
     True when either isn't known: then the pid is all there is to go on. A
@@ -319,6 +330,10 @@ def _same_process(recorded, actual: Optional[int]) -> bool:
         return True
     if actual == platform_paths.NOT_YOURS:
         return False
+    if not _FILETIME_FROM <= recorded <= _FILETIME_TO:
+        # Another clock: Cowork's Claude Code 2.1.205 wrote .NET ticks since
+        # the year 1 (#91). It can't be compared, so it isn't held against it.
+        return True
     # The same clock read twice can differ in the last digits: a second apart
     # is still the same process; a reused pid started long after.
     return abs(recorded - actual) < 10_000_000
@@ -358,14 +373,16 @@ def load_desktop_sessions(directory: Optional[Path] = None,
     live = live if live is not None else {}
     result = DesktopLoadResult()
     for path in _newest_files(directories, "**/local_*.json"):
-        _add_desktop_session(result, path, live, include_archived)
+        _add_desktop_session(result, path, lambda: live, include_archived)
     # Each Cowork session's folder is a whole Claude Code home, so only
     # metadata files at the depth the desktop app writes them count. Its live
     # state is in that home too, not in ~/.claude/sessions.
     for path in _newest_files(cowork_directories, "*/*/local_*.json"):
         home = platform_paths.cowork_claude_home(path)
-        cowork_live = load_live_status(home / "sessions", alive=alive, started=started)
-        _add_desktop_session(result, path, cowork_live, include_archived, claude_home=home)
+        _add_desktop_session(
+            result, path,
+            lambda home=home: load_live_status(home / "sessions", alive=alive, started=started),
+            include_archived, claude_home=home)
     return result
 
 
@@ -387,9 +404,11 @@ def _newest_files(directories: Iterable[Path], pattern: str) -> List[Path]:
 
 
 def _add_desktop_session(result: DesktopLoadResult, path: Path,
-                         live: Dict[str, LiveStatus], include_archived: bool,
+                         live: Callable[[], Dict[str, LiveStatus]], include_archived: bool,
                          claude_home: Optional[Path] = None) -> None:
-    """Read one metadata file into ``result``. ``claude_home`` is given only
+    """Read one metadata file into ``result``. ``live`` gives the live state
+    to look it up in, read only for a session that isn't archived (each
+    Cowork session's is a folder of its own). ``claude_home`` is given only
     for a Cowork session."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -404,10 +423,14 @@ def _add_desktop_session(result: DesktopLoadResult, path: Path,
         result.desktop_cli_ids.add(cli_id)
     if data.get("isArchived") and not include_archived:
         return
-    info = desktop_session_from_metadata(data, live)
+    info = desktop_session_from_metadata(data, {} if data.get("isArchived") else live())
     if info is not None:
         info.cowork = claude_home is not None
         info.claude_home = claude_home
+        if info.cowork:
+            folders = data.get("userSelectedFolders")
+            if isinstance(folders, list) and folders and isinstance(folders[0], str):
+                info.cowork_folder = folders[0]
         result.sessions.append(info)
 
 

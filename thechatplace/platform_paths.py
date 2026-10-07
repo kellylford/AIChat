@@ -93,10 +93,11 @@ COWORK_DIR_NAME = "local-agent-mode-sessions"
 def cowork_sessions_dirs() -> List[Path]:
     """Every folder that holds the desktop app's Cowork session files (#91)
     that exists: the installer version's and the Store version's, as for
-    Code sessions."""
+    Code sessions. In the long form (``long_path``): the files in them are
+    already near Windows' 260-character limit."""
     candidates = [_roaming_dir() / "Claude" / COWORK_DIR_NAME,
                   *_store_app_sessions_dirs(COWORK_DIR_NAME)]
-    return [path for path in candidates if path.is_dir()]
+    return [long_path(path) for path in candidates if path.is_dir()]
 
 
 def cowork_claude_home(metadata_file: Path) -> Path:

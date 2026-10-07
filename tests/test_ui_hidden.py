@@ -101,8 +101,8 @@ def env(tmp_path, monkeypatch, app):
     activated = []
     from thechatplace.ui import mac_a11y
     monkeypatch.setattr(mac_a11y, "activate_app", lambda: activated.append(True) or True)
-    return {"desktop": desktop, "cowork": cowork, "projects": projects, "spoken": spoken, "copied": copied,
-            "feedback": feedback, "opened": opened, "boxes": boxes, "tmp": tmp_path,
+    return {"desktop": desktop, "cowork": cowork, "projects": projects, "spoken": spoken,
+            "copied": copied, "feedback": feedback, "opened": opened, "boxes": boxes, "tmp": tmp_path,
             "live": live, "notified": notified, "activated": activated}
 
 
@@ -1666,6 +1666,25 @@ def test_cowork_session_reads_opens_in_claude_and_wont_continue(frame, env, fake
     frame.on_open_session()
     assert frame.continue_btn.IsShown()
     assert "Continue Here starts" in frame.desktop_note.GetValue()
+
+
+def test_cowork_missing_transcript_and_bug_report_count(frame, env, monkeypatch):
+    folder = env["cowork"] / "acct" / "org"
+    folder.mkdir(parents=True)
+    (folder / "local_gone.json").write_text(json.dumps(
+        {"sessionId": "local_gone", "cliSessionId": "cli-gone", "cwd": "C:\\x\\outputs",
+         "title": "Gone one", "isArchived": False, "lastActivityAt": now_ms()}),
+        encoding="utf-8")
+    frame.refresh_sessions(force=True, resort=True)
+    settle(frame)
+    select(frame, "Gone one")
+    frame.on_open_session()
+    assert pump(lambda: frame._chat_loaded)
+    assert frame.chat_list.GetString(0).startswith("No transcript: this Cowork session's")
+    fills = _fake_bug_dialog(monkeypatch, "open", ("T", "W", "E", ""))
+    frame.on_report_bug()
+    assert any(line.startswith("Sessions listed: 2 desktop app Code, 1 desktop app Cowork, "
+                               "1 Chat Place") for line in fills.seen)
 
 
 def test_cowork_view_shows_only_cowork_sessions(frame, env):

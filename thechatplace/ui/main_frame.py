@@ -1004,9 +1004,12 @@ class MainFrame(wx.Frame):
         info = self._open
         if info is None:
             return
-        kind = ("Chat Place session" if info.is_own
-                else "Claude desktop app Cowork session, read-only" if info.cowork
-                else "Claude desktop app session, read-only")
+        if info.is_own:
+            kind = "Chat Place session"
+        elif info.cowork:
+            kind = "Claude desktop app Cowork session, read-only"
+        else:
+            kind = "Claude desktop app session, read-only"
         if info.is_own:
             own = self.store.get(info.cli_session_id)
             if own is not None:
@@ -1083,6 +1086,9 @@ class MainFrame(wx.Frame):
         elif info.is_own:
             line = ("No transcript found for this session. Claude Code may not have "
                     "saved it, or it was deleted.")
+        elif info.cowork:
+            line = ("No transcript: this Cowork session's history isn't in its folder in "
+                    "the desktop app's files. Open it in Claude to see it there.")
         else:
             line = ("No transcript: this session's history is no longer on disk. Claude "
                     "Code deletes transcripts after its retention period (cleanupPeriodDays "
@@ -3163,10 +3169,11 @@ class MainFrame(wx.Frame):
         """Help, Report a Bug (#28): what happened, plus non-sensitive facts
         about the app, to a GitHub issue (see bugreport.py)."""
         listed = [s for s in self._snapshot.sessions if not s.archived]
-        counts = {"desktop app": sum(1 for s in listed if not s.is_own and not s.cowork)}
+        code = sum(1 for s in listed if not s.is_own and not s.cowork)
         cowork = sum(1 for s in listed if s.cowork)
-        if cowork:
-            counts["Cowork"] = cowork
+        # Cowork ones are desktop app sessions too: split only when there are some.
+        counts = {"desktop app Code": code, "desktop app Cowork": cowork} if cowork \
+            else {"desktop app": code}
         counts["Chat Place"] = sum(1 for s in listed if s.is_own)
         facts = bugreport.environment(self.speech, counts,
                                       claude_version=self._claude_version or "checking")

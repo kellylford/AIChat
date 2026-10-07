@@ -139,6 +139,9 @@ def test_cowork_folders_both_installs(monkeypatch, tmp_path):
     monkeypatch.setattr(platform_paths.sys, "platform", "win32")
     monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "Local"))
+    # The long form is tested on its own; with sys.platform faked on a Mac
+    # it would make a nonsense path of the tmp folder.
+    monkeypatch.setattr(platform_paths, "long_path", lambda path: path)
     assert platform_paths.cowork_sessions_dirs() == []
     classic = tmp_path / "Roaming" / "Claude" / "local-agent-mode-sessions"
     store = (tmp_path / "Local" / "Packages" / "Claude_pzs8sxrjxfjjc" / "LocalCache"
@@ -149,6 +152,31 @@ def test_cowork_folders_both_installs(monkeypatch, tmp_path):
     write_cowork(store, title="From the Store app")
     titles = [s.title for s in load_desktop_sessions().sessions]
     assert titles == ["From the Store app"]
+
+
+def test_folder_is_the_one_cowork_was_given_not_outputs(tmp_path):
+    path, _home, _cwd = write_cowork(tmp_path / "cowork")
+    [info] = load(tmp_path).sessions
+    assert info.repo == "Cowork"
+    assert info.list_line(NOW).startswith("Sort the receipts, Cowork, idle")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["userSelectedFolders"] = ["C:\\Users\\k\\OneDrive\\Finance\\"]
+    path.write_text(json.dumps(data), encoding="utf-8")
+    [info] = load(tmp_path).sessions
+    assert info.repo == "Finance"
+    data["userSelectedFolders"] = [5, "C:\\x"]  # not what's expected: ignored
+    path.write_text(json.dumps(data), encoding="utf-8")
+    assert load(tmp_path).sessions[0].repo == "Cowork"
+
+
+def test_archived_cowork_live_state_is_not_read(tmp_path):
+    _path, home, _cwd = write_cowork(tmp_path / "cowork", archived=True)
+    (home / "sessions").mkdir()
+    (home / "sessions" / "7.json").write_text(json.dumps(
+        {"pid": 7, "sessionId": "cli-cw1", "status": "busy"}), encoding="utf-8")
+    seen = []
+    load(tmp_path, include_archived=True, alive=lambda pid: seen.append(pid) or True)
+    assert seen == []
 
 
 def test_cowork_claude_home_is_beside_the_metadata(tmp_path):
