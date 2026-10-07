@@ -3522,15 +3522,18 @@ def test_activating_does_nothing_off_macos(monkeypatch):
 def test_the_reply_box_grows_with_the_window(frame):
     """It was held at its minimum (about four lines) however big the window
     was, with all the extra height going to the messages list."""
-    def reply_height(size):
+    def heights(size):
         frame.SetSize(size)
         frame.Layout()
         frame.own_reply.Layout()
-        return frame.reply_text.GetSize().height
+        return frame.GetSize().height, frame.reply_text.GetSize().height
 
     select(frame, "Hub probe")
     frame.on_open_session()
-    small, large = reply_height((1000, 720)), reply_height((1440, 900))
+    # The window may not get as tall as asked (CI's Windows screen is small),
+    # so measure what it actually grew by.
+    (small_frame, small), (large_frame, large) = heights((1000, 720)), heights((1440, 900))
     assert small >= 120
-    assert large > small + 40
+    assert large_frame > small_frame
+    assert large - small >= (large_frame - small_frame) / 5  # about a third goes to the reply
     assert frame.chat_list.GetSize().height > frame.own_reply.GetSize().height
