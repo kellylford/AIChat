@@ -153,6 +153,9 @@ def file_text(changes: FileChanges) -> str:
             out.append(_where(hunk))
             for line in hunk.lines:
                 mark, text = line[:1], line[1:]
+                if mark == "\\":  # "\ No newline at end of file", about the line before
+                    out.append(f"Note: {text.strip()}")
+                    continue
                 word = {"+": "Added", "-": "Removed"}.get(mark, "Unchanged")
                 out.append(f"{word}: {text}" if text.strip() else f"{word}: blank line")
     return "\n".join(out)

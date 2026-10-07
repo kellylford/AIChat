@@ -178,7 +178,8 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   message, or in the whole session, each with its line counts ("main_frame.py, 40 lines added, 12
   removed, in theclaudehub\ui"). Enter on a file reads its changes in a text box, a line at a
   time: where each change is, then "Removed:", "Added:" and "Unchanged:" lines. It's built from the
-  transcript, so it works for desktop app sessions too, with no git needed. When the loaded
+  transcript, so it works for desktop app sessions too, with no git needed. Changes made by a
+  subagent Claude hands work to, and notebook edits, aren't counted yet. When the loaded
   session's turn ends, the announcement (at the full level) is followed by a one-line summary:
   "Changed 3 files: main_frame.py, 40 lines added, 12 removed; …".
 - **Usage and Context** (Ctrl+Shift+U, View menu) says how full the loaded session's context is

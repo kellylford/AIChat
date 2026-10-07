@@ -2748,23 +2748,46 @@ def test_changed_files_view_and_turn_end_summary(frame, env, monkeypatch):
     assert shown[0][0] == 0  # your latest message
     assert shown[0][1] == ["a.py, 2 lines added, 1 removed, in src"]
     assert "Removed: old\nAdded: new\nAdded: more" in shown[0][2]
-    # The turn ends: the reply, then what it changed.
+    # Changes there when the session loaded are old news; a turn's new ones
+    # are said after its reply, without cutting it off.
     frame._changes_due = True
-    with open(path, "a", encoding="utf-8") as handle:
-        handle.write(json.dumps(assistant_block(text_block("All done."), "m3")) + "\n")
     frame._refresh_chat()
-    assert pump(lambda: any("Changed 1 file" in s for s in env["spoken"]))
-    assert env["spoken"][-2] == "Quiet one replied. All done."
-    assert env["spoken"][-1] == ("Quiet one: Changed 1 file: a.py, 2 lines added, 1 removed. "
-                                 "Ctrl+Shift+D shows the changes.")
+    pump(lambda: not frame._changes_due)
+    assert not any("Changed" in t for t in env["spoken"] + env["feedback"])
+    with open(path, "a", encoding="utf-8") as handle:
+        handle.write(json.dumps(user_text("And the docs")) + "\n")
+        handle.write(json.dumps(assistant_block(tool_use_block(
+            "Write", {"file_path": "C:\\G\\Repo\\README.md", "content": "Hi\n"}, "t2"),
+            "m3")) + "\n")
+        handle.write(json.dumps(tool_result("t2", "Created.", toolUseResult={
+            "type": "create", "filePath": "C:\\G\\Repo\\README.md", "content": "Hi\n",
+            "structuredPatch": []})) + "\n")
+        handle.write(json.dumps(assistant_block(text_block("All done."), "m4")) + "\n")
+    frame._changes_due = True
+    frame._refresh_chat()
+    assert pump(lambda: any("Changed 1 file" in t for t in env["feedback"]))
+    assert env["spoken"][-1] == "Quiet one replied. All done."
+    assert env["feedback"][-1] == ("Quiet one: Changed 1 file: README.md, created, 1 line. "
+                                   "Ctrl+Shift+D shows the changes.")
     assert not frame._changes_due
+    # Another turn with no changes (a background task's, say): nothing again.
+    count = len(env["feedback"])
+    with open(path, "a", encoding="utf-8") as handle:
+        handle.write(json.dumps(assistant_block(text_block("Task finished."), "m5")) + "\n")
+    frame._changes_due = True
+    frame._refresh_chat()
+    pump(lambda: not frame._changes_due)
+    assert not any("Changed" in t for t in env["feedback"][count:])
     # A new message with no changes yet: the view starts on the whole session.
     with open(path, "a", encoding="utf-8") as handle:
         handle.write(json.dumps(user_text("Thanks")) + "\n")
     frame._refresh_chat()
-    assert pump(lambda: frame.chat_list.GetCount() == 4)
+    assert pump(lambda: frame._chat_turns == 3)
     frame.on_changes()
-    assert shown[-1][0] == 1 and shown[-1][1] == ["a.py, 2 lines added, 1 removed, in src"]
+    assert shown[-1][0] == 1 and len(shown[-1][1]) == 2
+    # A summary due for a session that's no longer loaded isn't said.
+    frame._say_changes(frame._open_generation - 1)
+    assert frame._changes_due is False
 
 
 def test_changed_files_with_nothing_changed(frame, env):

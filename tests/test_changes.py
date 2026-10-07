@@ -1,6 +1,6 @@
 """What a turn changed in files (#18)."""
 from theclaudehub.changes import by_file, edit_from_tool, file_text, summary_text
-from theclaudehub.transcript import parse_lines
+from theclaudehub.transcript import TranscriptParser, parse_lines
 
 from records import assistant_block, lines, text_block, tool_result, tool_use_block, user_text
 
@@ -72,3 +72,25 @@ def test_transcript_keeps_successful_edits_by_turn():
     assert [(e.path, e.turn) for e in tr.edits] == [("a.py", 1), ("README.md", 2)]
     assert tr.turns == 2
     assert [e.path for e in tr.latest_turn_edits()] == ["README.md"]
+
+
+def test_notes_deletions_and_writes_over_a_file():
+    patch = [{"oldStart": 5, "oldLines": 2, "newStart": 5, "newLines": 0,
+              "lines": ["-gone", "-also gone", "\\ No newline at end of file"]}]
+    edit = edit_from_tool("Edit", {}, {"filePath": "a.py", "structuredPatch": patch}, 1)
+    assert file_text(by_file([edit])[0]).split("\n")[2:] == [
+        "At line 5:", "Removed: gone", "Removed: also gone", "Note: No newline at end of file"]
+    update = edit_from_tool("Write", {"file_path": "b.txt", "content": "one\nTWO\n"},
+                            {"type": "update", "filePath": "b.txt", "content": "one\nTWO\n",
+                             "originalFile": "one\ntwo\n", "structuredPatch": []}, 1)
+    assert (update.created, update.added, update.removed) == (False, 1, 1)
+
+
+def test_a_result_read_later_than_its_call_still_counts():
+    parser = TranscriptParser()
+    parser.feed(lines(user_text("Go"), assistant_block(tool_use_block(
+        "Edit", {"file_path": "a.py", "old_string": "x", "new_string": "y"}, "t1"), "m1")))
+    assert parser.transcript.edits == []
+    parser.feed(lines(tool_result("t1", "Updated.", toolUseResult={
+        "filePath": "a.py", "structuredPatch": PATCH})))
+    assert [e.path for e in parser.transcript.edits] == ["a.py"]
