@@ -57,6 +57,20 @@ Versions below 1.0 publish as pre-releases. Both platforms update through Velopa
 (`updater.CHANNEL`). Velopack calls every Mac app portable, so the portable check is Windows-only
 (`updater.PORTABLE_COPIES_EXIST`); applying it on a Mac silently stops all Mac updates.
 
+**Release notes and the user guide, with every user-visible change** (the QuickMail process):
+- The **open** notes file is the highest `release-notes/vX.Y.Z.md` with no matching tag. Add an
+  entry there with each PR, citing it (`(#90)`); if none is open, start the next patch version's
+  file. Internal changes (tests, CI, refactors) need no entry. `__version__` is bumped only in
+  the release commit, so the notes file can wait on main ahead of it.
+- The order: a short intro (what it updates, pre-release or not, that it offers itself as an
+  update), then **Changed**, **Fixed** and **Added** as needed (what shipped is what people came to
+  read), then the footers, copied from the last release: **Reporting Issues**, **Downloads**,
+  **Requirements**, and the independence line.
+- Write for users: say what they'll notice, in plain words, with the menu path and the key. Don't
+  name a screen reader unless the change is specific to one; say "screen readers".
+- The **README is the user guide**: update it in the same PR whenever behaviour changes, along
+  with `ui_text.py` (`SHORTCUTS`) and `tools/make_docs.py`'s output in `docs/` when a key changes.
+
 ## Architecture
 
 **Data flow.** The app reads files that belong to the Claude desktop app and Claude Code. Their
