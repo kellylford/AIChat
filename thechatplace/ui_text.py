@@ -45,6 +45,9 @@ SHORTCUTS = [
                    "from Group and Manage Groups are on the File menu"),
         ("Delete", "Hide the selected session; View, Show Sessions, Hidden lists hidden "
                    "sessions, and File, Bring Back Session returns one"),
+        ("Shift+Delete", "Delete one of The Chat Place's own sessions permanently, "
+                         "transcript and all, after you confirm (desktop app sessions "
+                         "can only be hidden)"),
         ("Ctrl+F", "Show only sessions whose title, folder or what they need contains some "
                    "text; Escape in the list shows them all again"),
     ]),

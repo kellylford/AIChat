@@ -225,9 +225,13 @@ class MainFrame(wx.Frame):
         self._item(session, "Rem&ote Control...", lambda e: self.on_remote_control())
         self._item(session, "&Refresh\tF5",
                    lambda e: self.refresh_sessions(force=True, resort=True))
-        self._item(session, "H&ide Session\tDelete", lambda e: self.on_hide())
+        # Delete and Shift+Delete belong to the session list (its char hook):
+        # as menu accelerators they were window-wide, so Delete in the
+        # attachments list hid the loaded session instead of removing the file.
+        # The keys are in the labels, without a tab, so they're still read out.
+        self._item(session, "H&ide Session (Delete)", lambda e: self.on_hide())
         self._item(session, "&Bring Back Session", lambda e: self.on_unhide())
-        self._item(session, "Delete Session &Permanently...",
+        self._item(session, "Delete Session &Permanently (Shift+Delete)...",
                    lambda e: self.on_delete_permanently())
         self._item(session, "&Export Session...\tCtrl+E", lambda e: self.on_export())
         self._item(session, "Insert Command or S&kill...\tCtrl+/",
@@ -821,8 +825,11 @@ class MainFrame(wx.Frame):
         self._refresh_list_in_place()
 
     def on_delete_permanently(self):
-        """File, Delete Session Permanently: one of The Chat Place's hidden
-        sessions, gone for good, its Claude Code transcript with it."""
+        """File, Delete Session Permanently (Shift+Delete): one of The Chat
+        Place's own sessions, gone for good, its Claude Code transcript with
+        it. It works from any view, hidden or not: having to hide a session
+        first and then find it in the Hidden view was a hunt nobody could
+        guess, and the confirmation (No by default) is the safeguard."""
         info = self._selected_session()
         if info is None:
             self._feedback("No session selected.")
@@ -831,16 +838,25 @@ class MainFrame(wx.Frame):
             self._feedback(f"{info.title} is a desktop app session: delete it in the desktop "
                            "app. Here it can only be hidden.")
             return
-        if info.key not in self.hidden:
-            self._feedback(f"Hide {info.title} first (Delete); then it can be deleted "
-                           "permanently from View, Show Sessions, Hidden.")
+        # Desktop sessions are read-only, and this deletes files: an own
+        # session whose id is one the desktop app knows (a fork that kept its
+        # source's id, say) would take the desktop app's transcript with it.
+        if (info.cli_session_id in self._snapshot.desktop_cli_ids
+                or info.cli_session_id.startswith("local_")):
+            self._feedback(f"{info.title} shares its id with a desktop app session, so "
+                           "its files aren't deleted here. It can be hidden.")
             return
         if info.cli_session_id in self._runners:
             self._feedback("A turn is running in that session. Stop it first.")
             return
+        if info.state == WORKING:
+            # Resumed in a terminal: that claude is still writing it.
+            self._feedback(f"{info.title} is working outside The Chat Place. Let it "
+                           "finish first.")
+            return
         answer = wx.MessageBox(
             f"Delete \"{info.title}\" permanently? Its conversation (Claude Code's "
-            "transcript) is deleted from this PC and can't be brought back.",
+            "transcript) is deleted from this computer and can't be brought back.",
             "Delete Session Permanently", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING, self)
         if answer != wx.YES:
             return
@@ -848,38 +864,57 @@ class MainFrame(wx.Frame):
         # Out of The Chat Place first: if that can't be saved, nothing is lost.
         if not self._store_write(self.store.remove, info.cli_session_id):
             return
+        was_loaded = self._open is not None and self._open.key == info.key
+        if was_loaded:
+            # Stop reading it before deleting it: Windows won't delete a file
+            # a background read has open.
+            self.unload_session()
+        failed = None
         try:
-            if path is not None and path.exists():
-                path.unlink()
-            folder = path.with_suffix("") if path is not None else None
-            if folder is not None and folder.is_dir():
-                shutil.rmtree(folder)  # its subagents' transcripts and tool output
+            _delete_transcript(path)
         except OSError as exc:
-            wx.MessageBox(f"{info.title} is gone from The Chat Place, but its files "
-                          f"couldn't all be deleted ({path}): {exc}", APP_NAME,
-                          wx.OK | wx.ICON_WARNING, self)
+            failed = exc
+        # A deleted session left in a group or the hidden list is harmless.
         try:
             self.groups.forget(info.key)
-            self.hidden.show(info.key)
         except OSError:
-            pass  # a deleted session in a group or the hidden list is harmless
-        self._attachments.pop(info.cli_session_id, None)
-        self._leave_list(info)
-        self._feedback(f"Deleted {info.title} permanently.")
+            pass
+        if info.key in self.hidden:
+            try:
+                self.hidden.show(info.key)
+            except OSError:
+                pass
+        # Nothing of it may linger: an unsent draft would hold back updates
+        # (_unsent_text) for a reply box that no longer exists.
+        for per_session in (self._attachments, self._drafts, self._queued,
+                            self._pending, self._denials):
+            per_session.pop(info.cli_session_id, None)
+        self._leave_list(info, refocus=was_loaded)
+        if failed is not None:
+            wx.MessageBox(f"{info.title} is gone from The Chat Place, but its files "
+                          f"couldn't all be deleted ({path}): {failed}", APP_NAME,
+                          wx.OK | wx.ICON_WARNING, self)
+            self._feedback(f"Removed {info.title} from The Chat Place; its files are "
+                           "still on this computer.")
+        else:
+            self._feedback(f"Deleted {info.title} permanently.")
 
-    def _leave_list(self, info: SessionInfo):
+    def _leave_list(self, info: SessionInfo, refocus: bool = False):
         """``info`` leaves the list: the neighbour moves into its row, and if
-        it was loaded, nothing is."""
+        it was loaded, nothing is. Focus comes to the list only once the row
+        is gone, so a screen reader reads the neighbour, not the departed one."""
         if self._open is not None and self._open.key == info.key:
             self.unload_session()
-            # Its messages and reply box are gone: don't leave focus on them.
-            self.session_list.SetFocus()
+            refocus = True
         index = self._list_keys.index(info.key) if info.key in self._list_keys else -1
         if index >= 0:
             self.session_list.Delete(index)
             del self._list_keys[index]
             if self._list_keys:
                 self.session_list.SetSelection(min(index, len(self._list_keys) - 1))
+        if refocus:
+            # Its messages and reply box are gone: don't leave focus on them.
+            self.session_list.SetFocus()
         self.refresh_sessions()
 
     # ----------------------------------------------------------- session view
@@ -3316,8 +3351,12 @@ class MainFrame(wx.Frame):
         if key == wx.WXK_BACK and not ctrl and focus is self.chat_list:
             self.focus_sessions()
             return
-        if key == wx.WXK_DELETE and focus is self.session_list:
-            self.on_hide()
+        if (key == wx.WXK_DELETE and focus is self.session_list
+                and not ctrl and not event.AltDown()):
+            if event.ShiftDown():
+                self.on_delete_permanently()  # as Shift+Delete is in Explorer
+            else:
+                self.on_hide()
             return
         if key == wx.WXK_DELETE and focus is self.chat_list \
                 and self._selected_queued() is not None:
@@ -3437,6 +3476,27 @@ def _fitting_size(width: int, height: int):
         return (min(width, area.width - 40), min(height, area.height - 40))
     except Exception:  # noqa: BLE001
         return (width, height)
+
+
+def _delete_transcript(path, tries: int = 5) -> None:
+    """Delete a transcript and its folder (its subagents' transcripts and tool
+    output). A background read that was already under way when the session
+    was unloaded can hold the file open for a moment, and Windows won't delete
+    an open file, so a refusal is tried again briefly before it's reported."""
+    if path is None:
+        return
+    folder = path.with_suffix("")
+    for attempt in range(tries):
+        try:
+            if path.exists():
+                path.unlink()
+            if folder.is_dir():
+                shutil.rmtree(folder)
+            return
+        except PermissionError:
+            if attempt == tries - 1:
+                raise
+            time.sleep(0.1)
 
 
 def _same_but_age(old: str, new: str) -> bool:
