@@ -118,9 +118,6 @@ def main(argv: Optional[list] = None) -> int:
     # app with hook arguments and expects it to exit, before anything else.
     from . import updater
 
-    # TheClaudeHub's sessions, groups and settings, before anything here
-    # writes to the new folder (#25).
-    platform_paths.carry_over_old_data()
     # Logging before the hooks, so a failed install or update hook is recorded.
     updater.configure_logging()
     updater.bootstrap()
@@ -146,6 +143,11 @@ def main(argv: Optional[list] = None) -> int:
             wx.MessageBox("The Chat Place is already running. Switch to it with Alt+Tab.",
                           APP_TITLE, wx.OK | wx.ICON_INFORMATION)
         return 0
+    # TheClaudeHub's sessions, groups and settings (#25): only here, in the
+    # one running copy and before they're read, never for a smoke test or an
+    # install hook.
+    for problem in platform_paths.carry_over_old_data():
+        updater.logger.warning("Carrying over from TheClaudeHub: %s", problem)
     frame = MainFrame()
     frame.Centre()
     frame.Show()
