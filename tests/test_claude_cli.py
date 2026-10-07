@@ -823,3 +823,13 @@ def test_the_message_waits_for_initialize_and_is_never_sent_to_a_fable_default(t
     _runner, events, _ = run_turn(process, tmp_path, command=["claude", "-p", "--model", "opus"])
     assert events[-1].kind == "finished"
     assert b'"type": "user"' in process.written
+
+
+def test_an_old_claude_code_is_told_to_update():
+    # Claude Code 2.1.258 on a Mac, which predates --permission-prompts.
+    text = cli.exit_message(1, "error: unknown option '--permission-prompts'")
+    assert text.startswith("Claude Code is too old for The Chat Place")
+    assert "--permission-prompts" in text and "claude update" in text
+    assert cli.exit_message(3, "boom") == \
+        "Claude exited without finishing the turn (exit code 3). boom"
+    assert cli.exit_message(3, "") == "Claude exited without finishing the turn (exit code 3)."
