@@ -44,9 +44,11 @@ def env(tmp_path, monkeypatch, app):
     desktop = tmp_path / "desktop"
     live = tmp_path / "live"
     projects = tmp_path / "projects"
-    for folder in (desktop, live, projects):
+    cowork = tmp_path / "cowork"
+    for folder in (desktop, live, projects, cowork):
         folder.mkdir()
     monkeypatch.setattr(platform_paths, "desktop_sessions_dirs", lambda: [desktop])
+    monkeypatch.setattr(platform_paths, "cowork_sessions_dirs", lambda: [cowork])
     monkeypatch.setattr(platform_paths, "live_sessions_dir", lambda: live)
     monkeypatch.setattr(platform_paths, "projects_dir", lambda: projects)
     monkeypatch.setattr(speech, "DEFAULT_SETTINGS_PATH", tmp_path / "speech.json")
@@ -99,7 +101,7 @@ def env(tmp_path, monkeypatch, app):
     activated = []
     from thechatplace.ui import mac_a11y
     monkeypatch.setattr(mac_a11y, "activate_app", lambda: activated.append(True) or True)
-    return {"desktop": desktop, "projects": projects, "spoken": spoken, "copied": copied,
+    return {"desktop": desktop, "cowork": cowork, "projects": projects, "spoken": spoken, "copied": copied,
             "feedback": feedback, "opened": opened, "boxes": boxes, "tmp": tmp_path,
             "live": live, "notified": notified, "activated": activated}
 
@@ -1616,6 +1618,65 @@ def test_continue_here_needs_a_transcript_and_a_desktop_session(frame, env, fake
     assert env["feedback"][-1] == ("Hub probe is already a Chat Place session; "
                                    "reply to it here.")
     assert fake_runner.instances == []
+
+
+# -- the desktop app's Cowork sessions (#91) ----------------------------------------------
+
+
+def add_cowork(env, local, cli, title, *records):
+    """A Cowork session, laid out as the desktop app does: metadata, and a
+    folder beside it that is the session's own Claude Code home."""
+    folder = env["cowork"] / "acct" / "org"
+    folder.mkdir(parents=True, exist_ok=True)
+    cwd = str(folder / local / "outputs")
+    (folder / f"{local}.json").write_text(json.dumps(
+        {"sessionId": local, "cliSessionId": cli, "cwd": cwd, "title": title,
+         "isArchived": False, "lastActivityAt": now_ms() - 30_000}), encoding="utf-8")
+    projects = (platform_paths.long_path(folder / local / ".claude") / "projects"
+                / platform_paths.encode_cwd(cwd))
+    projects.mkdir(parents=True)
+    (projects / f"{cli}.jsonl").write_text("\n".join(lines(*records)) + "\n", encoding="utf-8")
+
+
+def test_cowork_session_reads_opens_in_claude_and_wont_continue(frame, env, fake_runner,
+                                                                monkeypatch):
+    add_cowork(env, "local_cw", "cli-cw", "Sort the receipts",
+               user_text("Total these"), assistant_block(text_block("It's 42 dollars."), "m1"))
+    frame.refresh_sessions(force=True, resort=True)
+    settle(frame)
+    row = select(frame, "Sort the receipts")
+    assert frame.session_list.GetString(row).endswith("Cowork session")
+    frame.on_open_session()
+    assert pump(lambda: frame._chat_loaded and frame.chat_list.GetCount() == 2)
+    assert "It's 42 dollars." in frame.chat_list.GetString(1)
+    assert frame.session_heading.GetLabel().endswith(
+        "Claude desktop app Cowork session, read-only.")
+    assert frame.desktop_reply.IsShown() and not frame.own_reply.IsShown()
+    assert not frame.continue_btn.IsShown()
+    assert "Cowork" in frame.desktop_note.GetValue()
+    frame.on_send()  # read-only, like any desktop app session
+    assert frame._runners == {}
+    frame.on_open_in_claude()
+    assert env["opened"] == ["claude://claude.ai/cowork/local_cw"]
+    frame.on_continue_here()
+    assert "can't be continued here" in env["boxes"][-1]
+    assert fake_runner.instances == []
+    # A Code session after it gets its note and Continue Here back.
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    assert frame.continue_btn.IsShown()
+    assert "Continue Here starts" in frame.desktop_note.GetValue()
+
+
+def test_cowork_view_shows_only_cowork_sessions(frame, env):
+    from thechatplace.sessions import VIEW_COWORK
+    add_cowork(env, "local_cw", "cli-cw", "Sort the receipts", user_text("Hi"))
+    frame.refresh_sessions(force=True, resort=True)
+    settle(frame)
+    frame.on_view(VIEW_COWORK)
+    assert env["feedback"][-1] == "Showing Cowork sessions: 1 session."
+    assert [frame.session_list.GetString(i).split(",")[0]
+            for i in range(frame.session_list.GetCount())] == ["Sort the receipts"]
 
 
 # -- full messages as a formatted page (#190) ----------------------------------------------

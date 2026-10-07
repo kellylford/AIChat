@@ -42,7 +42,8 @@ def collect(own: Iterable[OwnSession], running_own_ids: Set[str],
     # Archived ones too, flagged: the list shows them only in its Archived view
     # (#32) or a group they're in.
     desktop: DesktopLoadResult = load_desktop_sessions(desktop_dir, live,
-                                                       include_archived=True)
+                                                       include_archived=True,
+                                                       alive=alive, started=started)
     sessions = list(desktop.sessions)
     waiting = waiting or {}
     for item in own:

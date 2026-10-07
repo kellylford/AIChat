@@ -11,6 +11,9 @@ app (none of this is documented, so every caller treats it as best effort):
   ``%APPDATA%\\Claude\\claude-code-sessions\\<id>\\<orgId>\\local_<id>.json``,
   or for the Microsoft Store version
   ``%LOCALAPPDATA%\\Packages\\Claude_<id>\\LocalCache\\Roaming\\Claude\\claude-code-sessions``
+* Cowork sessions (#91): ``local-agent-mode-sessions\\<id>\\<orgId>\\local_<id>.json``
+  in the same two ``Claude`` folders. The ``local_<id>`` folder beside each is
+  the session's own Claude Code home (``.claude\\projects\\...\\<cli>.jsonl``).
 * Transcripts: ``%USERPROFILE%\\.claude\\projects\\<encoded cwd>\\<cliSessionId>.jsonl``
 * Live sessions: ``%USERPROFILE%\\.claude\\sessions\\<pid>.json``
 * The Chat Place's own files: ``%APPDATA%\\TheChatPlace\\``
@@ -59,7 +62,7 @@ def desktop_sessions_dir() -> Path:
     return _roaming_dir() / "Claude" / "claude-code-sessions"
 
 
-def _store_app_sessions_dirs() -> List[Path]:
+def _store_app_sessions_dirs(name: str = "claude-code-sessions") -> List[Path]:
     """The same folder for the Microsoft Store (MSIX) version of the desktop
     app (issue #183). Windows redirects a packaged app's AppData writes into
     its package folder, so ``%APPDATA%\\Claude`` doesn't exist there. Matched
@@ -70,7 +73,7 @@ def _store_app_sessions_dirs() -> List[Path]:
     local = os.environ.get("LOCALAPPDATA")
     packages = Path(local) / "Packages" if local else Path.home() / "AppData" / "Local" / "Packages"
     try:
-        return sorted(p / "LocalCache" / "Roaming" / "Claude" / "claude-code-sessions"
+        return sorted(p / "LocalCache" / "Roaming" / "Claude" / name
                       for p in packages.glob("Claude_*"))
     except OSError:
         return []
@@ -82,6 +85,42 @@ def desktop_sessions_dirs() -> List[Path]:
     the old folder behind); callers read all of them."""
     candidates = [desktop_sessions_dir(), *_store_app_sessions_dirs()]
     return [path for path in candidates if path.is_dir()]
+
+
+COWORK_DIR_NAME = "local-agent-mode-sessions"
+
+
+def cowork_sessions_dirs() -> List[Path]:
+    """Every folder that holds the desktop app's Cowork session files (#91)
+    that exists: the installer version's and the Store version's, as for
+    Code sessions."""
+    candidates = [_roaming_dir() / "Claude" / COWORK_DIR_NAME,
+                  *_store_app_sessions_dirs(COWORK_DIR_NAME)]
+    return [path for path in candidates if path.is_dir()]
+
+
+def cowork_claude_home(metadata_file: Path) -> Path:
+    """A Cowork session's own Claude Code home. The ``local_<id>`` folder
+    beside its ``local_<id>.json`` holds a ``.claude`` folder with the
+    session's ``projects`` (transcripts) and ``sessions`` (pid files); Cowork
+    doesn't use ``~/.claude``."""
+    return long_path(metadata_file.with_suffix("") / ".claude")
+
+
+def long_path(path: Path) -> Path:
+    """``path`` in a form Windows opens however long it gets. A Cowork
+    transcript's path is the session folder (already ~200 characters in the
+    Store app's package folder) plus its cwd encoded again, well past the 260
+    Windows allows unless long paths are turned on, which they aren't by
+    default. The ``\\\\?\\`` form has no such limit."""
+    if sys.platform != "win32":
+        return path
+    text = str(path)
+    if text.startswith("\\\\?\\") or not path.is_absolute():
+        return path
+    if text.startswith("\\\\"):
+        return Path("\\\\?\\UNC\\" + text[2:])
+    return Path("\\\\?\\" + text)
 
 
 def app_icon_path() -> Path:

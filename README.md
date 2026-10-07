@@ -48,7 +48,7 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   and a new one is added at the end. F5, or a refresh while you're elsewhere, puts it back in
   order, keeping you on the same session.
   **View, Show Sessions** (Alt+V, H) chooses which sessions are listed: all, needs you or
-  working, needs you, desktop app sessions, The Chat Place's own, Remote Control sessions (ones
+  working, needs you, desktop app sessions, Cowork sessions, The Chat Place's own, Remote Control sessions (ones
   the desktop app has linked for Remote Control), archived (the desktop app's archived
   sessions, otherwise hidden), or one of your groups. The list's name says what it shows and how
   many ("Session list, needs you, 2 of 139"), and the choice is remembered.
@@ -142,6 +142,12 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   back. Headings carry the time, and the date whenever the day changes.
 - **Open in Claude** (Ctrl+O) switches the desktop app to the session, for approving a permission
   prompt or answering a question card in a desktop app session.
+- **Cowork sessions.** The desktop app's Cowork sessions are listed too, read-only, as desktop app
+  sessions are. Each row ends "Cowork session", and View, Show Sessions, Cowork Sessions lists
+  only them. Enter reads the conversation, the list says when one is working, a finished turn is
+  announced, and Open in Claude switches the desktop app to it. They can't be continued here (see
+  Limitations). The desktop app's Chat conversations are kept on Anthropic's servers rather than
+  on your PC, so they aren't listed.
 - **Continue Here** (Ctrl+Shift+N, or the button beside Open in Claude) carries a desktop app
   session on in The Chat Place, as a copy: a new Chat Place session in the same folder, with the
   whole conversation so far in its messages, that you reply to here. You type its first message
@@ -438,6 +444,7 @@ Everything it reads is on your own PC, so reading costs nothing.
 | What | Where |
 |---|---|
 | The desktop app's sessions | `%APPDATA%\Claude\claude-code-sessions\<id>\<org>\local_<id>.json`: title, folder, last activity, archived, and sometimes a summary of the last turn that says whether it needs you. Archived sessions are left out. The Microsoft Store version of the desktop app keeps the same files in `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude\claude-code-sessions`; both places are read, and a session in both is read from the newer copy. |
+| The desktop app's Cowork sessions | `%APPDATA%\Claude\local-agent-mode-sessions\<id>\<org>\local_<id>.json`, and the same under the Store version's package folder. The `local_<id>` folder beside each is that session's own Claude Code home: its conversation is in `.claude\projects\<folder>\<session>.jsonl` and its busy or idle file in `.claude\sessions`, not in `%USERPROFILE%\.claude`. Those paths are longer than Windows' usual 260-character limit, so they're read with the `\\?\` long-path form. |
 | Whether a session is working | `%USERPROFILE%\.claude\sessions\<pid>.json`, which says busy or idle while Claude Code runs it. Files whose process has gone are ignored. |
 | The conversation | `%USERPROFILE%\.claude\projects\<folder>\<session>.jsonl`, where `<folder>` is the session's folder with every character that isn't a letter or digit turned into `-`. This was checked against every transcript on Kelly's PC; if it ever misses, the app searches all the project folders for the session id instead. |
 | The Chat Place's own sessions | `%APPDATA%\TheChatPlace\sessions.json` (and `speech.json` for settings). If `sessions.json` can't be read, it's renamed to `sessions.json.bad-<date>` rather than overwritten, and the app says so. |
@@ -546,6 +553,9 @@ Checked with Claude Code 2.1.286 (issues #187 and #188):
   (`cleanupPeriodDays`, 90 days on Kelly's PC). The chat says so.
 - The Chat Place's own sessions don't appear in the desktop app, so Open in Claude doesn't work for
   them; the app says so.
+- Cowork sessions can't be continued here. Their conversation is in the session's own Claude Code
+  folder inside the desktop app's files, where `claude -p` on your PC can't resume it, and Cowork
+  runs its tools in the desktop app's own sandbox. Open in Claude carries on there.
 - Subagent conversations are left out of the chat.
 - Turns of The Chat Place's own sessions are also spoken by ClaudeSpeak's Stop hook, if that's
   installed, since `claude -p` runs hooks; so a reply can be heard twice.

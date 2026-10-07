@@ -93,8 +93,28 @@ ACTIVITY_DELAY_MS = 1200
 _REPLY_KINDS = (ASSISTANT, QUESTION, PLAN, ERROR)
 
 
-def claude_link(desktop_session_id: str) -> str:
-    return f"claude://claude.ai/epitaxy/{desktop_session_id}"
+#: The read-only note where a desktop app session's reply box would be.
+_DESKTOP_NOTE = (
+    "This session belongs to the Claude desktop app, so you reply to it "
+    "in Claude. The Chat Place only reads it: sending from here while the "
+    "desktop app has it open could run two turns at once and tangle "
+    "the conversation. Open in Claude switches the desktop app to it. "
+    "Continue Here starts a Chat Place copy of it, with the whole "
+    "conversation so far, that you can reply to here; the desktop app "
+    "session isn't changed.")
+#: The same for a Cowork session (#91), which can't be continued here.
+_COWORK_NOTE = (
+    "This is a Cowork session in the Claude desktop app, so you reply to it "
+    "in Claude. The Chat Place only reads it. Open in Claude switches the "
+    "desktop app to it. Cowork keeps its conversation inside the desktop app's "
+    "own folders, so it can't be continued here.")
+
+
+def claude_link(info: SessionInfo) -> str:
+    """The desktop app's own link to a session: its Code page, or for a
+    Cowork session (#91) the page the app's own notifications open."""
+    page = "cowork" if info.cowork else "epitaxy"
+    return f"claude://claude.ai/{page}/{info.desktop_session_id}"
 
 
 #: The narrowest the lists go. Without it a list's minimum is its longest row
@@ -381,13 +401,7 @@ class MainFrame(wx.Frame):
         dsizer.Add(wx.StaticText(self.desktop_reply, label="About replying:"), 0, wx.BOTTOM, 4)
         self.desktop_note = wx.TextCtrl(
             self.desktop_reply, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_RICH2,
-            value=("This session belongs to the Claude desktop app, so you reply to it "
-                   "in Claude. The Chat Place only reads it: sending from here while the "
-                   "desktop app has it open could run two turns at once and tangle "
-                   "the conversation. Open in Claude switches the desktop app to it. "
-                   "Continue Here starts a Chat Place copy of it, with the whole "
-                   "conversation so far, that you can reply to here; the desktop app "
-                   "session isn't changed."))
+            value=_DESKTOP_NOTE)
         set_accessible_name(self.desktop_note, "About replying")
         self.desktop_note.SetMinSize((-1, 120))
         dsizer.Add(self.desktop_note, 1, wx.EXPAND)
@@ -592,7 +606,7 @@ class MainFrame(wx.Frame):
                     for info in ended:
                         if info.is_own or not info.cli_session_id:
                             continue  # own sessions announce from their own turn
-                        path = platform_paths.transcript_path(info.cwd, info.cli_session_id)
+                        path = info.transcript_path()
                         replies[info.key] = last_reply_from_tail(path) if path else ""
                 wx.CallAfter(self._apply_snapshot, snap, ended, replies, force, resort)
             except Exception as exc:  # noqa: BLE001
@@ -924,6 +938,9 @@ class MainFrame(wx.Frame):
         self._update_messages_label()
         self.own_reply.Show(info.is_own)
         self.desktop_reply.Show(not info.is_own)
+        if not info.is_own:
+            self.desktop_note.SetValue(_COWORK_NOTE if info.cowork else _DESKTOP_NOTE)
+            self.continue_btn.Show(not info.cowork)
         self.session_view.Layout()
         self._update_heading()
         self._update_send_state()
@@ -987,7 +1004,9 @@ class MainFrame(wx.Frame):
         info = self._open
         if info is None:
             return
-        kind = "Chat Place session" if info.is_own else "Claude desktop app session, read-only"
+        kind = ("Chat Place session" if info.is_own
+                else "Claude desktop app Cowork session, read-only" if info.cowork
+                else "Claude desktop app session, read-only")
         if info.is_own:
             own = self.store.get(info.cli_session_id)
             if own is not None:
@@ -1027,7 +1046,7 @@ class MainFrame(wx.Frame):
             return
         generation = self._open_generation
         if self._reader is None:
-            path = platform_paths.transcript_path(info.cwd, info.cli_session_id)
+            path = info.transcript_path()
             if path is None:
                 self._show_missing_transcript(info)
                 return
@@ -1437,9 +1456,7 @@ class MainFrame(wx.Frame):
         when there's nothing on disk."""
         if self._open is not None and info.key == self._open.key and self._chat_loaded:
             return [m for m in self._visible_messages() if m.kind != QUEUED], None
-        path = platform_paths.transcript_path(info.cwd, info.cli_session_id) \
-            if info.cli_session_id else None
-        return None, path
+        return None, info.transcript_path()
 
     def on_export(self):
         """File, Export Session (Ctrl+E): save the conversation as
@@ -1527,7 +1544,7 @@ class MainFrame(wx.Frame):
                 "here.", APP_NAME, wx.OK | wx.ICON_INFORMATION, self)
             return
         try:
-            platform_paths.open_url(claude_link(info.desktop_session_id))
+            platform_paths.open_url(claude_link(info))
             self._feedback(f"Opened {info.title} in Claude.")
         except OSError as exc:
             wx.MessageBox(f"Couldn't open the Claude desktop app: {exc}", APP_NAME,
@@ -2092,8 +2109,14 @@ class MainFrame(wx.Frame):
         if info.is_own:
             self._feedback(f"{info.title} is already a Chat Place session; reply to it here.")
             return
-        if not info.cli_session_id or platform_paths.transcript_path(
-                info.cwd, info.cli_session_id) is None:
+        if info.cowork:
+            # Its transcript is in the session's own Claude Code home, where
+            # claude -p on this PC can't resume it (#91).
+            wx.MessageBox("A Cowork session can't be continued here. Open it in Claude "
+                          "to carry on there.", APP_NAME,
+                          wx.OK | wx.ICON_INFORMATION, self)
+            return
+        if info.transcript_path() is None:
             wx.MessageBox("This session's conversation is no longer on disk, so there is "
                           "nothing to continue from.", APP_NAME, wx.OK | wx.ICON_INFORMATION,
                           self)
@@ -3140,8 +3163,11 @@ class MainFrame(wx.Frame):
         """Help, Report a Bug (#28): what happened, plus non-sensitive facts
         about the app, to a GitHub issue (see bugreport.py)."""
         listed = [s for s in self._snapshot.sessions if not s.archived]
-        counts = {"desktop app": sum(1 for s in listed if not s.is_own),
-                  "Chat Place": sum(1 for s in listed if s.is_own)}
+        counts = {"desktop app": sum(1 for s in listed if not s.is_own and not s.cowork)}
+        cowork = sum(1 for s in listed if s.cowork)
+        if cowork:
+            counts["Cowork"] = cowork
+        counts["Chat Place"] = sum(1 for s in listed if s.is_own)
         facts = bugreport.environment(self.speech, counts,
                                       claude_version=self._claude_version or "checking")
         dialog = BugReportDialog(self, [f"{label}: {value}" for label, value in facts])
