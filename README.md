@@ -16,7 +16,10 @@ It runs on your existing Claude subscription. It never uses an API key and costs
 
 One window, three parts, in Tab order: the **session list**, the **messages** of the loaded
 session, and the **reply box** with Send and Stop. Shift+Tab goes back the same way, and the
-session list is always there.
+session list is always there. **F6** and **Shift+F6** move between those parts and the **status
+bar**, which holds whatever was said last ("12 sessions: 1 need you", "Claude is using Bash.") in
+a read-only box to read by line, word and character; **Ctrl+9** goes straight there. The status
+bar isn't a Tab stop, and your screen reader's own read-status-bar key still works.
 
 - **Session list.** Each item reads its title, its repo folder, its state (needs you, working or
   idle), and when it was last active: "Fix the release build, QuickMail, needs you: Choose a
@@ -215,6 +218,8 @@ shows it as plain text instead.
 |---|---|---|
 | Anywhere | Tab, Shift+Tab | Session list, messages, reply box, and back |
 | Anywhere | Ctrl+1, Ctrl+2, Ctrl+3 | Go to the session list, the messages, the reply box |
+| Anywhere | F6, Shift+F6 | Next or previous part: session list, messages, reply box, status bar |
+| Anywhere | Ctrl+9 | Go to the status bar |
 | Messages or reply box | Escape | Back to the session list, on the same session |
 | Messages | Backspace | Also back to the session list |
 | Session list | Enter | Load that session and move to its messages |

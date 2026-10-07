@@ -1697,3 +1697,70 @@ def test_saved_sort_order_is_used_and_checked_at_start(env):
         window._pool.shutdown(wait=True)
         window.Destroy()
         wx.GetApp().ProcessPendingEvents()
+
+
+# -- F6, Shift+F6 and the status bar (#10) ---------------------------------------------------
+
+
+def _walk(frame, monkeypatch, start, steps, forward=True):
+    """Press F6 (or Shift+F6) ``steps`` times from ``start``; the panes visited."""
+    focused = {"window": start}
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: focused["window"]))
+    targets = {frame.PANE_SESSIONS: frame.session_list, frame.PANE_MESSAGES: frame.chat_list,
+               frame.PANE_STATUS: frame.status_text}
+    visited = []
+
+    def focus_pane(pane):
+        visited.append(pane)
+        focused["window"] = targets.get(pane, frame.reply_text)
+    monkeypatch.setattr(frame, "focus_pane", focus_pane)
+    for _ in range(steps):
+        frame.cycle_focus(forward)
+    return visited
+
+
+def test_f6_with_nothing_loaded_skips_the_reply(frame, monkeypatch):
+    assert _walk(frame, monkeypatch, frame.session_list, 3) == [
+        frame.PANE_MESSAGES, frame.PANE_STATUS, frame.PANE_SESSIONS]
+    assert _walk(frame, monkeypatch, frame.session_list, 3, forward=False) == [
+        frame.PANE_STATUS, frame.PANE_MESSAGES, frame.PANE_SESSIONS]
+
+
+def test_f6_with_a_session_loaded_visits_every_part(frame, monkeypatch):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    assert _walk(frame, monkeypatch, frame.session_list, 4) == [
+        frame.PANE_MESSAGES, frame.PANE_REPLY, frame.PANE_STATUS, frame.PANE_SESSIONS]
+    # From Send (or any control after the messages), forward is the status bar.
+    assert _walk(frame, monkeypatch, frame.send_btn, 1) == [frame.PANE_STATUS]
+    assert _walk(frame, monkeypatch, frame.send_btn, 1, forward=False) == [frame.PANE_MESSAGES]
+
+
+def test_f6_key_and_shift_f6_reach_cycle_focus(frame, monkeypatch):
+    calls = []
+    monkeypatch.setattr(frame, "cycle_focus", lambda forward=True: calls.append(forward))
+    for shift in (False, True):
+        event = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
+        event.SetKeyCode(wx.WXK_F6)
+        event.SetShiftDown(shift)
+        frame._on_char_hook(event)
+    assert calls == [True, False]
+
+
+def test_status_bar_text_box_holds_the_same_text(frame):
+    frame._status("Hub probe: Claude is using Bash.")
+    assert frame.GetStatusBar().GetStatusText() == "Hub probe: Claude is using Bash."
+    assert frame.status_text.GetValue() == "Hub probe: Claude is using Bash."
+    assert frame.status_text.GetParent() is frame.GetStatusBar()  # never a Tab stop
+    assert frame.status_text.GetName() == "Status bar"
+    assert not frame.status_text.IsEditable()
+    assert frame.status_text not in tab_order(frame)
+
+
+def test_ctrl_9_goes_to_the_status_bar(frame, monkeypatch):
+    focused = []
+    monkeypatch.setattr(frame.status_text, "SetFocus", lambda: focused.append(True))
+    labels = [item.GetItemLabel() for item in frame.GetMenuBar().GetMenu(1).GetMenuItems()]
+    assert "Go to Status &Bar\tCtrl+9" in labels
+    frame.focus_status()
+    assert focused == [True]

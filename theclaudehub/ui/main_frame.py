@@ -121,8 +121,8 @@ class MainFrame(wx.Frame):
 
         self._build_menu()
         self._build_ui()
-        self.CreateStatusBar(1)
-        self.SetStatusText("Loading sessions…")
+        self._build_status_bar()
+        self._status("Loading sessions…")
         self.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
         self.Bind(wx.EVT_CLOSE, self._on_close)
 
@@ -167,6 +167,7 @@ class MainFrame(wx.Frame):
         self._item(view, "Go to &Sessions\tCtrl+1", lambda e: self.focus_sessions())
         self._item(view, "Go to &Messages\tCtrl+2", lambda e: self.focus_messages())
         self._item(view, "Go to &Reply\tCtrl+3", lambda e: self.focus_reply())
+        self._item(view, "Go to Status &Bar\tCtrl+9", lambda e: self.focus_status())
         # Radio items: a screen reader says which order is checked.
         sort_menu = wx.Menu()
         self.sort_items = {}
@@ -316,8 +317,33 @@ class MainFrame(wx.Frame):
         finally:
             dialog.Destroy()
 
+    def _build_status_bar(self):
+        """The status bar, reachable with F6 and Ctrl+9 (#10).
+
+        A native status bar can't take focus, so a read-only text box sits
+        over its one field, holding the same text, to read by line, word and
+        character. The field keeps its own text too, for the screen reader's
+        read-status-bar key. Being a child of the status bar, not of the
+        window's panel, the box is never in the Tab order.
+        """
+        bar = self.CreateStatusBar(1)
+        self.status_text = wx.TextCtrl(bar, style=wx.TE_READONLY | wx.BORDER_NONE,
+                                       name="Status bar")
+        set_accessible_name(self.status_text, "Status bar")
+        self.status_text.SetBackgroundColour(bar.GetBackgroundColour())
+
+        def fit(event=None):
+            rect = bar.GetFieldRect(0)
+            self.status_text.SetSize(rect.x + 2, rect.y + 2, rect.width - 4, rect.height - 4)
+            if event is not None:
+                event.Skip()
+        bar.Bind(wx.EVT_SIZE, fit)
+        fit()
+
     def _status(self, text: str):
-        self.SetStatusText(announce.status_text(text))
+        text = announce.status_text(text)
+        self.SetStatusText(text)
+        self.status_text.ChangeValue(text)
 
     def _say(self, text: Optional[str], force: bool = False):
         """Speak an announcement (per the level) and put it in the status bar."""
@@ -1639,6 +1665,9 @@ class MainFrame(wx.Frame):
             if not ctrl and focus is self.chat_list:
                 self.on_read_message()
                 return
+        if key == wx.WXK_F6 and not ctrl and not event.AltDown():
+            self.cycle_focus(forward=not event.ShiftDown())
+            return
         if key == wx.WXK_ESCAPE and in_session:
             self.focus_sessions()
             return
@@ -1652,6 +1681,54 @@ class MainFrame(wx.Frame):
             self._copy_message()
             return
         event.Skip()
+
+    # F6 and Shift+F6 (#10), as in QuickMail: the window's parts in order,
+    # wrapping round. The reply stop is the reply box for TheClaudeHub's own
+    # sessions, the "About replying" note for desktop ones, and is skipped
+    # when nothing is loaded.
+    PANE_SESSIONS, PANE_MESSAGES, PANE_REPLY, PANE_STATUS = range(4)
+
+    def _panes(self) -> List[int]:
+        panes = [self.PANE_SESSIONS, self.PANE_MESSAGES]
+        if self._open is not None:
+            panes.append(self.PANE_REPLY)
+        panes.append(self.PANE_STATUS)
+        return panes
+
+    def _current_pane(self) -> int:
+        focus = wx.Window.FindFocus()
+        if focus is self.session_list:
+            return self.PANE_SESSIONS
+        if focus is self.chat_list:
+            return self.PANE_MESSAGES
+        if focus is self.status_text:
+            return self.PANE_STATUS
+        # Anything else in the window comes after the messages in Tab order:
+        # the reply area, its buttons, Show tool activity, New and Refresh.
+        return self.PANE_REPLY if focus is not None else self.PANE_SESSIONS
+
+    def cycle_focus(self, forward: bool = True):
+        panes = self._panes()
+        current = self._current_pane()
+        if current not in panes:  # the reply stop, with nothing loaded
+            current = self.PANE_MESSAGES
+        step = 1 if forward else -1
+        self.focus_pane(panes[(panes.index(current) + step) % len(panes)])
+
+    def focus_pane(self, pane: int):
+        if pane == self.PANE_SESSIONS:
+            self.focus_sessions()
+        elif pane == self.PANE_MESSAGES:
+            self.focus_messages()
+        elif pane == self.PANE_REPLY:
+            self.focus_reply()
+        else:
+            self.focus_status()
+
+    def focus_status(self):
+        """Ctrl+9, and the last F6 stop: the status bar's text, read-only."""
+        self.status_text.SetFocus()
+        self.status_text.SetInsertionPoint(0)
 
     def _is_in_session_view(self, window) -> bool:
         """True for the messages list, the reply area and the controls after
