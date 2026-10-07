@@ -49,6 +49,12 @@ class SessionInfo:
     detail: str = ""            # needs_action text, error, etc.
     permission_mode: str = ""
     unread: bool = False
+    #: The desktop app archived it (shown only in the Archived view, #32).
+    archived: bool = False
+    #: The desktop app has linked it for Remote Control (claude.ai).
+    remote: bool = False
+    #: TheClaudeHub groups it's in (#31), set by the window, read in its row.
+    groups: tuple = ()
 
     @property
     def is_own(self) -> bool:
@@ -84,6 +90,11 @@ class SessionInfo:
         parts.append(describe_age(self.last_activity_ms, now_ms))
         if self.is_own:
             parts.append("TheClaudeHub session")
+        if self.archived:
+            parts.append("archived")
+        if self.groups:
+            parts.append(("group " if len(self.groups) == 1 else "groups ")
+                         + ", ".join(self.groups))
         return ", ".join(parts)
 
 
@@ -129,6 +140,64 @@ SORT_VALUES = [value for value, _label in SORT_ORDERS]
 SORT_SPOKEN = {SORT_STATUS: "by status", SORT_NEWEST: "newest first",
                SORT_OLDEST: "oldest first", SORT_TITLE: "by title",
                SORT_FOLDER: "by folder"}
+
+
+#: Which sessions the list shows (View, Show, #32): (value, menu label). A
+#: group's view is "group:<name>".
+VIEW_ALL = "all"
+VIEW_ACTIVE = "active"
+VIEW_NEEDS_YOU = "needs"
+VIEW_DESKTOP = "desktop"
+VIEW_OWN = "own"
+VIEW_REMOTE = "remote"
+VIEW_ARCHIVED = "archived"
+GROUP_VIEW_PREFIX = "group:"
+VIEWS = [
+    (VIEW_ALL, "&All Sessions"),
+    (VIEW_ACTIVE, "Needs You or &Working"),
+    (VIEW_NEEDS_YOU, "&Needs You"),
+    (VIEW_DESKTOP, "&Desktop App Sessions"),
+    (VIEW_OWN, "&TheClaudeHub Sessions"),
+    (VIEW_REMOTE, "&Remote Control Sessions"),
+    (VIEW_ARCHIVED, "Ar&chived"),
+]
+#: Said and shown in the list's name: "showing needs you or working".
+VIEW_SPOKEN = {VIEW_ALL: "all sessions", VIEW_ACTIVE: "needs you or working",
+               VIEW_NEEDS_YOU: "needs you", VIEW_DESKTOP: "desktop app sessions",
+               VIEW_OWN: "TheClaudeHub sessions", VIEW_REMOTE: "Remote Control sessions",
+               VIEW_ARCHIVED: "archived sessions"}
+
+
+def group_view(name: str) -> str:
+    return GROUP_VIEW_PREFIX + name
+
+
+def view_spoken(view: str) -> str:
+    if view.startswith(GROUP_VIEW_PREFIX):
+        return f"group {view[len(GROUP_VIEW_PREFIX):]}"
+    return VIEW_SPOKEN.get(view, VIEW_SPOKEN[VIEW_ALL])
+
+
+def in_view(info: SessionInfo, view: str) -> bool:
+    """Whether the list shows ``info`` in ``view``. Archived sessions are only
+    in the Archived view (and in a group they were put in)."""
+    if view.startswith(GROUP_VIEW_PREFIX):
+        return view[len(GROUP_VIEW_PREFIX):] in info.groups
+    if view == VIEW_ARCHIVED:
+        return info.archived
+    if info.archived:
+        return False
+    if view == VIEW_ACTIVE:
+        return info.state in (NEEDS_YOU, WORKING)
+    if view == VIEW_NEEDS_YOU:
+        return info.state == NEEDS_YOU
+    if view == VIEW_DESKTOP:
+        return not info.is_own
+    if view == VIEW_OWN:
+        return info.is_own
+    if view == VIEW_REMOTE:
+        return info.remote
+    return True
 
 
 def sort_sessions(sessions: Iterable[SessionInfo],
@@ -217,7 +286,11 @@ class DesktopLoadResult:
 
 
 def load_desktop_sessions(directory: Optional[Path] = None,
-                          live: Optional[Dict[str, LiveStatus]] = None) -> DesktopLoadResult:
+                          live: Optional[Dict[str, LiveStatus]] = None,
+                          include_archived: bool = False) -> DesktopLoadResult:
+    """The desktop app's sessions. Archived ones are left out unless
+    ``include_archived`` (the list's Archived view, #32); they come with
+    ``archived`` set."""
     directories = [directory] if directory else platform_paths.desktop_sessions_dirs()
     live = live if live is not None else {}
     result = DesktopLoadResult()
@@ -245,7 +318,7 @@ def load_desktop_sessions(directory: Optional[Path] = None,
         cli_id = data.get("cliSessionId")
         if isinstance(cli_id, str) and cli_id:
             result.desktop_cli_ids.add(cli_id)
-        if data.get("isArchived"):
+        if data.get("isArchived") and not include_archived:
             continue
         info = desktop_session_from_metadata(data, live)
         if info is not None:
@@ -276,6 +349,8 @@ def desktop_session_from_metadata(data: dict,
         desktop_session_id=local_id,
         last_activity_ms=_int(data.get("lastActivityAt") or data.get("createdAt")),
         permission_mode=str(data.get("permissionMode") or ""),
+        archived=bool(data.get("isArchived")),
+        remote=isinstance(data.get("bridgeSessionIds"), list) and bool(data["bridgeSessionIds"]),
     )
     info.state, info.detail = desktop_state(data, live.get(cli_id) or live.get(local_id))
     return info
