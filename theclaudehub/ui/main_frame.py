@@ -55,6 +55,7 @@ from .. import (__version__, announce, attachments, bugreport, signin, export, h
 from ..claude_cli import (PERMISSION_MODES, PermissionRequest, ResumeRefused, TurnEvent,
                           TurnRunner, allow_response, answer_questions_response,
                           build_fork_command, build_new_command, build_resume_command,
+                          child_environment,
                           deny_response, fetch_commands, usable_commands,
                           describe_elapsed, model_label, model_matches, model_spoken,
                           new_session_id)
@@ -183,7 +184,9 @@ class MainFrame(wx.Frame):
                          wx.OK | wx.ICON_WARNING, self)
         self.refresh_sessions()
         self._check_claude_version()
-        self._check_sign_in(manual=False)
+        # After the session list has been read, like the update check.
+        self._startup_sign_in = wx.CallLater(UPDATE_CHECK_DELAY_MS, self._check_sign_in,
+                                             manual=False)
         self._pool.submit(attachments.remove_old_pastes)  # pasted pictures over 30 days old
         self.session_list.SetFocus()
         if check_updates_at_start:
@@ -2933,23 +2936,37 @@ class MainFrame(wx.Frame):
         """Help, Claude Code Sign-in (#52): whether Claude Code is signed in,
         to which plan, and a way to sign in if it isn't."""
         self._feedback("Checking Claude Code's sign-in.")
+        self._sign_in_asked = True  # this answer replaces the start-up one
         self._check_sign_in(manual=True)
 
     def _check_sign_in(self, manual: bool):
+        if not self:
+            return
+
         def work():
-            status = signin.check()
+            try:
+                status = signin.check()
+            except Exception as exc:  # noqa: BLE001 - always answer
+                status = signin.SignIn(False, problem=str(exc) or "it failed")
             wx.CallAfter(self._on_sign_in_result, status, manual)
-        self._pool.submit(work)
+        try:
+            self._pool.submit(work)
+        except RuntimeError:
+            pass  # closing
 
     def _on_sign_in_result(self, status, manual: bool):
         if not self:
             return
         text = signin.describe(status)
         if not manual:
-            # At start-up, only a problem is news.
+            # At start-up, only a problem is news, and not over the list.
+            if getattr(self, "_sign_in_asked", False):
+                return
             if status.known and not (status.signed_in and status.subscription):
-                self._say(f"{text} Help, Claude Code Sign-in signs in.")
+                self._feedback(f"{text} To sign in, choose Claude Code Sign-in on the "
+                               "Help menu.")
             return
+        self._sign_in_asked = False
         if not status.known:
             wx.MessageBox(text, "Claude Code Sign-in", wx.OK | wx.ICON_WARNING, self)
             return
@@ -2966,12 +2983,21 @@ class MainFrame(wx.Frame):
         try:
             if command is None:
                 raise OSError("Claude Code wasn't found")
-            subprocess.Popen(command, creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
+            process = subprocess.Popen(command, env=child_environment(),
+                                       creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
         except OSError as exc:
             wx.MessageBox(f"Couldn't start the sign-in: {exc}", APP_NAME,
                           wx.OK | wx.ICON_ERROR, self)
             return
-        self._feedback("Signing in, in a new window.")
+        self._feedback("Signing in, in a new window. TheClaudeHub checks again when it closes.")
+
+        def wait():
+            process.wait()
+            wx.CallAfter(self._check_sign_in, manual=True)  # the result, said
+        try:
+            self._pool.submit(wait)
+        except RuntimeError:
+            pass
 
     def on_about(self, _event=None):
         wx.MessageBox(
@@ -3128,6 +3154,9 @@ class MainFrame(wx.Frame):
         self._clear_activity()
         self._list_timer.Stop()
         self._chat_timer.Stop()
+        startup_sign_in = getattr(self, "_startup_sign_in", None)
+        if startup_sign_in is not None:
+            startup_sign_in.Stop()
         startup_check = getattr(self, "_startup_update_check", None)
         if startup_check is not None:
             startup_check.Stop()

@@ -3204,19 +3204,36 @@ def test_sign_in_is_checked_and_offered(frame, env, monkeypatch):
     shown = []
     monkeypatch.setattr(wx, "MessageBox", lambda text, title, style, parent=None: (
         shown.append((text, style)), wx.YES)[1])
-    frame._on_sign_in_result(signin.SignIn(True, True, "claude.ai", "max", "k@example.com"),
+    frame._on_sign_in_result(signin.SignIn(True, True, "claude.ai", plan="max", email="k@example.com"),
                              manual=True)
     assert shown[-1][0] == "Claude Code is signed in to your Claude Max plan as k@example.com."
     started = []
-    monkeypatch.setattr(main_frame.subprocess, "Popen",
-                        lambda command, **k: started.append(command))
     monkeypatch.setattr(signin, "login_command", lambda: ["claude", "auth", "login"])
+
+    class Process:
+        def wait(self):
+            return 0
+    monkeypatch.setattr(main_frame.subprocess, "Popen",
+                        lambda command, **k: started.append((command, k)) or Process())
     frame._on_sign_in_result(signin.SignIn(True, signed_in=False), manual=True)
     assert shown[-1][0].startswith("Claude Code isn't signed in.")
-    assert started == [["claude", "auth", "login"]]
-    # At start-up only a problem is said.
-    count = len(env["spoken"])
-    frame._on_sign_in_result(signin.SignIn(True, True, "claude.ai", "max"), manual=False)
-    assert len(env["spoken"]) == count
+    assert started[0][0] == ["claude", "auth", "login"]
+    assert "ANTHROPIC_API_KEY" not in started[0][1]["env"]
+    # At start-up only a problem is said, and without cutting off the list.
+    frame._sign_in_asked = False
+    count = len(env["feedback"])
+    frame._on_sign_in_result(signin.SignIn(True, True, "claude.ai", plan="max"), manual=False)
+    frame._on_sign_in_result(signin.SignIn(False, problem="no claude"), manual=False)
+    assert len(env["feedback"]) == count
     frame._on_sign_in_result(signin.SignIn(True, signed_in=False), manual=False)
-    assert env["spoken"][-1].endswith("Help, Claude Code Sign-in signs in.")
+    assert env["feedback"][-1].endswith(
+        "To sign in, choose Claude Code Sign-in on the Help menu.")
+    # Asked from the menu meanwhile: the start-up answer isn't said as well.
+    frame._sign_in_asked = True
+    count = len(env["feedback"])
+    frame._on_sign_in_result(signin.SignIn(True, signed_in=False), manual=False)
+    assert len(env["feedback"]) == count
+    # The sign-in can't start: said.
+    monkeypatch.setattr(signin, "login_command", lambda: None)
+    frame._on_sign_in_result(signin.SignIn(True, signed_in=False), manual=True)
+    assert shown[-1][0].startswith("Couldn't start the sign-in")
