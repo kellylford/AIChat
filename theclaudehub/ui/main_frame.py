@@ -2601,7 +2601,8 @@ class MainFrame(wx.Frame):
         if key == wx.WXK_DELETE and focus is self.session_list:
             self.on_forget(None)
             return
-        if ctrl and key in (ord("C"), ord("c")) and focus is self.chat_list:
+        if (ctrl and key in (ord("C"), ord("c")) and not event.AltDown()
+                and focus is self.chat_list):
             if event.ShiftDown():
                 self.copy_last_code_block()
             else:
@@ -2667,12 +2668,10 @@ class MainFrame(wx.Frame):
         index = self.chat_list.GetSelection()
         if not (0 <= index < len(visible)):
             return
-        if wx.TheClipboard.Open():
-            try:
-                wx.TheClipboard.SetData(wx.TextDataObject(visible[index].full_text()))
-            finally:
-                wx.TheClipboard.Close()
+        if self._copy_text(visible[index].full_text()):
             self._feedback("Message copied.")
+        else:
+            self._feedback("Couldn't open the clipboard.")
 
     # ---------------------------------------------------------------- close
 

@@ -2686,7 +2686,7 @@ def test_code_blocks_are_described_listed_and_copied(frame, env, monkeypatch):
         dialog.Destroy()
     monkeypatch.setattr(frame, "_modal", modal)
     frame.on_code_blocks()
-    assert shown == [["1. Python, 1 line: print(1)", "2. Bash, 2 lines: echo hi"]]
+    assert shown == [["Python, 1 line: print(1)", "Bash, 2 lines: echo hi"]]
     assert env["copied"][-1] == "print(1)"
     assert isinstance(CodeBlocksDialog, type)
     menu = frame._message_menu()
@@ -2707,3 +2707,16 @@ def test_messages_without_code_say_so(frame, env, monkeypatch):
     labels = {item.GetItemLabelText(): item.IsEnabled() for item in menu.GetMenuItems()}
     assert not labels["Code Blocks..."] and not labels["Copy Last Code Block"]
     menu.Destroy()
+
+
+def test_ctrl_c_copies_the_message_and_ctrl_shift_c_its_code(frame, env, monkeypatch):
+    _load_code(frame, env)
+    frame.chat_list.SetSelection(1)
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.chat_list))
+    for shift, expected in ((False, "Claude:\nTwo ways:"), (True, "echo hi\necho there")):
+        event = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
+        event.SetKeyCode(ord("C"))
+        event.SetControlDown(True)
+        event.SetShiftDown(shift)
+        frame._on_char_hook(event)
+        assert env["copied"][-1].startswith(expected)

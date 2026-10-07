@@ -959,7 +959,7 @@ class CodeBlocksDialog(wx.Dialog):
         sizer = wx.BoxSizer(wx.VERTICAL)
         sizer.Add(wx.StaticText(self, label="Code &blocks:"), 0, wx.LEFT | wx.TOP, 8)
         self.list = wx.ListBox(self, style=wx.LB_SINGLE,
-                               choices=[f"{i}. {b.row()}" for i, b in enumerate(self._blocks, 1)])
+                               choices=[b.row() for b in self._blocks])
         set_accessible_name(self.list, f"Code blocks, {len(self._blocks)}")
         self.list.SetMinSize((-1, 110))
         sizer.Add(self.list, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
@@ -977,6 +977,7 @@ class CodeBlocksDialog(wx.Dialog):
         self.SetEscapeId(wx.ID_CANCEL)
         self.list.Bind(wx.EVT_LISTBOX, lambda e: self._show())
         self.list.Bind(wx.EVT_LISTBOX_DCLICK, lambda e: self.code.SetFocus())
+        self.list.Bind(wx.EVT_KEY_DOWN, self._on_list_key)
         copy_btn.Bind(wx.EVT_BUTTON, lambda e: self.copy_selected())
         if self._blocks:
             self.list.SetSelection(0)
@@ -986,8 +987,17 @@ class CodeBlocksDialog(wx.Dialog):
     def _show(self):
         index = self.list.GetSelection()
         if 0 <= index < len(self._blocks):
-            self.code.ChangeValue(self._blocks[index].code)
+            block = self._blocks[index]
+            self.code.ChangeValue(block.code)
             self.code.SetInsertionPoint(0)
+            # Tabbing in says which block this is.
+            set_accessible_name(self.code, block.describe())
+
+    def _on_list_key(self, event):
+        if event.GetKeyCode() in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER):
+            self.code.SetFocus()  # Enter: read the block's code
+            return
+        event.Skip()
 
     def copy_selected(self):
         index = self.list.GetSelection()

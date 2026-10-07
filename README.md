@@ -79,7 +79,8 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   Edge WebView2 runtime, which comes with Windows 11; without it, the text box opens. Nothing in
   the page is fetched from the internet, and HTML in a message is shown as text, never run.
   **Code Blocks** on the context menu lists the message's code blocks by language and size, with
-  the selected one's code in a box to read by line and a Copy button for just that block;
+  the selected one's code in a box to read by line (Enter on a block goes there) and a Copy
+  button for just that block;
   **Ctrl+Shift+C** copies the message's last code block straight away.
   Question cards read as "Claude asked: Which version?" with the
   options in the full text, then "You answered: ...". Refused tools read "Permission denied:
