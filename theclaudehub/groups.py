@@ -47,7 +47,13 @@ class GroupStore:
             self.load_error = f"Couldn't read your groups ({self.path}): {exc}"
             return
         items = raw.get("groups") if isinstance(raw, dict) else None
-        for item in items if isinstance(items, list) else []:
+        if not isinstance(items, list):
+            # Not ours, or damaged: never save over it (save refuses).
+            self.load_error = (f"Your groups file ({self.path}) isn't in the expected "
+                               "format, so TheClaudeHub won't change it. Groups are off "
+                               "until it's fixed or removed.")
+            return
+        for item in items:
             if not isinstance(item, dict):
                 continue
             name = clean_name(str(item.get("name") or ""))
@@ -91,7 +97,20 @@ class GroupStore:
         wanted = clean_name(name).casefold()
         return next((n for n in self._groups if n.casefold() == wanted), None)
 
-    # -- changes (each saves) ---------------------------------------------------
+    # -- changes (each saves; a change that can't be saved is undone) -------------
+
+    def _commit(self, groups: Dict[str, List[str]]) -> None:
+        """Make ``groups`` the groups, if it can be saved."""
+        before = self._groups
+        self._groups = groups
+        try:
+            self.save()
+        except Exception:
+            self._groups = before
+            raise
+
+    def _copy(self) -> Dict[str, List[str]]:
+        return {name: list(members) for name, members in self._groups.items()}
 
     def create(self, name: str) -> str:
         name = clean_name(name)
@@ -99,8 +118,9 @@ class GroupStore:
             raise ValueError("A group needs a name.")
         if self.find(name):
             raise ValueError(f"There's already a group called {self.find(name)}.")
-        self._groups[name] = []
-        self.save()
+        groups = self._copy()
+        groups[name] = []
+        self._commit(groups)
         return name
 
     def rename(self, old: str, new: str) -> str:
@@ -113,13 +133,14 @@ class GroupStore:
         if clash and clash != old:
             raise ValueError(f"There's already a group called {clash}.")
         # Keep its place in the order.
-        self._groups = {(new if n == old else n): m for n, m in self._groups.items()}
-        self.save()
+        self._commit({(new if n == old else n): list(m) for n, m in self._groups.items()})
         return new
 
     def delete(self, name: str) -> None:
-        if self._groups.pop(name, None) is not None:
-            self.save()
+        if name in self._groups:
+            groups = self._copy()
+            del groups[name]
+            self._commit(groups)
 
     def add(self, name: str, key: str) -> bool:
         """Put a session in a group. False if it was already there."""
@@ -128,24 +149,27 @@ class GroupStore:
             raise ValueError(f"There's no group called {name}.")
         if key in members:
             return False
-        members.append(key)
-        self.save()
+        groups = self._copy()
+        groups[name].append(key)
+        self._commit(groups)
         return True
 
     def remove(self, name: str, key: str) -> bool:
         members = self._groups.get(name)
         if not members or key not in members:
             return False
-        members.remove(key)
-        self.save()
+        groups = self._copy()
+        groups[name].remove(key)
+        self._commit(groups)
         return True
+
+    def forget(self, key: str) -> None:
+        """A session is gone: take it out of every group."""
+        if any(key in members for members in self._groups.values()):
+            self._commit({n: [k for k in m if k != key] for n, m in self._groups.items()})
 
     def rename_key(self, old: str, new: str) -> None:
         """A session's key changed (Claude Code chose its own id)."""
-        changed = False
-        for members in self._groups.values():
-            if old in members:
-                members[members.index(old)] = new
-                changed = True
-        if changed:
-            self.save()
+        if any(old in members for members in self._groups.values()):
+            self._commit({n: [new if k == old else k for k in m]
+                          for n, m in self._groups.items()})

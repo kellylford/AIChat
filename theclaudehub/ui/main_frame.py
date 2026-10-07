@@ -55,7 +55,8 @@ from ..claude_cli import (PERMISSION_MODES, PermissionRequest, ResumeRefused, Tu
 from ..hub import Snapshot, collect, finished_turns, last_reply_from_tail
 from ..own_store import OwnSession, OwnSessionStore
 from ..groups import GroupStore
-from ..sessions import (IDLE, NEEDS_YOU, SORT_ORDERS, SORT_SPOKEN, VIEW_ALL, VIEWS, WORKING,
+from ..sessions import (GROUP_VIEW_PREFIX, IDLE, NEEDS_YOU, SORT_ORDERS, SORT_SPOKEN,
+                        VIEW_ALL, VIEWS, WORKING,
                         SessionInfo, group_view, in_view, view_spoken)
 from ..speech import SpeechSettings, default_options, list_speech_options, speaker
 from ..transcript import ASSISTANT, ERROR, PLAN, QUESTION, TOOL, ChatMessage, TranscriptReader
@@ -141,6 +142,9 @@ class MainFrame(wx.Frame):
 
         if self.store.load_error:
             wx.CallAfter(wx.MessageBox, self.store.load_error, APP_NAME,
+                         wx.OK | wx.ICON_WARNING, self)
+        if self.groups.load_error:
+            wx.CallAfter(wx.MessageBox, self.groups.load_error, APP_NAME,
                          wx.OK | wx.ICON_WARNING, self)
         self.refresh_sessions()
         self.session_list.SetFocus()
@@ -493,6 +497,15 @@ class MainFrame(wx.Frame):
         keep_order = (not resort and not first
                       and wx.Window.FindFocus() is self.session_list)
         shown = self._in_current_view(snap.sessions)
+        if keep_order:
+            # A session leaving the view (it stopped needing you) stays while
+            # you're on it, so the row under you doesn't change; F5 or leaving
+            # the list puts the view right.
+            index = self.session_list.GetSelection()
+            if 0 <= index < len(self._list_keys):
+                selected = self._list_keys[index]
+                if selected not in {s.key for s in shown}:
+                    shown += [s for s in snap.sessions if s.key == selected]
         self._update_session_list(shown, keep_order=keep_order)
         self._update_list_label(len(shown))
 
@@ -618,6 +631,10 @@ class MainFrame(wx.Frame):
             return
         if not self._store_write(self.store.remove, info.cli_session_id):
             return
+        try:
+            self.groups.forget(info.key)
+        except OSError:
+            pass  # a gone session in a group is harmless; it isn't listed
         if self._open is not None and self._open.key == info.key:
             self.unload_session()
             # Its messages and reply box are gone: don't leave focus on them.
@@ -1601,6 +1618,7 @@ class MainFrame(wx.Frame):
     def _build_show_menu(self):
         """View, Show Sessions: the fixed views, then one item per group."""
         for item in list(self.show_menu.GetMenuItems()):
+            self.Unbind(wx.EVT_MENU, id=item.GetId())
             self.show_menu.Delete(item)
         self.view_items = {}
         choices = list(VIEWS)
@@ -1609,6 +1627,10 @@ class MainFrame(wx.Frame):
             choices.append((group_view(name), "Group: " + name.replace("&", "&&")))
         if self.speech.session_view not in [v for v, _label in choices]:
             self.speech.session_view = VIEW_ALL  # its group is gone
+            try:
+                self.speech.save()
+            except OSError:
+                pass
         for index, (view, label) in enumerate(choices):
             if index == len(VIEWS) and names:
                 self.show_menu.AppendSeparator()
@@ -1627,12 +1649,13 @@ class MainFrame(wx.Frame):
     def _update_list_label(self, shown: int):
         """The list's label, and so its name, says what it's showing."""
         view = self.speech.session_view
-        if view == VIEW_ALL:
-            label = "Session list"
-        else:
+        rest = ""
+        if view != VIEW_ALL:
             total = sum(1 for s in self._snapshot.sessions if not s.archived)
-            label = f"Session list, {view_spoken(view)}, {shown} of {total}"
-        shown_label = "&" + label.replace("&", "&&") + ":"
+            rest = f", {view_spoken(view)}, {shown} of {total}"
+        label = "Session list" + rest
+        # Alt+L stays on "list" whatever follows it.
+        shown_label = "Session &list" + rest.replace("&", "&&") + ":"
         if self.sessions_label.GetLabel() != shown_label:
             self.sessions_label.SetLabel(shown_label)
             set_accessible_name(self.session_list, label)
@@ -1728,12 +1751,22 @@ class MainFrame(wx.Frame):
         self._refresh_list_in_place()
 
     def on_manage_groups(self):
-        counts = {name: len(self.groups.members(name)) for name in self.groups.names()}
+        present = {s.key for s in self._snapshot.sessions}
+        counts = {name: sum(1 for k in self.groups.members(name) if k in present)
+                  for name in self.groups.names()}
         dialog = ManageGroupsDialog(self, self.groups, counts)
         try:
             dialog.ShowModal()
+            renamed = dict(dialog.renamed)
         finally:
             dialog.Destroy()
+        view = self.speech.session_view
+        if view.startswith(GROUP_VIEW_PREFIX) and view[len(GROUP_VIEW_PREFIX):] in renamed:
+            self.speech.session_view = group_view(renamed[view[len(GROUP_VIEW_PREFIX):]])
+            try:
+                self.speech.save()
+            except OSError:
+                pass
         self._build_show_menu()
         self._refresh_list_in_place()
 

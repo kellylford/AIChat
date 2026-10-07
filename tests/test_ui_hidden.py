@@ -1935,7 +1935,7 @@ def test_show_sessions_filters_names_the_list_and_remembers(frame, env):
     frame.on_view("needs")
     assert _titles(frame) == ["Blocked one"]
     assert frame.session_list.GetName() == "Session list, needs you, 1 of 3"
-    assert frame.sessions_label.GetLabel() == "&Session list, needs you, 1 of 3:"
+    assert frame.sessions_label.GetLabel() == "Session &list, needs you, 1 of 3:"  # Alt+L kept
     assert env["feedback"][-1] == "Showing needs you: 1 session."
     assert speech.SpeechSettings.load().session_view == "needs"
     frame.on_view("archived")
@@ -1984,6 +1984,8 @@ def test_deleting_the_group_being_shown_goes_back_to_all(frame, env, monkeypatch
     frame.groups.delete("Temp")
 
     class Closes:
+        renamed = {}
+
         def __init__(self, *a):
             pass
 
@@ -2020,3 +2022,57 @@ def test_manage_groups_dialog_lists_renames_and_deletes(frame, env, monkeypatch)
         assert "already a group" in env["boxes"][-1]
     finally:
         dialog.Destroy()
+
+
+def test_session_list_keeps_alt_l_in_every_view(frame):
+    assert frame.sessions_label.GetLabel() == "Session &list:"
+    frame.groups.create("R&D")
+    frame._build_show_menu()
+    frame.on_view("group:R&D")
+    assert frame.sessions_label.GetLabel() == "Session &list, group R&&D, 0 of 3:"
+    assert frame.session_list.GetName() == "Session list, group R&D, 0 of 3"
+
+
+def test_a_session_leaving_the_view_stays_while_you_are_on_it(frame, env, monkeypatch):
+    frame.on_view("needs")
+    select(frame, "Blocked one")
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    add_desktop(env, "local_b", "cli-b", "Blocked one")  # it no longer needs you
+    frame.refresh_sessions()
+    settle(frame)
+    assert frame.session_list.GetStringSelection().startswith("Blocked one, Repo, idle")
+    frame.refresh_sessions(resort=True)  # F5: the view is put right
+    settle(frame)
+    assert frame.session_list.GetCount() == 0
+
+
+def test_forgetting_a_session_takes_it_out_of_its_groups(frame, env):
+    frame.groups.create("Work")
+    frame.groups.add("Work", "own:own-1")
+    select(frame, "Hub probe")
+    frame.on_forget(None)  # wx.MessageBox is patched to say yes
+    assert frame.groups.members("Work") == []
+
+
+def test_renaming_the_group_in_view_follows_it(frame, monkeypatch):
+    frame.groups.create("Work")
+    frame._build_show_menu()
+    frame.on_view("group:Work")
+
+    class Renames:
+        renamed = {}
+
+        def __init__(self, parent, groups, counts):
+            groups.rename("Work", "Jobs")
+            Renames.renamed = {"Work": "Jobs"}
+
+        def ShowModal(self):
+            return wx.ID_CANCEL
+
+        def Destroy(self):
+            pass
+    monkeypatch.setattr("theclaudehub.ui.main_frame.ManageGroupsDialog", Renames)
+    frame.on_manage_groups()
+    assert frame.speech.session_view == "group:Jobs"
+    assert frame.view_items["group:Jobs"].IsChecked()
+    assert speech.SpeechSettings.load().session_view == "group:Jobs"

@@ -129,3 +129,45 @@ def test_archived_and_remote_come_from_the_desktop_files(tmp_path):
     assert everything["local_a"].archived and not everything["local_r"].archived
     assert everything["local_r"].remote and not everything["local_n"].remote
     assert "local_a" not in {s.key for s in load_desktop_sessions(tmp_path).sessions}
+
+
+def test_a_change_that_cannot_be_saved_is_undone(tmp_path, monkeypatch):
+    groups = GroupStore(tmp_path / "g.json")
+    groups.create("Work")
+
+    def fail():
+        raise OSError("disk full")
+    monkeypatch.setattr(groups, "save", fail)
+    for change in (lambda: groups.create("Home"), lambda: groups.add("Work", "k"),
+                   lambda: groups.rename("Work", "Jobs"), lambda: groups.delete("Work")):
+        with pytest.raises(OSError):
+            change()
+        assert groups.names() == ["Work"] and groups.members("Work") == []
+
+
+def test_a_wrong_shaped_file_is_reported_and_never_overwritten(tmp_path):
+    path = tmp_path / "groups.json"
+    for content in ('["a list"]', '{"groups": "nope"}'):
+        path.write_text(content, encoding="utf-8")
+        groups = GroupStore(path)
+        assert "expected format" in groups.load_error
+        with pytest.raises(OSError):
+            groups.create("Work")
+        assert path.read_text(encoding="utf-8") == content
+
+
+def test_forget_removes_a_session_everywhere(tmp_path):
+    groups = GroupStore(tmp_path / "g.json")
+    groups.create("A")
+    groups.create("B")
+    groups.add("A", "k")
+    groups.add("B", "k")
+    groups.forget("k")
+    assert GroupStore(tmp_path / "g.json").groups_of("k") == []
+
+
+def test_archived_sessions_do_not_announce_turn_ends():
+    from theclaudehub.hub import finished_turns
+    done = _info("done", archived=True)
+    assert finished_turns({"done": "working"}, [done]) == []
+    assert finished_turns({"done": "working"}, [_info("done")])[0].key == "done"

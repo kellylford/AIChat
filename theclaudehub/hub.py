@@ -62,10 +62,12 @@ def finished_turns(previous: Dict[str, str], current: Iterable[SessionInfo]) -> 
     """Sessions that were working last time and are not now.
 
     ``previous`` maps session key -> state from the last snapshot. A session
-    that has vanished (archived) is not reported.
+    that has vanished, or been archived, is not reported.
     """
     ended = []
     for info in current:
+        if info.archived:
+            continue
         if previous.get(info.key) == WORKING and info.state != WORKING:
             ended.append(info)
     return ended

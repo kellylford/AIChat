@@ -702,6 +702,8 @@ class ManageGroupsDialog(wx.Dialog):
                          style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
         self.groups = groups
         self._counts = dict(counts)
+        #: old name -> new name, for every rename made here (chains followed).
+        self.renamed = {}
         sizer = wx.BoxSizer(wx.VERTICAL)
         sizer.Add(wx.StaticText(self, label="&Groups:"), 0, wx.LEFT | wx.TOP, 8)
         self.list = wx.ListBox(self, style=wx.LB_SINGLE)
@@ -777,6 +779,10 @@ class ManageGroupsDialog(wx.Dialog):
                 renamed = self._try(lambda: self.groups.rename(old, new))
                 if renamed:
                     self._counts[renamed] = self._counts.pop(old, 0)
+                    for first, latest in list(self.renamed.items()):
+                        if latest == old:
+                            self.renamed[first] = renamed
+                    self.renamed.setdefault(old, renamed)
                     self._fill(renamed)
         self.list.SetFocus()
 
