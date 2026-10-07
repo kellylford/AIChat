@@ -33,7 +33,9 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Tuple
+
+from .changes import EDIT_TOOLS, FileEdit, edit_from_tool
 
 # Message kinds. The label is what a screen reader hears first on each line.
 USER = "user"
@@ -110,6 +112,14 @@ class Transcript:
     #: The model of Claude's latest reply ("claude-opus-5-5").
     model: str = ""
     compactions: int = 0
+    #: How many messages you've sent: the turn a file change belongs to.
+    turns: int = 0
+    #: Files Claude changed, in order (#18).
+    edits: List[FileEdit] = field(default_factory=list)
+
+    def latest_turn_edits(self) -> List[FileEdit]:
+        """The changes made since your latest message."""
+        return [e for e in self.edits if e.turn == self.turns]
 
     def visible(self, show_activity: bool = False) -> List[ChatMessage]:
         if show_activity:
@@ -152,6 +162,7 @@ class TranscriptParser:
     def __init__(self) -> None:
         self.transcript = Transcript()
         self._tool_names: Dict[str, str] = {}  # tool_use_id -> tool name
+        self._edit_inputs: Dict[str, Tuple[str, dict]] = {}  # file-changing calls
         self._last_assistant_id: Optional[str] = None
 
     # -- public -------------------------------------------------------------
@@ -273,12 +284,19 @@ class TranscriptParser:
             return []
         if _INTERRUPT.match(text):
             return [self._add(INTERRUPTED, "You stopped Claude.", record)]
+        self.transcript.turns += 1
         return [self._add(USER, text, record)]
 
     def _tool_result(self, block: dict, record: dict) -> ChatMessage:
         tool_id = str(block.get("tool_use_id") or "")
         name = self._tool_names.get(tool_id, "")
         body = _plain_text(block.get("content"))
+        edit_call = self._edit_inputs.pop(tool_id, None)
+        if edit_call is not None and not block.get("is_error"):
+            edit = edit_from_tool(edit_call[0], edit_call[1], record.get("toolUseResult"),
+                                  self.transcript.turns)
+            if edit is not None:
+                self.transcript.edits.append(edit)
         if name == "AskUserQuestion":
             return self._add(ANSWER, _format_answers(record.get("toolUseResult"), body),
                              record, key=f"{record.get('uuid')}:{tool_id}")
@@ -338,6 +356,8 @@ class TranscriptParser:
         if tool_id:
             self._tool_names[tool_id] = name
         tool_input = block.get("input") if isinstance(block.get("input"), dict) else {}
+        if tool_id and name in EDIT_TOOLS:
+            self._edit_inputs[tool_id] = (name, tool_input)
         key = f"{record.get('uuid')}:{tool_id}"
         if name == "AskUserQuestion":
             return self._add(QUESTION, _format_questions(tool_input), record, key=key)

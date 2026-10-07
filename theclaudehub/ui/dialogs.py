@@ -6,6 +6,7 @@ import os
 
 import wx
 
+from ..changes import file_text
 from ..claude_cli import DEFAULT_PERMISSION_MODE, MODELS, PERMISSION_MODES
 from ..speech import (ANNOUNCE_LABELS, ANNOUNCE_LEVELS, RATE_PRESET_LABELS,
                       SpeechSettings)
@@ -1003,3 +1004,69 @@ class CodeBlocksDialog(wx.Dialog):
         index = self.list.GetSelection()
         if 0 <= index < len(self._blocks):
             self._copy(self._blocks[index])
+
+
+class ChangesDialog(wx.Dialog):
+    """The files Claude changed (#18): from your latest message or the whole
+    session, each file's line counts, and the selected file's changes to
+    read by line ("Removed: …", "Added: …")."""
+
+    def __init__(self, parent, title, latest, everything, describe):
+        super().__init__(parent, title=f"Changed Files: {title}", size=(800, 580),
+                         style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+        self._sets = [latest, everything]
+        self._describe = describe
+        self._files = []
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        row = wx.BoxSizer(wx.HORIZONTAL)
+        row.Add(wx.StaticText(self, label="&Show changes from:"), 0,
+                wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
+        self.scope = wx.Choice(self, choices=["Your latest message", "The whole session"])
+        self.scope.SetSelection(0 if latest else 1)
+        row.Add(self.scope, 0)
+        sizer.Add(row, 0, wx.LEFT | wx.TOP | wx.RIGHT, 8)
+        sizer.Add(wx.StaticText(self, label="&Files:"), 0, wx.LEFT | wx.TOP, 8)
+        self.list = wx.ListBox(self, style=wx.LB_SINGLE)
+        self.list.SetMinSize((-1, 130))
+        sizer.Add(self.list, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        sizer.Add(wx.StaticText(self, label="C&hanges:"), 0, wx.LEFT | wx.TOP, 8)
+        self.text = _read_only_text(self, "", "Changes", min_height=240)
+        self.text.SetFont(wx.Font(10, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL,
+                                  wx.FONTWEIGHT_NORMAL))
+        sizer.Add(self.text, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        buttons = wx.BoxSizer(wx.HORIZONTAL)
+        buttons.Add(wx.Button(self, wx.ID_CANCEL, "C&lose"), 0)
+        sizer.Add(buttons, 0, wx.ALIGN_RIGHT | wx.ALL, 8)
+        self.SetSizer(sizer)
+        self.SetEscapeId(wx.ID_CANCEL)
+        self.scope.Bind(wx.EVT_CHOICE, lambda e: self._fill())
+        self.list.Bind(wx.EVT_LISTBOX, lambda e: self._show())
+        self.list.Bind(wx.EVT_LISTBOX_DCLICK, lambda e: self.text.SetFocus())
+        self.list.Bind(wx.EVT_KEY_DOWN, self._on_list_key)
+        self._fill()
+        wx.CallAfter(self.list.SetFocus)
+
+    def _fill(self):
+        self._files = self._sets[self.scope.GetSelection()]
+        rows = [self._describe(f) for f in self._files] or ["No files changed."]
+        self.list.Set(rows)
+        set_accessible_name(self.list, f"Files, {len(self._files)}")
+        self.list.SetSelection(0)
+        self._show()
+
+    def _show(self):
+        index = self.list.GetSelection()
+        if 0 <= index < len(self._files):
+            changes = self._files[index]
+            self.text.ChangeValue(file_text(changes))
+            set_accessible_name(self.text, f"Changes to {os.path.basename(changes.path)}")
+        else:
+            self.text.ChangeValue("")
+            set_accessible_name(self.text, "Changes")
+        self.text.SetInsertionPoint(0)
+
+    def _on_list_key(self, event):
+        if event.GetKeyCode() in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER):
+            self.text.SetFocus()  # Enter: read the file's changes
+            return
+        event.Skip()
