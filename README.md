@@ -73,9 +73,9 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   Chat Place, since its files are never changed: it's kept in
   `%APPDATA%\TheChatPlace\titles.json`, and the desktop app keeps its own name for it. Renaming
   it to nothing (clear the box) goes back to the desktop app's name.
-- **The session's menu** (Applications key or Shift+F10 in the session list, or a right-click)
-  has the File menu's commands for the selected session: load, open in Claude, continue here,
-  rename, Remote Control, groups, export, and hide or delete.
+- **The session's menu** (Applications key or Shift+F10 in the session list, VO+Shift+M with
+  VoiceOver on a Mac, or a right-click) has the File menu's commands for the selected session:
+  load, open in Claude, continue here, rename, Remote Control, groups, export, and hide or delete.
 - **What Claude knows about you** (Ctrl+Shift+K, View, What Claude Knows About You). Claude Code
   keeps what it knows about you in plain files, and this lists them by kind: your instructions
   (`CLAUDE.md`, yours and each project's), the memories Claude saved for each project, your

@@ -6,3 +6,9 @@ releases/
 *.spec
 smoke*.json
 .venv/
+
+# Files Finder and Explorer leave in folders
+.DS_Store
+._*
+Thumbs.db
+desktop.ini

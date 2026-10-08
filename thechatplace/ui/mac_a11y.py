@@ -153,6 +153,123 @@ def activate_app() -> bool:
         return False
 
 
+_MENU_CLASS = b"wxNSTableView"  # the NSTableView inside every wx.ListBox
+_menu_handlers: dict = {}  # native view address -> what opens its menu
+_menu_methods: list = []  # the installed methods' ctypes callbacks, kept alive
+_ACTION_NAMES_TYPE = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)
+_SHOW_MENU_TYPE = ctypes.CFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+_PERFORM_TYPE = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)
+
+
+def _install_show_menu() -> bool:
+    """Teach wx's list box table VoiceOver's show-menu action, once.
+
+    VO+Shift+M performs AXShowMenu, and a ``wx.ListBox``'s table doesn't
+    offer it: wx opens context menus from a right-click or a key, and the
+    table has no NSMenu of its own, so AppKit lists no actions and VO+Shift+M
+    did nothing. Methods are put on the class: the action list gains
+    AXShowMenu for a table with a handler, and performing it calls that
+    handler. Tables without one are answered as before. Performing goes
+    through both the old ``accessibilityPerformAction:``, which the table
+    still answers itself (calling the original found no menu and did
+    nothing), and the newer ``accessibilityPerformShowMenu``.
+    """
+    if _menu_methods:
+        return True
+    objc = _runtime()
+    if objc is None:
+        return False
+    objc.class_getInstanceMethod.restype = ctypes.c_void_p
+    objc.class_getInstanceMethod.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    objc.method_getImplementation.restype = ctypes.c_void_p
+    objc.method_getImplementation.argtypes = [ctypes.c_void_p]
+    objc.class_replaceMethod.restype = ctypes.c_void_p
+    objc.class_replaceMethod.argtypes = [ctypes.c_void_p, ctypes.c_void_p,
+                                         ctypes.c_void_p, ctypes.c_char_p]
+    cls = objc.objc_getClass(_MENU_CLASS)
+    if not cls:
+        return False
+    names_selector = _selector("accessibilityActionNames")
+    inherited = objc.class_getInstanceMethod(cls, names_selector)
+    if not inherited:
+        return False
+    original_names = _ACTION_NAMES_TYPE(objc.method_getImplementation(inherited))
+    perform_selector = _selector("accessibilityPerformAction:")
+    inherited = objc.class_getInstanceMethod(cls, perform_selector)
+    if not inherited:
+        return False
+    original_perform = _PERFORM_TYPE(objc.method_getImplementation(inherited))
+
+    def action_names(view, selector):
+        names = original_names(view, selector)
+        if view not in _menu_handlers:
+            return names
+        try:
+            show_menu = ctypes.c_void_p(_nsstring("AXShowMenu"))
+            if names:
+                return _send(ctypes.c_void_p(names), "arrayByAddingObject:", show_menu,
+                             argtypes=(ctypes.c_void_p,))
+            return _send(objc.objc_getClass(b"NSArray"), "arrayWithObject:", show_menu,
+                         argtypes=(ctypes.c_void_p,))
+        except Exception:  # noqa: BLE001 - an exception can't cross into AppKit
+            return names
+
+    def perform_show_menu(view, _selector_):
+        handler = _menu_handlers.get(view)
+        if handler is None:
+            return False
+        try:
+            handler()
+        except Exception:  # noqa: BLE001
+            return False
+        return True
+
+    def perform_action(view, selector, action):
+        if view in _menu_handlers:
+            try:
+                if _to_str(action) == "AXShowMenu":
+                    perform_show_menu(view, selector)
+                    return
+            except Exception:  # noqa: BLE001
+                pass
+        original_perform(view, selector, action)
+
+    names_imp = _ACTION_NAMES_TYPE(action_names)
+    show_imp = _SHOW_MENU_TYPE(perform_show_menu)
+    perform_imp = _PERFORM_TYPE(perform_action)
+    _menu_methods.extend([original_names, original_perform, names_imp, show_imp, perform_imp])
+    objc.class_replaceMethod(cls, names_selector,
+                             ctypes.cast(names_imp, ctypes.c_void_p), b"@@:")
+    objc.class_replaceMethod(cls, perform_selector,
+                             ctypes.cast(perform_imp, ctypes.c_void_p), b"v@:@")
+    objc.class_replaceMethod(cls, _selector("accessibilityPerformShowMenu"),
+                             ctypes.cast(show_imp, ctypes.c_void_p), b"B@:")
+    return True
+
+
+def set_show_menu(window, handler) -> bool:
+    """Make VO+Shift+M on list box `window` call `handler()`. True if it will.
+
+    `handler` runs inside VoiceOver's request, so it should only schedule the
+    menu (``wx.CallAfter``): a menu opened there would hold VoiceOver up until
+    it closed. ``handler=None`` removes it, which a destroyed list must do, as
+    its view's address can be reused.
+    """
+    if not IS_MACOS:
+        return False
+    try:
+        view = _target_view(window)
+        if view is None or not _install_show_menu():
+            return False
+        if handler is None:
+            _menu_handlers.pop(view.value, None)
+        else:
+            _menu_handlers[view.value] = handler
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def get_label(window) -> str | None:
     """The name VoiceOver would read for `window`, or None. For tests, and for
     checking a control reported as unlabelled."""

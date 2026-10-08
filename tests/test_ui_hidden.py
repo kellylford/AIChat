@@ -3840,6 +3840,69 @@ def test_voiceover_follows_a_changing_name(frame):
     assert mac_a11y.get_label(frame.chat_list) == "Messages, Hub probe, idle"
 
 
+def _voiceover_actions(listbox):
+    import ctypes
+    from thechatplace.ui import mac_a11y
+    names = mac_a11y._send(mac_a11y._target_view(listbox), "accessibilityActionNames")
+    count = mac_a11y._send(ctypes.c_void_p(names), "count", restype=ctypes.c_ulong)
+    return [mac_a11y._to_str(mac_a11y._send(ctypes.c_void_p(names), "objectAtIndex:", i,
+                                            argtypes=(ctypes.c_ulong,)))
+            for i in range(count)]
+
+
+def _voiceover_show_menu(listbox):
+    """What VO+Shift+M does: perform AXShowMenu on the list's table."""
+    import ctypes
+    from thechatplace.ui import mac_a11y
+    mac_a11y._send(mac_a11y._target_view(listbox), "accessibilityPerformAction:",
+                   ctypes.c_void_p(mac_a11y._nsstring("AXShowMenu")),
+                   restype=None, argtypes=(ctypes.c_void_p,))
+
+
+@voiceover
+def test_voiceover_opens_the_lists_context_menus(frame, env, monkeypatch):
+    # A wx list box's table offered VoiceOver no AXShowMenu, so VO+Shift+M
+    # did nothing in either list.
+    assert "AXShowMenu" in _voiceover_actions(frame.session_list)
+    assert "AXShowMenu" in _voiceover_actions(frame.chat_list)
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    select(frame, "Quiet one")
+    shown = []
+    monkeypatch.setattr(frame.session_list, "GetPopupMenuSelectionFromUser",
+                        lambda menu, position: shown.append(_labels(menu)) or wx.ID_NONE)
+    _voiceover_show_menu(frame.session_list)
+    assert shown == []  # not inside VoiceOver's request, which it would hold up
+    assert pump(lambda: shown)
+    assert "H&ide Session" in shown[0]
+    popped = []
+    monkeypatch.setattr(frame.chat_list, "PopupMenu",
+                        lambda menu, position: popped.append(menu) or True)
+    _voiceover_show_menu(frame.chat_list)
+    assert pump(lambda: popped)
+
+
+@voiceover
+def test_voiceover_menu_by_the_newer_call_and_only_for_live_lists(frame, monkeypatch):
+    import ctypes
+    from thechatplace.ui import mac_a11y
+    popped = []
+    monkeypatch.setattr(frame.chat_list, "PopupMenu",
+                        lambda menu, position: popped.append(menu) or True)
+    view = mac_a11y._target_view(frame.chat_list)
+    assert mac_a11y._send(view, "accessibilityPerformShowMenu", restype=ctypes.c_bool)
+    assert pump(lambda: popped)
+    # Another list box is left as it was, and a destroyed one is forgotten,
+    # so a new view at its address doesn't open the old list's menu.
+    other = wx.ListBox(frame, choices=["one"])
+    assert "AXShowMenu" not in _voiceover_actions(other)
+    from thechatplace.ui.a11y import set_voiceover_menu
+    set_voiceover_menu(other, lambda: None)
+    address = mac_a11y._target_view(other).value
+    assert address in mac_a11y._menu_handlers
+    other.Destroy()
+    assert address not in mac_a11y._menu_handlers
+
+
 @voiceover
 def test_voiceover_reads_dialog_labels(frame):
     from thechatplace.ui.dialogs import (BugReportDialog, ChangesDialog, CommandPickerDialog,
