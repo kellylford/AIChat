@@ -4156,3 +4156,166 @@ def test_about_you_says_so_when_reading_fails(frame, env, monkeypatch):
     monkeypatch.setattr(main_frame.about_you, "collect", broken)
     frame.on_about_you()
     assert pump(lambda: "bad disk" in env["feedback"][-1])
+
+
+# -- Remote Control, easier to find (#96) ----------------------------------------------------
+
+
+def test_a_remote_control_session_says_so_in_its_row():
+    from thechatplace.sessions import SessionInfo
+    info = SessionInfo(source="desktop", key="local_a", title="Work", cwd="/r", cli_session_id="c",
+                       last_activity_ms=1, remote=True)
+    assert ", Remote Control" in info.list_line(now_ms=1)
+    info.remote = False
+    assert "Remote Control" not in info.list_line(now_ms=1)
+
+
+def test_turning_remote_control_on_shows_in_the_row_heading_and_view(frame, env, monkeypatch):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    assert pump(lambda: frame._open is not None)
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.chat_list))
+    monkeypatch.setattr(frame, "_choose", lambda title, prompt, choices, selection=None:
+                        choices.index("On for this session"))
+    frame.on_remote_control()
+    assert frame.session_heading.GetLabel().endswith(", Remote Control on.")
+    assert any(r.startswith("Hub probe") and "Remote Control" in r
+               for r in frame.session_list.GetStrings())
+    # Still so after the next read, and in View, Show Sessions, Remote Control Sessions.
+    frame.refresh_sessions(force=True)
+    settle(frame)
+    frame.on_view("remote")
+    settle(frame)
+    assert [r.split(",")[0] for r in frame.session_list.GetStrings()] == ["Hub probe"]
+    # Turning it off takes it out of the row.
+    frame.on_view("all")
+    settle(frame)
+    select(frame, "Hub probe")
+    monkeypatch.setattr(frame, "_choose", lambda title, prompt, choices, selection=None:
+                        choices.index("Off for this session"))
+    frame.on_remote_control()
+    assert not any(r.startswith("Hub probe") and "Remote Control" in r
+                   for r in frame.session_list.GetStrings())
+    assert not frame.session_heading.GetLabel().endswith(", Remote Control on.")
+
+
+def _hub_row(frame):
+    return next(r for r in frame.session_list.GetStrings() if r.startswith("Hub probe"))
+
+
+def test_with_only_the_default_on_a_row_says_remote_control_once_connected(frame, env):
+    # Every row saying so would be noise when it's true of them all.
+    frame.speech.remote_control = True
+    frame.refresh_sessions(force=True)
+    settle(frame)
+    assert "Remote Control" not in _hub_row(frame)
+    frame.store.update("own-1", bridge_session_id="cse_1")
+    frame.refresh_sessions(force=True)
+    settle(frame)
+    assert "Remote Control" in _hub_row(frame)
+    frame.speech.remote_control = False  # the default off: not used, so not said
+    frame.refresh_sessions(force=True)
+    settle(frame)
+    assert "Remote Control" not in _hub_row(frame)
+
+
+def test_a_linked_desktop_session_is_said_to_be_on_remote_control(frame, env, monkeypatch):
+    add_desktop(env, "local_r", "cli-r", "Linked one", bridgeSessionIds=["cse_7"])
+    add_transcript(env, "C:\\G\\Repo", "cli-r", [user_text("hi")])
+    frame.refresh_sessions(force=True, resort=True)
+    settle(frame)
+    assert "Remote Control" in next(r for r in frame.session_list.GetStrings()
+                                    if r.startswith("Linked one"))
+    select(frame, "Linked one")
+    frame.on_open_session()
+    assert pump(lambda: frame._open is not None)
+    assert frame.session_heading.GetLabel().endswith(
+        ", on Remote Control in the desktop app.")
+    # Its dialog says nothing more is needed, rather than offering to turn it on.
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.chat_list))
+    asked = []
+    monkeypatch.setattr(frame, "_choose", lambda title, prompt, choices, selection=None:
+                        asked.append((prompt, choices)))
+    frame.on_remote_control()
+    prompt, choices = asked[-1]
+    assert "already on Remote Control" in prompt and "nothing more is needed" in prompt
+    assert not any("to turn on Remote Control" in c for c in choices)
+
+
+def test_desktop_remote_control_offers_only_what_can_work(frame, env, monkeypatch):
+    # No transcript: Continue Here can't work, so only Open is offered; with
+    # neither, it says why instead of showing an empty choice.
+    add_desktop(env, "local_n", "cli-n", "No transcript")
+    frame.refresh_sessions(force=True, resort=True)
+    settle(frame)
+    select(frame, "No transcript")
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    asked = []
+    monkeypatch.setattr(frame, "_choose", lambda title, prompt, choices, selection=None:
+                        asked.append(choices))
+    frame.on_remote_control()
+    assert asked[-1] == ["Open it in the Claude desktop app, to turn on Remote Control there"]
+    monkeypatch.setattr(type(frame._selected_session()), "can_open_in_claude",
+                        property(lambda self: False))
+    count = len(asked)
+    frame.on_remote_control()
+    assert len(asked) == count and "can't use Remote Control" in env["feedback"][-1]
+
+
+def test_remote_control_is_on_the_session_menu(frame, monkeypatch):
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    for title in ("Hub probe", "Quiet one"):
+        select(frame, title)
+        menu, actions = frame._session_menu()
+        assert "&Remote Control..." in _labels(menu)
+        menu.Destroy()
+
+
+def test_remote_control_for_a_desktop_session_offers_both_ways(frame, env, fake_runner,
+                                                                monkeypatch):
+    folder = env["tmp"] / "repo"
+    folder.mkdir()
+    add_desktop(env, "local_c", "cli-c", "Desktop work", cwd=str(folder))
+    add_transcript(env, str(folder), "cli-c", [user_text("Earlier question")])
+    frame.refresh_sessions(force=True, resort=True)
+    settle(frame)
+    select(frame, "Desktop work")
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    asked = []
+
+    def choose(title, prompt, choices, selection=None):
+        asked.append((prompt, list(choices)))
+        return next(i for i, c in enumerate(choices) if c.startswith("Open it in"))
+    monkeypatch.setattr(frame, "_choose", choose)
+    frame.on_remote_control()
+    prompt, choices = asked[-1]
+    assert "doesn't change" in prompt
+    assert choices == ["Open it in the Claude desktop app, to turn on Remote Control there",
+                       "Continue it here as a copy, with Remote Control on"]
+    assert env["opened"][-1].startswith("claude://")
+    # Continuing it here starts the copy on Remote Control from its first turn.
+    monkeypatch.setattr(frame, "_choose", lambda title, prompt, choices, selection=None:
+                        choices.index("Continue it here as a copy, with Remote Control on"))
+    from thechatplace.ui import dialogs
+
+    class Fills(dialogs.NewSessionDialog):
+        def ShowModal(self):
+            self.message.SetValue("Carry on")
+            return wx.ID_OK
+    monkeypatch.setattr("thechatplace.ui.main_frame.NewSessionDialog", Fills)
+    frame.on_remote_control()
+    runner = fake_runner.instances[-1]
+    new_id = runner.command[runner.command.index("--session-id") + 1]
+    assert frame.store.get(new_id).remote_control == "on"
+    assert runner.remote_control == {"name": "Desktop work (continued)", "reattach": ""}
+    assert "starts on Remote Control" in env["feedback"][-1]
+    # The desktop app's session is untouched.
+    assert (env["desktop"] / "local_c" / "org" / "local_c.json").is_file()
+
+
+def test_remote_control_for_a_desktop_session_cancelled_does_nothing(frame, env, monkeypatch):
+    select(frame, "Quiet one")
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    monkeypatch.setattr(frame, "_choose", lambda title, prompt, choices, selection=None: None)
+    frame.on_remote_control()
+    assert env["opened"] == [] and len(frame.store.all()) == 1

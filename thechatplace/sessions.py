@@ -51,7 +51,10 @@ class SessionInfo:
     unread: bool = False
     #: The desktop app archived it (shown only in the Archived view, #32).
     archived: bool = False
-    #: The desktop app has linked it for Remote Control (claude.ai).
+    #: On Remote Control (claude.ai). For a desktop app session: the desktop
+    #: app has linked it. For one of The Chat Place's own, set by the window
+    #: (#96): its turns ask for Remote Control, and you turned it on for it or
+    #: it has connected; not proof it is reachable right now.
     remote: bool = False
     #: Chat Place groups it's in (#31), set by the window, read in its row.
     groups: tuple = ()
@@ -92,6 +95,8 @@ class SessionInfo:
         parts.append(describe_age(self.last_activity_ms, now_ms))
         if self.is_own:
             parts.append("Chat Place session")
+        if self.remote:
+            parts.append("Remote Control")  # #96: say which can be reached from claude.ai
         if self.archived:
             parts.append("archived")
         if self.hidden:
