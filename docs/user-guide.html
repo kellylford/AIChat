@@ -22,7 +22,7 @@ heading, so your screen reader's heading keys move between them. For every key i
 Help, Keyboard Shortcuts (F1).</p>
 <p>The Chat Place is an independent project by Kelly Ford. It works with Claude Code and the Claude
 desktop app, but it isn't made, sponsored or endorsed by Anthropic, and isn't affiliated with it.</p>
-<nav aria-labelledby="contents"><h2 id="contents">Contents</h2><ul><li><a href="#before-you-start">Before you start</a></li><li><a href="#the-window">The window</a></li><li><a href="#reading-a-session">Reading a session</a></li><li><a href="#desktop-app-sessions-and-the-chat-place-s-own">Desktop app sessions and The Chat Place's own</a></li><li><a href="#starting-a-session-and-replying">Starting a session and replying</a></li><li><a href="#when-claude-needs-you">When Claude needs you</a></li><li><a href="#organizing-your-sessions">Organizing your sessions</a></li><li><a href="#announcements-and-notifications">Announcements and notifications</a></li><li><a href="#more-things-you-can-do">More things you can do</a></li><li><a href="#remote-control">Remote Control</a></li><li><a href="#updates">Updates</a></li><li><a href="#when-something-isn-t-right">When something isn't right</a></li><li><a href="#good-to-know">Good to know</a></li></ul></nav><h2 id="before-you-start">Before you start</h2>
+<nav aria-labelledby="contents"><h2 id="contents">Contents</h2><ul><li><a href="#before-you-start">Before you start</a></li><li><a href="#the-window">The window</a></li><li><a href="#reading-a-session">Reading a session</a></li><li><a href="#desktop-app-sessions-and-the-chat-place-s-own">Desktop app sessions and The Chat Place's own</a></li><li><a href="#starting-a-session-and-replying">Starting a session and replying</a></li><li><a href="#when-claude-needs-you">When Claude needs you</a></li><li><a href="#organizing-your-sessions">Organizing your sessions</a></li><li><a href="#announcements-and-notifications">Announcements and notifications</a></li><li><a href="#more-things-you-can-do">More things you can do</a></li><li><a href="#remote-control">Remote Control</a></li><li><a href="#your-sessions-on-other-computers">Your sessions on other computers</a></li><li><a href="#updates">Updates</a></li><li><a href="#when-something-isn-t-right">When something isn't right</a></li><li><a href="#good-to-know">Good to know</a></li></ul></nav><h2 id="before-you-start">Before you start</h2>
 <p>You need:</p>
 <ul>
 <li>Windows 10 or 11, or a Mac with Apple silicon.</li>
@@ -274,9 +274,9 @@ File, Remote Control copies the session's claude.ai address.</p>
   offline on claude.ai until you send your next message from The Chat Place.</li>
 <li>See the session from another computer's copy of The Chat Place. The session lives on the
   computer that started it; claude.ai is how you reach it from elsewhere.</li>
-<li>Reach a session on another computer from here, even with Remote Control on. If you turned on
-  Remote Control for a session on another computer, for example in the Claude desktop app there, The Chat Place on
-  this computer doesn't list it. Open it on claude.ai or in the Claude app instead.</li>
+<li>Read a session on another computer from here. You can send it a message and hear its reply
+  (see "Your sessions on other computers", next), but its own conversation is only on claude.ai
+  and in the Claude app.</li>
 </ul>
 <p><strong>Good to know:</strong> turning Remote Control on copies the conversation to claude.ai, and it stays
 there even if you turn Remote Control off or delete the session here (you can archive it on
@@ -285,6 +285,50 @@ Settings can turn Remote Control on for all of The Chat Place's sessions; then a
 says so once it has connected.</p>
 <p>For a Claude desktop app session, File, Remote Control offers to open it in the desktop app, where
 you turn Remote Control on, or to continue it here as a copy with Remote Control on.</p>
+<h2 id="your-sessions-on-other-computers">Your sessions on other computers</h2>
+<p>If you use Claude Code on more than one computer, say a laptop, a desktop and a Mac, The Chat
+Place can send a message to a session on another of them and let you hear the answer, without
+going to that computer. It goes through Claude: Claude in one of The Chat Place's own sessions
+here passes your message on, and the other session's reply comes back to that session.</p>
+<p><strong>What you need:</strong></p>
+<ul>
+<li>One of The Chat Place's own sessions, loaded, with Remote Control on (File, Remote Control).
+  Any of your sessions will do. One kept for the purpose, called "Hub" say, keeps these messages
+  out of your other work.</li>
+<li>On the other computer, a Claude Code session with Remote Control on: in the Claude desktop
+  app, in a terminal, or in The Chat Place there. That computer has to be awake.</li>
+</ul>
+<p><strong>Sending a message:</strong></p>
+<ol>
+<li>Load your session and press <strong>Ctrl+Shift+M</strong> (File, Other Machines).</li>
+<li>The first time, the list only offers <strong>Refresh the list (asks Claude)</strong>. Choose it. Claude
+   looks up your sessions on other computers, as a turn in this session, and says what it found.</li>
+<li>When it has answered, press <strong>Ctrl+Shift+M</strong> again. Now the list has each session on your
+   other computers and how it is: "idle", "working", "needs you" or "offline".</li>
+<li>Choose one, type your message, and press <strong>Enter</strong>. Claude sends it word for word.</li>
+<li>The answer arrives in the same session as a message from that session, "From Mac Hub" for
+   example, and it's announced. Enter reads it in full, like any message.</li>
+</ol>
+<p>The list is Claude's latest look, so after a while choose Refresh again. Other Machines works
+between turns. While Claude is working, wait for it to finish.</p>
+<p><strong>Messages from other sessions.</strong> Any message another Claude Code session sends to one of your
+sessions shows as "From" and that session's name, not as something you typed, and it's
+announced. It doesn't matter whether you asked for it with Other Machines, or in your own words
+("ask the Mac session what it's working on"). A message that arrives while Claude is working
+shows up when it does.</p>
+<p><strong>Good to know:</strong></p>
+<ul>
+<li><strong>"Offline" doesn't always mean off.</strong> A session in The Chat Place is offline between turns,
+  because each turn is its own Claude Code process. A message to it waits, and it gets the
+  message on its next turn, when someone sends it something there. A session in the Claude
+  desktop app or a terminal keeps running between turns instead.</li>
+<li><strong>Other sessions find yours by its name.</strong> A session of The Chat Place's keeps the same name
+  every turn, so rename it (F2) to something easy to ask for.</li>
+<li><strong>You hear only what comes back.</strong> The other computer's conversation can't be read from here;
+  open it on claude.ai or in the Claude app for that.</li>
+<li><strong>A message from another session isn't you.</strong> Claude treats it as information, not as your
+  say-so, so it still asks you before anything that needs your permission.</li>
+</ul>
 <h2 id="updates">Updates</h2>
 <p>The installed app checks for a new version shortly after it starts, and says so only if there is
 one. <strong>Help, Check for Updates</strong> asks right away and offers to install it (No is the default). It

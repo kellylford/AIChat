@@ -317,9 +317,9 @@ File, Remote Control copies the session's claude.ai address.
   offline on claude.ai until you send your next message from The Chat Place.
 - See the session from another computer's copy of The Chat Place. The session lives on the
   computer that started it; claude.ai is how you reach it from elsewhere.
-- Reach a session on another computer from here, even with Remote Control on. If you turned on
-  Remote Control for a session on another computer, for example in the Claude desktop app there, The Chat Place on
-  this computer doesn't list it. Open it on claude.ai or in the Claude app instead.
+- Read a session on another computer from here. You can send it a message and hear its reply
+  (see "Your sessions on other computers", next), but its own conversation is only on claude.ai
+  and in the Claude app.
 
 **Good to know:** turning Remote Control on copies the conversation to claude.ai, and it stays
 there even if you turn Remote Control off or delete the session here (you can archive it on
@@ -329,6 +329,54 @@ says so once it has connected.
 
 For a Claude desktop app session, File, Remote Control offers to open it in the desktop app, where
 you turn Remote Control on, or to continue it here as a copy with Remote Control on.
+
+## Your sessions on other computers
+
+If you use Claude Code on more than one computer, say a laptop, a desktop and a Mac, The Chat
+Place can send a message to a session on another of them and let you hear the answer, without
+going to that computer. It goes through Claude: Claude in one of The Chat Place's own sessions
+here passes your message on, and the other session's reply comes back to that session.
+
+**What you need:**
+
+- One of The Chat Place's own sessions, loaded, with Remote Control on (File, Remote Control).
+  Any of your sessions will do. One kept for the purpose, called "Hub" say, keeps these messages
+  out of your other work.
+- On the other computer, a Claude Code session with Remote Control on: in the Claude desktop
+  app, in a terminal, or in The Chat Place there. That computer has to be awake.
+
+**Sending a message:**
+
+1. Load your session and press **Ctrl+Shift+M** (File, Other Machines).
+2. The first time, the list only offers **Refresh the list (asks Claude)**. Choose it. Claude
+   looks up your sessions on other computers, as a turn in this session, and says what it found.
+3. When it has answered, press **Ctrl+Shift+M** again. Now the list has each session on your
+   other computers and how it is: "idle", "working", "needs you" or "offline".
+4. Choose one, type your message, and press **Enter**. Claude sends it word for word.
+5. The answer arrives in the same session as a message from that session, "From Mac Hub" for
+   example, and it's announced. Enter reads it in full, like any message.
+
+The list is Claude's latest look, so after a while choose Refresh again. Other Machines works
+between turns. While Claude is working, wait for it to finish.
+
+**Messages from other sessions.** Any message another Claude Code session sends to one of your
+sessions shows as "From" and that session's name, not as something you typed, and it's
+announced. It doesn't matter whether you asked for it with Other Machines, or in your own words
+("ask the Mac session what it's working on"). A message that arrives while Claude is working
+shows up when it does.
+
+**Good to know:**
+
+- **"Offline" doesn't always mean off.** A session in The Chat Place is offline between turns,
+  because each turn is its own Claude Code process. A message to it waits, and it gets the
+  message on its next turn, when someone sends it something there. A session in the Claude
+  desktop app or a terminal keeps running between turns instead.
+- **Other sessions find yours by its name.** A session of The Chat Place's keeps the same name
+  every turn, so rename it (F2) to something easy to ask for.
+- **You hear only what comes back.** The other computer's conversation can't be read from here;
+  open it on claude.ai or in the Claude app for that.
+- **A message from another session isn't you.** Claude treats it as information, not as your
+  say-so, so it still asks you before anything that needs your permission.
 
 ## Updates
 
