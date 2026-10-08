@@ -1464,7 +1464,7 @@ class MainFrame(wx.Frame):
             menu.Bind(wx.EVT_MENU, lambda e: self.remove_queued(), remove)
             menu.AppendSeparator()
         has_code = message is not None and bool(find_code_blocks(message.text))
-        blocks = menu.Append(wx.ID_ANY, "Code &Blocks...")
+        blocks = menu.Append(wx.ID_ANY, "Code &Blocks...\tCtrl+Shift+B")
         copy_code = menu.Append(wx.ID_ANY, "Copy &Last Code Block\tCtrl+Shift+C")
         read.Enable(message is not None)
         copy.Enable(message is not None)
@@ -3616,6 +3616,10 @@ class MainFrame(wx.Frame):
                 self.copy_last_code_block()
             else:
                 self._copy_message()
+            return
+        if (ctrl and event.ShiftDown() and key in (ord("B"), ord("b"))
+                and not event.AltDown() and focus is self.chat_list):
+            self.on_code_blocks()  # straight to the list, as Ctrl+Shift+C copies the last one
             return
         event.Skip()
 
