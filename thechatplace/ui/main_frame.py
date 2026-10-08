@@ -646,7 +646,7 @@ class MainFrame(wx.Frame):
                 if own is not None:
                     info.title = own.title
                     # On Remote Control (#96): in that view, and its row says so.
-                    info.remote = self._remote_control_on(own)
+                    info.remote = self._remote_shown(own)
         ended = [info for info in ended if info.key not in self.hidden]
         if not snap.desktop_groups.read_ok:
             snap.desktop_groups = previous_desktop_groups  # keep the last good read
@@ -1919,6 +1919,13 @@ class MainFrame(wx.Frame):
             return own.remote_control == "on"
         return self.speech.remote_control
 
+    def _remote_shown(self, own) -> bool:
+        """Whether an own session's row says Remote Control (#96): its turns
+        use it, and you chose it for this session or it has connected. With
+        only the Settings default on, every row saying so would be noise."""
+        return self._remote_control_on(own) and (own.remote_control == "on"
+                                                 or bool(own.bridge_session_id))
+
     def on_remote_control(self):
         """File, Remote Control (#72): on, off, or as Settings says, for
         the selected session from its next turn. While a turn runs, the
@@ -1958,10 +1965,10 @@ class MainFrame(wx.Frame):
             return
         own = self.store.get(info.cli_session_id)
         on = self._remote_control_on(own)
-        for each in [s for s in self._snapshot.sessions if s.key == info.key] + [info]:
-            each.remote = on
+        for each in self._snapshot.sessions:
+            if each.key == info.key:
+                each.remote = self._remote_shown(own)
         if self._open is not None and self._open.key == info.key:
-            self._open.remote = on
             self._update_heading()
         self._refresh_list_in_place()
         self._feedback(f"Remote Control {'on' if on else 'off'} for {info.title}, "
@@ -1972,18 +1979,27 @@ class MainFrame(wx.Frame):
         never changes a desktop session, so it offers the two ways there
         are: turn it on in the desktop app, or continue the session here as
         a copy with Remote Control on from its first turn."""
-        now = (" It's on Remote Control in the desktop app now."
-               if info.remote else "")
         choices, actions = [], []
         if info.can_open_in_claude:
-            choices.append("Open it in the Claude desktop app, to turn on Remote Control there")
+            choices.append("Open it in the Claude desktop app, where Remote Control is "
+                           "turned on and off" if info.remote else
+                           "Open it in the Claude desktop app, to turn on Remote Control there")
             actions.append(self.on_open_in_claude)
-        choices.append("Continue it here as a copy, with Remote Control on")
-        actions.append(lambda: self.on_continue_here(remote_control="on"))
-        index = self._choose(
-            "Remote Control",
-            f"{info.title} is a Claude desktop app session, which The Chat Place doesn't "
-            f"change.{now} How do you want to reach it from claude.ai?", choices)
+        if info.cli_session_id and platform_paths.transcript_path(info.cwd, info.cli_session_id):
+            choices.append("Continue it here as a copy, with Remote Control on")
+            actions.append(lambda: self.on_continue_here(remote_control="on"))
+        if not choices:
+            self._feedback(f"{info.title} is a desktop app session that can't be opened in "
+                           "the desktop app or continued here, so it can't use Remote Control.")
+            return
+        if info.remote:
+            prompt = (f"{info.title} is already on Remote Control in the desktop app, so you "
+                      "can reach it from claude.ai now; nothing more is needed. The Chat "
+                      "Place doesn't change desktop app sessions. Other ways:")
+        else:
+            prompt = (f"{info.title} is a Claude desktop app session, which The Chat Place "
+                      "doesn't change. How do you want to reach it from claude.ai?")
+        index = self._choose("Remote Control", prompt, choices)
         if index is not None:
             actions[index]()
 
@@ -2383,6 +2399,8 @@ class MainFrame(wx.Frame):
         self._start_turn(new_id, command, info.cwd, message, title)
         self.open_session(own.to_info())
         self.refresh_sessions()
+        if remote_control == "on":
+            self._feedback(f"{title} starts on Remote Control; it's said once it connects.")
 
     def on_send(self, _event=None):
         info = self._open
@@ -3169,6 +3187,9 @@ class MainFrame(wx.Frame):
             wx.MessageBox(f"Couldn't save settings: {exc}", APP_NAME,
                           wx.OK | wx.ICON_WARNING, self)
         self._feedback("Settings saved.")
+        # The Remote Control default shows in rows and the heading (#96).
+        self.refresh_sessions()
+        self._update_heading()
 
     # ------------------------------------------------------------- updates
 

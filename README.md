@@ -48,8 +48,9 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   and a new one is added at the end. F5, or a refresh while you're elsewhere, puts it back in
   order, keeping you on the same session.
   **View, Show Sessions** (Alt+V, H) chooses which sessions are listed: all, needs you or
-  working, needs you, desktop app sessions, The Chat Place's own, Remote Control sessions (ones
-  the desktop app has linked for Remote Control), archived (the desktop app's archived
+  working, needs you, desktop app sessions, The Chat Place's own, Remote Control sessions (desktop app
+  sessions linked for Remote Control, and Chat Place sessions you've turned it on for or that
+  have connected), archived (the desktop app's archived
   sessions, otherwise hidden), hidden (the ones you've hidden), or one of your groups. The
   list's name says what it shows and how many ("Session list, needs you, 2 of 139"), and the
   choice is remembered.
@@ -196,7 +197,8 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   archive it on claude.ai). While a turn runs, anyone signed in to your account on claude.ai
   can type into it or answer its questions; a question answered there is cleared here.
   It's also on the session's menu (Applications key). A session on Remote Control says so in
-  its row and heading, and View, Show Sessions, Remote Control Sessions lists it. For a Claude
+  its row and heading, and View, Show Sessions, Remote Control Sessions lists it (with only the
+  Settings default on, a Chat Place session's row says so once it has connected). For a Claude
   desktop app session, File, Remote Control offers to open it in the desktop app, where its
   Remote Control is turned on, or to continue it here as a copy with Remote Control on from the
   first turn; The Chat Place never changes the desktop app's session itself.

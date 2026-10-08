@@ -4187,14 +4187,79 @@ def test_turning_remote_control_on_shows_in_the_row_heading_and_view(frame, env,
     frame.on_view("remote")
     settle(frame)
     assert [r.split(",")[0] for r in frame.session_list.GetStrings()] == ["Hub probe"]
-    # The Settings default counts too.
+    # Turning it off takes it out of the row.
     frame.on_view("all")
-    frame.store.update("own-1", remote_control="")
+    settle(frame)
+    select(frame, "Hub probe")
+    monkeypatch.setattr(frame, "_choose", lambda title, prompt, choices, selection=None:
+                        choices.index("Off for this session"))
+    frame.on_remote_control()
+    assert not any(r.startswith("Hub probe") and "Remote Control" in r
+                   for r in frame.session_list.GetStrings())
+    assert not frame.session_heading.GetLabel().endswith(", Remote Control on.")
+
+
+def _hub_row(frame):
+    return next(r for r in frame.session_list.GetStrings() if r.startswith("Hub probe"))
+
+
+def test_with_only_the_default_on_a_row_says_remote_control_once_connected(frame, env):
+    # Every row saying so would be noise when it's true of them all.
     frame.speech.remote_control = True
     frame.refresh_sessions(force=True)
     settle(frame)
-    assert any(r.startswith("Hub probe") and "Remote Control" in r
-               for r in frame.session_list.GetStrings())
+    assert "Remote Control" not in _hub_row(frame)
+    frame.store.update("own-1", bridge_session_id="cse_1")
+    frame.refresh_sessions(force=True)
+    settle(frame)
+    assert "Remote Control" in _hub_row(frame)
+    frame.speech.remote_control = False  # the default off: not used, so not said
+    frame.refresh_sessions(force=True)
+    settle(frame)
+    assert "Remote Control" not in _hub_row(frame)
+
+
+def test_a_linked_desktop_session_is_said_to_be_on_remote_control(frame, env, monkeypatch):
+    add_desktop(env, "local_r", "cli-r", "Linked one", bridgeSessionIds=["cse_7"])
+    add_transcript(env, "C:\\G\\Repo", "cli-r", [user_text("hi")])
+    frame.refresh_sessions(force=True, resort=True)
+    settle(frame)
+    assert "Remote Control" in next(r for r in frame.session_list.GetStrings()
+                                    if r.startswith("Linked one"))
+    select(frame, "Linked one")
+    frame.on_open_session()
+    assert pump(lambda: frame._open is not None)
+    assert frame.session_heading.GetLabel().endswith(
+        ", on Remote Control in the desktop app.")
+    # Its dialog says nothing more is needed, rather than offering to turn it on.
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.chat_list))
+    asked = []
+    monkeypatch.setattr(frame, "_choose", lambda title, prompt, choices, selection=None:
+                        asked.append((prompt, choices)))
+    frame.on_remote_control()
+    prompt, choices = asked[-1]
+    assert "already on Remote Control" in prompt and "nothing more is needed" in prompt
+    assert not any("to turn on Remote Control" in c for c in choices)
+
+
+def test_desktop_remote_control_offers_only_what_can_work(frame, env, monkeypatch):
+    # No transcript: Continue Here can't work, so only Open is offered; with
+    # neither, it says why instead of showing an empty choice.
+    add_desktop(env, "local_n", "cli-n", "No transcript")
+    frame.refresh_sessions(force=True, resort=True)
+    settle(frame)
+    select(frame, "No transcript")
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    asked = []
+    monkeypatch.setattr(frame, "_choose", lambda title, prompt, choices, selection=None:
+                        asked.append(choices))
+    frame.on_remote_control()
+    assert asked[-1] == ["Open it in the Claude desktop app, to turn on Remote Control there"]
+    monkeypatch.setattr(type(frame._selected_session()), "can_open_in_claude",
+                        property(lambda self: False))
+    count = len(asked)
+    frame.on_remote_control()
+    assert len(asked) == count and "can't use Remote Control" in env["feedback"][-1]
 
 
 def test_remote_control_is_on_the_session_menu(frame, monkeypatch):
@@ -4243,6 +4308,7 @@ def test_remote_control_for_a_desktop_session_offers_both_ways(frame, env, fake_
     new_id = runner.command[runner.command.index("--session-id") + 1]
     assert frame.store.get(new_id).remote_control == "on"
     assert runner.remote_control == {"name": "Desktop work (continued)", "reattach": ""}
+    assert "starts on Remote Control" in env["feedback"][-1]
     # The desktop app's session is untouched.
     assert (env["desktop"] / "local_c" / "org" / "local_c.json").is_file()
 
