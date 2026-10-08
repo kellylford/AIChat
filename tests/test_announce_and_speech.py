@@ -104,6 +104,14 @@ def test_speech_settings_defaults_and_round_trip(tmp_path):
     assert again.announce == ANNOUNCE_SILENT and not again.enabled
     assert not again.announce_all_sessions
     assert not again.announce_own
+
+
+def test_the_ungrouped_view_is_remembered(tmp_path):
+    path = tmp_path / "speech.json"
+    settings = SpeechSettings.load(path)
+    settings.session_view = "ungrouped"
+    settings.save(path)
+    assert SpeechSettings.load(path).session_view == "ungrouped"
     assert "enabled" not in json.loads(path.read_text())
 
 

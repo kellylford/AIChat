@@ -159,6 +159,7 @@ VIEW_NEEDS_YOU = "needs"
 VIEW_DESKTOP = "desktop"
 VIEW_OWN = "own"
 VIEW_REMOTE = "remote"
+VIEW_UNGROUPED = "ungrouped"
 VIEW_ARCHIVED = "archived"
 VIEW_HIDDEN = "hidden"
 GROUP_VIEW_PREFIX = "group:"
@@ -169,13 +170,15 @@ VIEWS = [
     (VIEW_DESKTOP, "&Desktop App Sessions"),
     (VIEW_OWN, "&Chat Place Sessions"),
     (VIEW_REMOTE, "&Remote Control Sessions"),
-    (VIEW_ARCHIVED, "Ar&chived"),
+    (VIEW_UNGROUPED, "&Ungrouped"),
+    (VIEW_ARCHIVED, "Archi&ved"),
     (VIEW_HIDDEN, "&Hidden"),
 ]
 #: Said and shown in the list's name: "showing needs you or working".
 VIEW_SPOKEN = {VIEW_ALL: "all sessions", VIEW_ACTIVE: "needs you or working",
                VIEW_NEEDS_YOU: "needs you", VIEW_DESKTOP: "desktop app sessions",
                VIEW_OWN: "Chat Place sessions", VIEW_REMOTE: "Remote Control sessions",
+               VIEW_UNGROUPED: "ungrouped sessions",
                VIEW_ARCHIVED: "archived sessions", VIEW_HIDDEN: "hidden sessions"}
 
 
@@ -213,6 +216,11 @@ def in_view(info: SessionInfo, view: str) -> bool:
         return info.is_own
     if view == VIEW_REMOTE:
         return info.remote
+    if view == VIEW_UNGROUPED:
+        # In none of your groups or the desktop app's: what still needs
+        # filing. ``groups`` is filled in by the window before this is asked;
+        # with groups.json unreadable, your own groups count as none.
+        return not info.groups
     return True
 
 

@@ -4445,3 +4445,47 @@ def test_activation_is_still_skipped_for_wx(frame):
     event = wx.ActivateEvent(wx.wxEVT_ACTIVATE, True)
     frame._on_activate(event)
     assert event.GetSkipped()  # wx still restores the last focus itself
+
+
+def test_ungrouped_shows_sessions_in_no_group_yours_or_the_desktop_apps(frame, env):
+    quiet = next(s for s in frame._snapshot.sessions if s.title == "Quiet one")
+    prefs = {"preferences": {"epitaxyPrefs": {"dframe-group-scopes": {"a/o": {
+        "groups": [{"id": "cg-1", "name": "IDT"}],
+        "assignments": {f"code:{quiet.key}": "cg-1"}}}}}}
+    (env["desktop"] / "a" / "o").mkdir(parents=True, exist_ok=True)
+    (env["desktop"].parent / "claude_desktop_config.json").write_text(json.dumps(prefs),
+                                                                      encoding="utf-8")
+    frame.groups.create("Work")
+    frame.groups.add("Work", "own:own-1")
+    frame.refresh_sessions(force=True)
+    settle(frame)
+    frame.on_view("ungrouped")
+    settle(frame)
+    assert [r.split(",")[0] for r in frame.session_list.GetStrings()] == ["Blocked one"]
+    assert frame.sessions_label.GetLabelText() == "Session list, ungrouped sessions, 1 of 3:"
+    labels = [i.GetItemLabelText() for i in frame.show_menu.GetMenuItems()]
+    assert "Ungrouped" in labels
+    # Taken out of its group, it's ungrouped again.
+    frame.groups.remove("Work", "own:own-1")
+    frame.refresh_sessions(force=True)
+    settle(frame)
+    assert sorted(r.split(",")[0] for r in frame.session_list.GetStrings()) == [
+        "Blocked one", "Hub probe"]
+    assert frame.view_items["ungrouped"].IsChecked()
+
+
+def test_filing_a_session_takes_it_out_of_ungrouped(frame, env, monkeypatch):
+    frame.on_view("ungrouped")
+    settle(frame)
+    assert len(_titles(frame)) == 3  # nothing is in a group yet
+    index = select(frame, "Quiet one")
+    next_title = frame.session_list.GetString(index + 1).split(",")[0] \
+        if index + 1 < frame.session_list.GetCount() else None
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    monkeypatch.setattr(frame, "_choose", lambda title, prompt, choices: 0)  # New group...
+    monkeypatch.setattr(frame, "_ask_group_name", lambda title, value="": "Work")
+    frame.on_add_to_group()
+    assert env["feedback"][-1] == "Added Quiet one to Work."
+    assert "Quiet one" not in _titles(frame)
+    if next_title:
+        assert frame.session_list.GetStringSelection().startswith(next_title)
