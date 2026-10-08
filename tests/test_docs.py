@@ -29,9 +29,22 @@ def test_the_published_guide_meets_wcag_basics():
     assert '<meta name="viewport" content="width=device-width, initial-scale=1">' in page
     assert '<nav aria-labelledby="contents"><h2 id="contents">Contents</h2>' in page
     assert page.index("<h1>") < page.index("<nav")  # the title comes first
-    ids = re.findall(r' id="([^"]+)"', page)
+    ids = re.findall(r' id="([^"]*)"', page)
     assert len(ids) == len(set(ids))
     targets = re.findall(r'href="#([^"]+)"', page)
     assert targets and set(targets) <= set(ids)
     sections = re.findall(r"<h2 id=", page)
     assert len(targets) == len(sections) - 1  # every section but Contents itself
+    assert "" not in ids
+
+
+def test_contents_links_survive_awkward_headings():
+    contents = _make_docs()._with_contents
+    assert contents("<p>no sections</p>") == "<p>no sections</p>"
+    body = contents("<h1>T</h1><h2>Groups</h2><h2>Groups</h2><h2>Contents</h2>"
+                    "<h2>Use <code>claude -p</code></h2><h2>!!!</h2><h2>Über &amp; more</h2>")
+    import re
+    ids = re.findall(r'<h2 id="([^"]*)"', body)
+    assert ids == ["contents", "groups", "groups-2", "contents-2", "use-claude-p",
+                   "section-5", "über-more"]
+    assert body.index("<h1>") < body.index("<nav")

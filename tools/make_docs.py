@@ -51,13 +51,21 @@ def _with_contents(body: str) -> str:
     section's heading given an id to link to. Only for the published page: in
     the app, links within the page are blocked, and H moves by heading."""
     entries = []
+    seen = {"contents"}  # the list's own heading
 
     def anchor(match: "re.Match[str]") -> str:
-        slug = re.sub(r"[^a-z0-9]+", "-", html.unescape(match.group(1)).lower()).strip("-")
-        entries.append(f'<li><a href="#{slug}">{match.group(1)}</a></li>')
-        return f'<h2 id="{slug}">{match.group(1)}</h2>'
+        words = html.unescape(re.sub(r"<[^>]+>", "", match.group(1))).lower()
+        slug = re.sub(r"\W+", "-", words).strip("-_") or f"section-{len(entries) + 1}"
+        unique, n = slug, 2
+        while unique in seen:
+            unique, n = f"{slug}-{n}", n + 1
+        seen.add(unique)
+        entries.append(f'<li><a href="#{unique}">{match.group(1)}</a></li>')
+        return f'<h2 id="{unique}">{match.group(1)}</h2>'
 
     body = _H2.sub(anchor, body)
+    if not entries:
+        return body
     nav = ('<nav aria-labelledby="contents"><h2 id="contents">Contents</h2><ul>'
            + "".join(entries) + "</ul></nav>")
     first = body.find("<h2 id=")

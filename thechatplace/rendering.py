@@ -42,14 +42,15 @@ LANGUAGE_NAMES = {
 }
 
 #: WCAG 2.2 AA, checked for the published user guide (#102): the reader's own
-#: text size (100%, not px), no sideways scrolling at 320px (long paths wrap),
+#: text size (100%, not px), no sideways scrolling at 320px (long words and
+#: paths wrap; not overflow-wrap: anywhere, which squeezes table columns),
 #: a focus ring that shows on every link, and dark-mode links, visited ones
 #: too, at 6.6:1 or better (the browser's default visited purple was 1.6:1).
 _STYLE = """
 body { font: 100%/1.5 "Segoe UI", sans-serif; margin: 1em 1.5em; max-width: 60em;
        overflow-wrap: break-word; }
 pre { white-space: pre-wrap; background: #f3f3f3; padding: .6em; border-radius: 4px; }
-code { font-family: Consolas, monospace; overflow-wrap: anywhere; }
+code { font-family: Consolas, monospace; }
 table { border-collapse: collapse; margin: .5em 0; }
 th, td { border: 1px solid #888; padding: .25em .6em; text-align: left; vertical-align: top; }
 a:focus-visible { outline: 3px solid; outline-offset: 2px; }
