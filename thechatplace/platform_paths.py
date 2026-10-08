@@ -129,6 +129,11 @@ def app_icon_path() -> Path:
     return Path(__file__).resolve().parent / "assets" / "app.ico"
 
 
+def docs_path() -> Path:
+    """The docs folder (README, user guide, etc.) at the repo root."""
+    return Path(__file__).resolve().parent.parent / "docs"
+
+
 def app_data_dir() -> Path:
     """The Chat Place's own settings and session store."""
     return _roaming_dir() / APP_DIR_NAME
