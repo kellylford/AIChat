@@ -171,7 +171,7 @@ VIEWS = [
     (VIEW_OWN, "&Chat Place Sessions"),
     (VIEW_REMOTE, "&Remote Control Sessions"),
     (VIEW_UNGROUPED, "&Ungrouped"),
-    (VIEW_ARCHIVED, "Ar&chived"),
+    (VIEW_ARCHIVED, "Archi&ved"),
     (VIEW_HIDDEN, "&Hidden"),
 ]
 #: Said and shown in the list's name: "showing needs you or working".
@@ -218,7 +218,8 @@ def in_view(info: SessionInfo, view: str) -> bool:
         return info.remote
     if view == VIEW_UNGROUPED:
         # In none of your groups or the desktop app's: what still needs
-        # filing. ``groups`` is filled in by the window before this is asked.
+        # filing. ``groups`` is filled in by the window before this is asked;
+        # with groups.json unreadable, your own groups count as none.
         return not info.groups
     return True
 

@@ -75,9 +75,11 @@ def test_bad_entries_in_the_file_are_skipped(tmp_path):
     assert groups.names() == ["Ok"] and groups.members("Ok") == ["a"]
 
 
-def _info(key, state=IDLE, source=DESKTOP, archived=False, remote=False, groups=()):
+def _info(key, state=IDLE, source=DESKTOP, archived=False, remote=False, groups=(),
+          hidden=False):
     return SessionInfo(source=source, key=key, title=key, cwd="C:\\r", cli_session_id=key,
-                       state=state, archived=archived, remote=remote, groups=groups)
+                       state=state, archived=archived, remote=remote, groups=groups,
+                       hidden=hidden)
 
 
 SESSIONS = [
@@ -85,6 +87,7 @@ SESSIONS = [
     _info("own", source=OWN), _info("remote", remote=True),
     _info("old", archived=True), _info("old-grouped", archived=True, groups=("Work",)),
     _info("grouped", groups=("Work", "Home")),
+    _info("hid", hidden=True),
 ]
 
 
@@ -97,6 +100,7 @@ SESSIONS = [
     ("remote", ["remote"]),
     # In no group; archived ones stay in Archived, as everywhere but a group.
     ("ungrouped", ["needs", "working", "idle", "own", "remote"]),
+    ("hidden", ["hid"]),  # a hidden session, ungrouped or not, is only in Hidden
     ("archived", ["old", "old-grouped"]),
     ("group:Work", ["old-grouped", "grouped"]),  # a group shows what you put in it
     ("group:Nobody", []),

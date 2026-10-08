@@ -4471,3 +4471,21 @@ def test_ungrouped_shows_sessions_in_no_group_yours_or_the_desktop_apps(frame, e
     settle(frame)
     assert sorted(r.split(",")[0] for r in frame.session_list.GetStrings()) == [
         "Blocked one", "Hub probe"]
+    assert frame.view_items["ungrouped"].IsChecked()
+
+
+def test_filing_a_session_takes_it_out_of_ungrouped(frame, env, monkeypatch):
+    frame.on_view("ungrouped")
+    settle(frame)
+    assert len(_titles(frame)) == 3  # nothing is in a group yet
+    index = select(frame, "Quiet one")
+    next_title = frame.session_list.GetString(index + 1).split(",")[0] \
+        if index + 1 < frame.session_list.GetCount() else None
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    monkeypatch.setattr(frame, "_choose", lambda title, prompt, choices: 0)  # New group...
+    monkeypatch.setattr(frame, "_ask_group_name", lambda title, value="": "Work")
+    frame.on_add_to_group()
+    assert env["feedback"][-1] == "Added Quiet one to Work."
+    assert "Quiet one" not in _titles(frame)
+    if next_title:
+        assert frame.session_list.GetStringSelection().startswith(next_title)

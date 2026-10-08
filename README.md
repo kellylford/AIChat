@@ -52,8 +52,7 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   (desktop app sessions linked for Remote Control, and Chat Place sessions you've turned it on
   for or that have connected), ungrouped (in none of your groups or the desktop app's), archived
   (the desktop app's archived sessions, otherwise hidden), hidden (the ones you've hidden), or
-  one of your groups. The
-  list's name says what it shows and how many ("Session list, needs you, 2 of 139"), and the
+  one of your groups. The list's name says what it shows and how many ("Session list, needs you, 2 of 139"), and the
   choice is remembered.
   Arrowing doesn't load anything; **Enter loads that session** into the messages list, moves you
   there, and says "Loaded Quiet one, 12 messages."
