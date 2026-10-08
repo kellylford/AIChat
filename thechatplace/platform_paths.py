@@ -282,6 +282,49 @@ def open_url(url: str) -> None:
         subprocess.Popen(["xdg-open", url])
 
 
+def _windows_program(*parts: str) -> str:
+    """A Windows program by its full path, never found by searching the
+    current folder or the app's own first."""
+    return os.path.join(os.environ.get("SystemRoot") or r"C:\Windows", *parts)
+
+
+def edit_file(path: Path) -> None:
+    """Open a text file in your own editor (What Claude Knows About You's
+    Edit, #92): The Chat Place itself never writes to Claude Code's files.
+    Windows tries the file type's Edit verb, then Open, then Notepad, since
+    a ``.md`` file often has no program set for it. Raises OSError if none
+    of them could start."""
+    import subprocess
+
+    if sys.platform == "win32":
+        for verb in ("edit", "open"):
+            try:
+                os.startfile(str(path), verb)  # type: ignore[attr-defined]  # noqa: S606
+                return
+            except OSError:
+                continue
+        subprocess.Popen([_windows_program("System32", "notepad.exe"), str(path)])
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", "-t", str(path)])  # the default text editor
+    else:
+        subprocess.Popen(["xdg-open", str(path)])
+
+
+def show_in_folder(path: Path) -> None:
+    """Show a file selected in Explorer or the Finder."""
+    import subprocess
+
+    if sys.platform == "win32":
+        # One command line, so the path keeps its own quotes: given as a list
+        # item, Python quotes "/select,C:\a b\x.md" whole, and Explorer
+        # opens Documents instead.
+        subprocess.Popen(f'"{_windows_program("explorer.exe")}" /select,"{path}"')
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", str(path)])
+    else:
+        subprocess.Popen(["xdg-open", str(Path(path).parent)])
+
+
 class ClaudeLookup:
     """Where ``claude`` is, or why it can't be used."""
 
@@ -521,6 +564,48 @@ def bring_window_forward(title_matches) -> bool:
     if user32.IsIconic(hwnd):
         user32.ShowWindow(hwnd, 9)  # SW_RESTORE
     return bool(user32.SetForegroundWindow(hwnd))
+
+
+def bring_last_popup_forward(hwnd: int) -> bool:
+    """Bring forward ``hwnd``'s open dialog: the frontmost visible, enabled
+    window it owns, directly or through another dialog, so the innermost of
+    nested dialogs, native message and file dialogs included (#103). For a
+    main window that was activated while disabled behind a dialog. Windows
+    only; False elsewhere, or if there is none.
+
+    Not GetLastActivePopup: activating the main window makes it its own last
+    active popup, so that answered with the main window (seen in the VM)."""
+    if sys.platform != "win32" or not hwnd:
+        return False
+    import ctypes
+    from ctypes import wintypes
+
+    user32 = ctypes.windll.user32
+    user32.GetWindow.restype = wintypes.HWND
+    user32.GetWindow.argtypes = (wintypes.HWND, wintypes.UINT)
+    gw_owner = 4
+    found = []
+
+    def owned_by_main(window) -> bool:
+        for _ in range(8):  # a dialog over a dialog over the main window
+            window = user32.GetWindow(window, gw_owner)
+            if not window:
+                return False
+            if window == hwnd:
+                return True
+        return False
+
+    @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    def callback(window, _lparam):
+        # EnumWindows goes front to back, so the first match is the front one.
+        if (window != hwnd and user32.IsWindowVisible(window)
+                and user32.IsWindowEnabled(window) and owned_by_main(window)):
+            found.append(window)
+            return False
+        return True
+
+    user32.EnumWindows(callback, 0)
+    return bool(found) and bool(user32.SetForegroundWindow(found[0]))
 
 
 def hidden_window_flags() -> int:

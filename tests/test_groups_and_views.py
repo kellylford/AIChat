@@ -75,9 +75,11 @@ def test_bad_entries_in_the_file_are_skipped(tmp_path):
     assert groups.names() == ["Ok"] and groups.members("Ok") == ["a"]
 
 
-def _info(key, state=IDLE, source=DESKTOP, archived=False, remote=False, groups=()):
+def _info(key, state=IDLE, source=DESKTOP, archived=False, remote=False, groups=(),
+          hidden=False):
     return SessionInfo(source=source, key=key, title=key, cwd="C:\\r", cli_session_id=key,
-                       state=state, archived=archived, remote=remote, groups=groups)
+                       state=state, archived=archived, remote=remote, groups=groups,
+                       hidden=hidden)
 
 
 SESSIONS = [
@@ -85,6 +87,7 @@ SESSIONS = [
     _info("own", source=OWN), _info("remote", remote=True),
     _info("old", archived=True), _info("old-grouped", archived=True, groups=("Work",)),
     _info("grouped", groups=("Work", "Home")),
+    _info("hid", hidden=True),
 ]
 
 
@@ -95,6 +98,9 @@ SESSIONS = [
     ("desktop", ["needs", "working", "idle", "remote", "grouped"]),
     ("own", ["own"]),
     ("remote", ["remote"]),
+    # In no group; archived ones stay in Archived, as everywhere but a group.
+    ("ungrouped", ["needs", "working", "idle", "own", "remote"]),
+    ("hidden", ["hid"]),  # a hidden session, ungrouped or not, is only in Hidden
     ("archived", ["old", "old-grouped"]),
     ("group:Work", ["old-grouped", "grouped"]),  # a group shows what you put in it
     ("group:Nobody", []),
@@ -105,6 +111,7 @@ def test_views(view, expected):
 
 def test_view_names_and_row_text():
     assert view_spoken("active") == "needs you or working"
+    assert view_spoken("ungrouped") == "ungrouped sessions"
     assert view_spoken(group_view("Work")) == "group Work"
     assert view_spoken("bogus") == "all sessions"
     line = _info("x", archived=True, groups=("Work", "Home")).list_line(0)

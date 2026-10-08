@@ -10,7 +10,7 @@ Keyboard shortcuts: [docs/keyboard-shortcuts.md](docs/keyboard-shortcuts.md) (al
 [HTML](docs/keyboard-shortcuts.html) and [plain text](docs/keyboard-shortcuts.txt)), the same list
 as Help, Keyboard Shortcuts (F1) in the app.
 
-> **Status: version 0.1.1, a pre-release** (0.1.0, the first release, came out on 7 October 2026). Used with JAWS on Kelly's PC; the
+> **Status: version 0.1.2, a pre-release** (0.1.0, the first release, came out on 7 October 2026). Used with JAWS on Kelly's PC; the
 > installer, uninstaller and update check have been tested in the vmtest VM. Downloading and
 > installing an update needs two published releases, so it is first tried with 0.1.1. It has not
 > yet had a pass with NVDA. The Mac build is new: built, smoke-tested and Developer ID signed on
@@ -48,12 +48,41 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   and a new one is added at the end. F5, or a refresh while you're elsewhere, puts it back in
   order, keeping you on the same session.
   **View, Show Sessions** (Alt+V, H) chooses which sessions are listed: all, needs you or
-  working, needs you, desktop app sessions, Cowork sessions, The Chat Place's own, Remote Control sessions (ones
-  the desktop app has linked for Remote Control), archived (the desktop app's archived
-  sessions, otherwise hidden), or one of your groups. The list's name says what it shows and how
-  many ("Session list, needs you, 2 of 139"), and the choice is remembered.
+  working, needs you, desktop app sessions, Cowork sessions, The Chat Place's own, Remote
+  Control sessions (desktop app sessions linked for Remote Control, and Chat Place sessions
+  you've turned it on for or that have connected), ungrouped (in none of your groups or the
+  desktop app's), archived (the desktop app's archived sessions, otherwise hidden), hidden (the
+  ones you've hidden), or one of your groups. The list's name says what it shows and how many
+  ("Session list, needs you, 2 of 139"), and the choice is remembered.
   Arrowing doesn't load anything; **Enter loads that session** into the messages list, moves you
   there, and says "Loaded Quiet one, 12 messages."
+- **Hide or delete a session.** **Delete** (File, Hide Session) takes the selected session out of
+  the list without changing it; View, Show Sessions, Hidden lists hidden sessions, and File, Bring
+  Back Session returns one. **Shift+Delete** (File, Delete Session Permanently) deletes one of The
+  Chat Place's own sessions for good, from any view, hidden or not: after you confirm (No is the
+  default), its Claude Code transcript is deleted from the computer and it leaves the list, its
+  groups and the hidden list. It waits while the session is working, here or in a terminal.
+  Desktop app sessions can only be hidden; delete those in the desktop app.
+  On a Mac laptop these are Fn+Delete and Fn+Shift+Delete (the forward-delete key).
+- **Rename a session** (F2, File, Rename Session, or the session's menu). One of The Chat
+  Place's own sessions is renamed outright. A desktop app session's new name shows only in The
+  Chat Place, since its files are never changed: it's kept in
+  `%APPDATA%\TheChatPlace\titles.json`, and the desktop app keeps its own name for it. Renaming
+  it to nothing (clear the box) goes back to the desktop app's name.
+- **The session's menu** (Applications key or Shift+F10 in the session list, or a right-click)
+  has the File menu's commands for the selected session: load, open in Claude, continue here,
+  rename, Remote Control, groups, export, and hide or delete.
+- **What Claude knows about you** (Ctrl+Shift+K, View, What Claude Knows About You). Claude Code
+  keeps what it knows about you in plain files, and this lists them by kind: your instructions
+  (`CLAUDE.md`, yours and each project's), the memories Claude saved for each project, your
+  skills (including ones synced from your account), subagents, slash commands, output styles and
+  settings. It includes the project-level ones in the folders your sessions work in. Pick a kind,
+  arrow through its items (each with its description), and Enter reads the file in a box you can
+  move through by line. **Edit in Your Editor** opens the file in your own editor (on Windows,
+  the program set to edit that kind of file, or Notepad); The Chat Place itself never writes to
+  Claude Code's files. Reload shows your changes; Show in Folder and Copy Path find the file.
+  Not listed yet: what plugins add, `CLAUDE.md` files in a project's parent folders,
+  `.claude/rules`, and an organization's managed settings.
 - **Find** (Ctrl+F, View, Find). In the session list it asks for some text and shows only
   sessions whose title, folder or "needs you" note contains it, within the current view; the
   list's name says so ("Session list, matching \"build\", 3 of 139") and Escape shows them
@@ -93,9 +122,9 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   that the default. Escape closes either, back on the same message. The page needs Microsoft's
   Edge WebView2 runtime, which comes with Windows 11; without it, the text box opens. Nothing in
   the page is fetched from the internet, and HTML in a message is shown as text, never run.
-  **Code Blocks** on the context menu lists the message's code blocks by language and size, with
-  the selected one's code in a box to read by line (Enter on a block goes there) and a Copy
-  button for just that block;
+  **Code Blocks** (**Ctrl+Shift+B**, or on the context menu) lists the message's code blocks by
+  language and size, with the selected one's code in a box to read by line (Enter on a block
+  goes there) and a Copy button for just that block;
   **Ctrl+Shift+C** copies the message's last code block straight away.
   Question cards read as "Claude asked: Which version?" with the
   options in the full text, then "You answered: ...". Refused tools read "Permission denied:
@@ -175,6 +204,12 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   where it stays (turning Remote Control off, or deleting the session, doesn't remove it;
   archive it on claude.ai). While a turn runs, anyone signed in to your account on claude.ai
   can type into it or answer its questions; a question answered there is cleared here.
+  It's also on the session's menu (Applications key). A session on Remote Control says so in
+  its row and heading, and View, Show Sessions, Remote Control Sessions lists it (with only the
+  Settings default on, a Chat Place session's row says so once it has connected). For a Claude
+  desktop app session, File, Remote Control offers to open it in the desktop app, where its
+  Remote Control is turned on, or to continue it here as a copy with Remote Control on from the
+  first turn; The Chat Place never changes the desktop app's session itself.
 - **Claude asks, you answer.** In The Chat Place's own sessions, when Claude needs permission
   for something the permission mode doesn't allow, asks you a question, or has a plan for you
   to approve, the turn waits for you. It's announced ("Build needs you. Claude wants to run
@@ -410,6 +445,9 @@ shows it as plain text instead.
 | Session list | Ctrl+O | Open the selected session in the Claude desktop app |
 | Session list | Ctrl+N | New Chat Place session |
 | Session list | Ctrl+G | Add the selected session to a group |
+| Session list | F2 | Rename the selected session |
+| Session list | Applications key, Shift+F10 | The session's menu |
+| Anywhere | Ctrl+Shift+K | What Claude knows about you: instructions, memories, skills and more |
 | Session list | Ctrl+F | Show only sessions matching some text (Escape shows all) |
 | Messages | Ctrl+F, F3, Shift+F3 | Find a message by its text; next; previous |
 | Anywhere | Ctrl+E | Export the session to a file |
@@ -421,8 +459,10 @@ shows it as plain text instead.
 | Anywhere | Ctrl+Shift+N | Continue the selected (or loaded) desktop app session here, as a copy |
 | Session list | F5 | Refresh the list now and put it in order |
 | Session list | Delete | Hide the selected session (View, Show Sessions, Hidden lists it; File, Bring Back Session returns it) |
-| Messages | Enter, or Applications key then Read Full Message | Read the whole message; Escape comes back to it |
+| Session list | Shift+Delete | Delete one of The Chat Place's own sessions permanently, after you confirm |
+| Messages | Enter, or Applications key / Shift+F10 then Read Full Message | Read the whole message; Escape comes back to it |
 | Messages | Ctrl+C | Copy the whole message |
+| Messages | Ctrl+Shift+B | Code blocks: list, read and copy each one |
 | Messages | Ctrl+Shift+C | Copy the message's last code block |
 | Messages | Ctrl+T | Show or hide tool activity |
 | Messages | Ctrl+O | Open this session in the Claude desktop app |
@@ -571,6 +611,8 @@ Checked with Claude Code 2.1.286 (issues #187 and #188):
 | `thechatplace/transcript.py` | Transcript parser |
 | `thechatplace/sessions.py` | Desktop metadata, live state, sorting, the list wording |
 | `thechatplace/own_store.py` | The Chat Place's own sessions |
+| `thechatplace/titles.py` | Names you've given desktop app sessions |
+| `thechatplace/about_you.py` | Finding what Claude knows about you |
 | `thechatplace/claude_cli.py` | `claude` commands, the `--resume` guard, the environment, stream-json events, running a turn |
 | `thechatplace/hub.py` | Gathering the list, noticing finished turns |
 | `thechatplace/announce.py` | What gets announced |
