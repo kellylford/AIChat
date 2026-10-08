@@ -127,6 +127,10 @@ class MainFrame(wx.Frame):
         self._runners: Dict[str, TurnRunner] = {}
         self._denials: Dict[str, List[str]] = {}
         self._pending_refresh: Optional[bool] = None
+        # Set once the window is closing (_on_close). Its destruction waits
+        # for idle time, so a menu VO+Shift+M scheduled just before Cmd+Q
+        # would otherwise still open, on a hidden window that has stopped.
+        self._closing = False
         self._claude_version = ""  # for bug reports; found in the background
         # Slash commands and skills per folder (#23), fetched in the background.
         self._commands: Dict[str, List[dict]] = {}  # by _folder_key
@@ -350,10 +354,6 @@ class MainFrame(wx.Frame):
         set_list_items_accessible(self.chat_list, self.chat_list.GetName,
                                   self._message_item_text)
         self._spoken: Dict[str, tuple] = {}  # message key -> (text, spoken words)
-        # Set once the window is closing (_on_close). Its destruction waits
-        # for idle time, so a menu VO+Shift+M scheduled just before Cmd+Q
-        # would otherwise still open, on a hidden window that has stopped.
-        self._closing = False
         vsizer.Add(self.chat_list, 2, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
         self.chat_list.Bind(wx.EVT_CONTEXT_MENU, self._on_message_menu)
         set_voiceover_menu(self.chat_list, self._on_message_menu)

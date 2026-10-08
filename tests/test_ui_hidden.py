@@ -645,6 +645,22 @@ def test_close_during_turn_asks_and_stops(frame, env, fake_runner):
     frame._on_close(event)
     assert "Quit anyway" in env["boxes"][-1]
     assert fake_runner.instances[0].cancelled
+    assert frame._closing  # no context menu opens from here on
+
+
+def test_a_cancelled_quit_leaves_the_window_working(frame, env, fake_runner, monkeypatch):
+    # Answering No to "Quit anyway?" keeps the window, so its menus must
+    # still open: the closing flag is set only past the question.
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame.reply_text.SetValue("long job")
+    frame.on_send()
+    monkeypatch.setattr(wx, "MessageBox", lambda *a, **k: wx.NO)
+    event = wx.CloseEvent(wx.wxEVT_CLOSE_WINDOW)
+    event.SetCanVeto(True)
+    frame._on_close(event)
+    assert event.GetVeto() and not frame._closing
+    assert not fake_runner.instances[0].cancelled
 
 
 def test_store_write_failure_is_reported_and_send_state_still_updates(frame, env,
