@@ -89,6 +89,12 @@ def app_icon_path() -> Path:
     return Path(__file__).resolve().parent / "assets" / "app.ico"
 
 
+def user_guide_path() -> Path:
+    """The user guide's Markdown (#102), shipped in ``assets`` like the icon so
+    every build has it; tools/make_docs.py makes the docs/ copies from it."""
+    return Path(__file__).resolve().parent / "assets" / "user-guide.md"
+
+
 def app_data_dir() -> Path:
     """The Chat Place's own settings and session store."""
     return _roaming_dir() / APP_DIR_NAME

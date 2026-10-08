@@ -4,8 +4,8 @@ mode (issue #190).
 Claude writes markdown: headings, lists, tables, code. In a plain text box a
 table is a run of pipes and a heading is "##". As a web page the screen
 reader can move by heading (H), table and cell (T, Ctrl+Alt+arrows), list
-(L) and region (R, where each code block is one, named "Code block, Python,
-14 lines").
+(L) and region (R in JAWS, D in NVDA; each code block is one, named "Code
+block, Python, 14 lines").
 
 The page is built to be inert:
 

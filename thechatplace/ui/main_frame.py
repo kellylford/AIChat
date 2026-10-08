@@ -77,7 +77,7 @@ from .a11y import set_accessible_name, set_list_items_accessible
 from .notify import Notifier
 from .statusbar import StatusParts
 from ..rendering import html_page, message_page
-from ..ui_text import shortcuts_html
+from ..ui_text import markdown_as_text, shortcuts_html
 from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, AboutYouDialog, ChangesDialog, CodeBlocksDialog, FormattedMessageDialog,
                       BugReportDialog, CommandPickerDialog, MessageDialog, NewSessionDialog, PermissionDialog, PlanDialog,
                       ManageGroupsDialog, QuestionDialog, SettingsDialog, ShortcutsDialog,
@@ -294,6 +294,7 @@ class MainFrame(wx.Frame):
         bar.Append(view, "&View")
 
         help_menu = wx.Menu()
+        self._item(help_menu, "User &Guide", self.on_user_guide)
         self._item(help_menu, "&Keyboard Shortcuts\tF1", self.on_shortcuts)
         self._item(help_menu, "Check for &Updates...", lambda e: self.check_for_updates(True))
         self._item(help_menu, "Claude Code &Sign-in...", lambda e: self.on_sign_in())
@@ -1423,6 +1424,21 @@ class MainFrame(wx.Frame):
         title = (f"Message from {message.label}" if message.label in ("Claude", "You")
                  else message.label)
         return self._show_page(title, message_page(title, message.text))
+
+    def on_user_guide(self, _event=None):
+        """Help, User Guide (#104): the guide as a page, read by heading like
+        the shortcuts, or in the text box when the page can't be shown or on
+        Read as Plain Text. It ships with the app, so it never needs the web."""
+        try:
+            text = platform_paths.user_guide_path().read_text(encoding="utf-8")
+        except OSError as exc:
+            # Only a broken build gets here; the smoke test checks for it.
+            wx.MessageBox(f"Couldn't open the user guide: {exc}", APP_NAME,
+                          wx.OK | wx.ICON_WARNING, self)
+            return
+        if self._show_page("User Guide", message_page("User Guide", text)):
+            return
+        self._modal(MessageDialog(self, "User Guide", markdown_as_text(text)))
 
     def on_shortcuts(self, _event=None):
         """The keyboard shortcuts as a page: a heading and a table per group.

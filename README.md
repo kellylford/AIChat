@@ -6,6 +6,10 @@ The Chat Place is an independent project by Kelly Ford. It works with Claude Cod
 Claude desktop app, but it isn't made, sponsored or endorsed by Anthropic, and isn't affiliated
 with it. Claude and Claude Code are trademarks of Anthropic.
 
+New to The Chat Place? The [user guide](docs/user-guide.md) starts
+with the everyday things and goes deeper; it's also in the app, under Help, User Guide. This README
+has the full details.
+
 Keyboard shortcuts: [docs/keyboard-shortcuts.md](docs/keyboard-shortcuts.md) (also as
 [HTML](docs/keyboard-shortcuts.html) and [plain text](docs/keyboard-shortcuts.txt)), the same list
 as Help, Keyboard Shortcuts (F1) in the app.
@@ -116,7 +120,8 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   and whether it's read-only. **Enter**
   (or the context menu's Read Full Message, with the Applications key or Shift+F10) shows the
   whole message as a formatted page, so your screen reader's browse mode moves by heading (H),
-  table (T, then its cell commands), list (L) and code block (each is a region, R, named like
+  table (T, then its cell commands), list (L) and code block (each is a region: R in JAWS, D in
+  NVDA, named like
   "Code block, Python, 14 lines"). Links open in your browser. **Read as Plain Text** (Alt+P)
   switches to a read-only text box, to read by line, word and character, and Settings can make
   that the default. Escape closes either, back on the same message. The page needs Microsoft's
@@ -276,6 +281,10 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
 - **Turn Status** (Ctrl+Shift+T) says how long Claude has been working on the current turn and what
   it last did. There's no time limit on a turn; Stop (Ctrl+Period) ends it, along with anything it
   started, such as a build.
+- **User Guide** (Help menu, Alt+H, G) shows the user guide as a page, read by heading like the
+  keyboard shortcuts, or as plain text (Alt+P). It's part of the app, so it works offline. It's
+  edited in `thechatplace/assets/user-guide.md`; `python tools/make_docs.py` makes the copies in
+  `docs/`.
 - **Claude Code Sign-in** (Help menu) says whether Claude Code is signed in, to which plan and
   as whom ("Claude Code is signed in to your Claude Max plan as …"). If it isn't, it offers to
   sign in: `claude auth login` opens in its own window and your browser shows Claude's sign-in
@@ -463,6 +472,7 @@ shows it as plain text instead.
 | Reply box | Ctrl+Shift+T | Turn status: how long it has been working, and on what |
 | Anywhere | Ctrl+Shift+A | Answer Claude: a permission request, a question or a plan |
 | Anywhere | F1 | Keyboard shortcuts |
+| Anywhere | Alt+H, G | The user guide |
 | Anywhere | Ctrl+Comma | Settings |
 | Anywhere | Ctrl+Shift+R | Repeat the last announcement |
 | Anywhere | Alt+F4 | Quit |
@@ -470,6 +480,9 @@ shows it as plain text instead.
 Menus are File (Alt+F), View (Alt+V) and Help (Alt+H). Controls have their own Alt letters
 (Alt+L the session list, Alt+M the messages, Alt+Y the reply box, Alt+D Send), and none of them
 takes a menu's letter.
+
+On a Mac, Ctrl is the Command key, the menus are in the menu bar (VO+M) rather than on Alt, and
+Settings is in the app menu.
 
 ## How it works
 

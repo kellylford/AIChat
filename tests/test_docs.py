@@ -1,4 +1,4 @@
-"""docs/ keeps up with the app's own keyboard shortcuts list."""
+"""docs/ keeps up with the app's own keyboard shortcuts list and user guide."""
 import importlib.util
 from pathlib import Path
 
@@ -12,7 +12,7 @@ def _make_docs():
     return module
 
 
-def test_the_shortcut_documents_match_the_app():
+def test_the_documents_match_the_app():
     for name, text in _make_docs().documents().items():
         path = ROOT / "docs" / name
         assert path.is_file(), f"run python tools/make_docs.py (docs/{name} is missing)"

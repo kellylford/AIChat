@@ -69,6 +69,7 @@ One window, three parts, in Tab order: the session list; the messages of the loa
 | Ctrl+Shift+A | Answer Claude: approve or deny a tool, answer its questions, or approve its plan (the loaded session first, then the one that has waited longest). Escape in the dialog answers later |
 | Ctrl+Shift+K | What Claude knows about you: your instructions, memories, skills, subagents, commands and settings, to read or open in your editor |
 | F1 | This list of shortcuts |
+| Alt+H, G | The user guide, read by heading |
 | Ctrl+Comma | Settings (announcements and speech) |
 | Ctrl+Shift+R | Repeat the last announcement |
 | Alt+F4 | Quit |
