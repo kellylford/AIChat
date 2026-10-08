@@ -95,6 +95,8 @@ SESSIONS = [
     ("desktop", ["needs", "working", "idle", "remote", "grouped"]),
     ("own", ["own"]),
     ("remote", ["remote"]),
+    # In no group; archived ones stay in Archived, as everywhere but a group.
+    ("ungrouped", ["needs", "working", "idle", "own", "remote"]),
     ("archived", ["old", "old-grouped"]),
     ("group:Work", ["old-grouped", "grouped"]),  # a group shows what you put in it
     ("group:Nobody", []),
@@ -105,6 +107,7 @@ def test_views(view, expected):
 
 def test_view_names_and_row_text():
     assert view_spoken("active") == "needs you or working"
+    assert view_spoken("ungrouped") == "ungrouped sessions"
     assert view_spoken(group_view("Work")) == "group Work"
     assert view_spoken("bogus") == "all sessions"
     line = _info("x", archived=True, groups=("Work", "Home")).list_line(0)

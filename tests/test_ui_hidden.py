@@ -4445,3 +4445,29 @@ def test_activation_is_still_skipped_for_wx(frame):
     event = wx.ActivateEvent(wx.wxEVT_ACTIVATE, True)
     frame._on_activate(event)
     assert event.GetSkipped()  # wx still restores the last focus itself
+
+
+def test_ungrouped_shows_sessions_in_no_group_yours_or_the_desktop_apps(frame, env):
+    quiet = next(s for s in frame._snapshot.sessions if s.title == "Quiet one")
+    prefs = {"preferences": {"epitaxyPrefs": {"dframe-group-scopes": {"a/o": {
+        "groups": [{"id": "cg-1", "name": "IDT"}],
+        "assignments": {f"code:{quiet.key}": "cg-1"}}}}}}
+    (env["desktop"] / "a" / "o").mkdir(parents=True, exist_ok=True)
+    (env["desktop"].parent / "claude_desktop_config.json").write_text(json.dumps(prefs),
+                                                                      encoding="utf-8")
+    frame.groups.create("Work")
+    frame.groups.add("Work", "own:own-1")
+    frame.refresh_sessions(force=True)
+    settle(frame)
+    frame.on_view("ungrouped")
+    settle(frame)
+    assert [r.split(",")[0] for r in frame.session_list.GetStrings()] == ["Blocked one"]
+    assert frame.sessions_label.GetLabelText() == "Session list, ungrouped sessions, 1 of 3:"
+    labels = [i.GetItemLabelText() for i in frame.show_menu.GetMenuItems()]
+    assert "Ungrouped" in labels
+    # Taken out of its group, it's ungrouped again.
+    frame.groups.remove("Work", "own:own-1")
+    frame.refresh_sessions(force=True)
+    settle(frame)
+    assert sorted(r.split(",")[0] for r in frame.session_list.GetStrings()) == [
+        "Blocked one", "Hub probe"]

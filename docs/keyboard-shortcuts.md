@@ -25,7 +25,7 @@ One window, three parts, in Tab order: the session list; the messages of the loa
 | Ctrl+Shift+N | Continue the selected desktop app session here, as a copy you can reply to (the desktop app session isn't changed) |
 | F5 | Refresh the list now and put it back in order (it also refreshes itself every few seconds, without moving rows while you're in it) |
 | Alt+V, O | Sort Sessions: by status, newest first, oldest first, by title or by folder; the choice is remembered |
-| Alt+V, H | Show Sessions: all, needs you or working, needs you, desktop app, The Chat Place, Remote Control, archived, or one of your groups |
+| Alt+V, H | Show Sessions: all, needs you or working, needs you, desktop app, The Chat Place, Remote Control, ungrouped (in no group), archived, or one of your groups |
 | Ctrl+E | Export the selected (or loaded) session as Markdown, a web page or plain text |
 | F2 | Rename the selected session (a desktop app session's new name shows only in The Chat Place) |
 | Applications key / Shift+F10 | The session's menu: load, open in Claude, rename, Remote Control, groups, export, hide or delete |

@@ -48,10 +48,11 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   and a new one is added at the end. F5, or a refresh while you're elsewhere, puts it back in
   order, keeping you on the same session.
   **View, Show Sessions** (Alt+V, H) chooses which sessions are listed: all, needs you or
-  working, needs you, desktop app sessions, The Chat Place's own, Remote Control sessions (desktop app
-  sessions linked for Remote Control, and Chat Place sessions you've turned it on for or that
-  have connected), archived (the desktop app's archived
-  sessions, otherwise hidden), hidden (the ones you've hidden), or one of your groups. The
+  working, needs you, desktop app sessions, The Chat Place's own, Remote Control sessions
+  (desktop app sessions linked for Remote Control, and Chat Place sessions you've turned it on
+  for or that have connected), ungrouped (in none of your groups or the desktop app's), archived
+  (the desktop app's archived sessions, otherwise hidden), hidden (the ones you've hidden), or
+  one of your groups. The
   list's name says what it shows and how many ("Session list, needs you, 2 of 139"), and the
   choice is remembered.
   Arrowing doesn't load anything; **Enter loads that session** into the messages list, moves you
