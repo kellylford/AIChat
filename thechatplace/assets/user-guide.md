@@ -294,10 +294,41 @@ notification is shown.
 - **What Claude Knows About You** (Ctrl+Shift+K) lists what Claude Code keeps about you: your
   instructions (CLAUDE.md files), the memories it saved, your skills, subagents, commands and
   settings. Enter reads one, and Edit in Your Editor opens it in your own editor.
-- **Remote Control** (File, Remote Control) lets you reach one of The Chat Place's sessions from
-  claude.ai and your phone while a turn runs. Turning it on copies the conversation to claude.ai,
-  where it stays, and anyone signed in to your account there can type into it. Settings can make
-  it the default for The Chat Place's sessions.
+
+## Remote Control
+
+Remote Control lets you keep an eye on one of The Chat Place's own sessions when you're away from
+your computer, on claude.ai or in the Claude app on your phone. Turn it on with File, Remote
+Control, or from the session's menu. Its line in the session list then says "Remote Control", and
+File, Remote Control copies the session's claude.ai address.
+
+**What you can do today:**
+
+- While Claude is working on a message you sent from The Chat Place, open the session on
+  claude.ai or your phone to follow what it's doing.
+- Answer Claude there. If it asks a question or wants permission, you can answer on your phone
+  instead of at your computer, and it can ask again later in the same answer, as often as it
+  needs. Whichever place you answer first counts, and the other one stops waiting.
+- Type to Claude there while it's working.
+
+**What you can't do yet:**
+
+- Start a new message from your phone. Once Claude finishes answering, the session shows as
+  offline on claude.ai until you send your next message from The Chat Place.
+- See the session from another computer's copy of The Chat Place. The session lives on the
+  computer that started it; claude.ai is how you reach it from elsewhere.
+- Reach a session on another computer from here, even with Remote Control on. If you turned on
+  Remote Control for a session on another computer, for example in the Claude desktop app there, The Chat Place on
+  this computer doesn't list it. Open it on claude.ai or in the Claude app instead.
+
+**Good to know:** turning Remote Control on copies the conversation to claude.ai, and it stays
+there even if you turn Remote Control off or delete the session here (you can archive it on
+claude.ai). While Claude is working, anyone signed in to your Claude account can type into it.
+Settings can turn Remote Control on for all of The Chat Place's sessions; then a session's line
+says so once it has connected.
+
+For a Claude desktop app session, File, Remote Control offers to open it in the desktop app, where
+you turn Remote Control on, or to continue it here as a copy with Remote Control on.
 
 ## Updates
 
@@ -339,13 +370,13 @@ support@theideaplace.net.
 - The Chat Place never writes to the desktop app's files or to any conversation. The only files it
   writes are its own: on Windows in `%APPDATA%\TheChatPlace`, on a Mac in
   `~/Library/Application Support/TheChatPlace`. The conversations themselves are Claude Code's.
-- The Mac version is new, and hasn't had a full pass with VoiceOver yet. In particular, VoiceOver
-  reads each line of the messages list as shown, not the whole message; Enter still opens the
-  whole message.
+- With VoiceOver, each line of the messages list reads as it's shown, "You:" or "Claude:" and
+  the first line, not the whole message, because reading the whole message on each line uses a
+  Windows feature. Enter opens the whole message.
 - Conversations Claude hands to a subagent aren't shown.
 - The desktop app's file formats aren't documented, so a desktop app update could change what The
   Chat Place can read.
 
 For every keyboard shortcut, see Help, Keyboard Shortcuts (F1), or the
-[keyboard shortcuts page](https://github.com/kellylford/AIChat/blob/main/docs/keyboard-shortcuts.md).
+[keyboard shortcuts page](https://kellylford.github.io/AIChat/keyboard-shortcuts.html).
 The [README](https://github.com/kellylford/AIChat#readme) has the full details of everything here.

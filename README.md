@@ -6,19 +6,19 @@ The Chat Place is an independent project by Kelly Ford. It works with Claude Cod
 Claude desktop app, but it isn't made, sponsored or endorsed by Anthropic, and isn't affiliated
 with it. Claude and Claude Code are trademarks of Anthropic.
 
-New to The Chat Place? The [user guide](docs/user-guide.md) starts
+New to The Chat Place? The [user guide](https://kellylford.github.io/AIChat/user-guide.html) starts
 with the everyday things and goes deeper; it's also in the app, under Help, User Guide. This README
 has the full details.
 
-Keyboard shortcuts: [docs/keyboard-shortcuts.md](docs/keyboard-shortcuts.md) (also as
-[HTML](docs/keyboard-shortcuts.html) and [plain text](docs/keyboard-shortcuts.txt)), the same list
+Keyboard shortcuts: [a web page](https://kellylford.github.io/AIChat/keyboard-shortcuts.html), also as
+[Markdown](docs/keyboard-shortcuts.md) and [plain text](docs/keyboard-shortcuts.txt): the same list
 as Help, Keyboard Shortcuts (F1) in the app.
 
 > **Status: version 0.1.2, a pre-release** (0.1.0, the first release, came out on 7 October 2026). Used with JAWS on Kelly's PC; the
 > installer, uninstaller and update check have been tested in the vmtest VM. Downloading and
 > installing an update needs two published releases, so it is first tried with 0.1.1. It has not
-> yet had a pass with NVDA. The Mac build is new: built, smoke-tested and Developer ID signed on
-> Kelly's Mac, but not yet notarized in CI or used with VoiceOver.
+> yet had a pass with NVDA. The Mac build is used with VoiceOver on Kelly's Mac, and since 0.1.2
+> the release workflow signs and notarizes it.
 
 A keyboard and screen reader friendly reader for Claude Code sessions. It lists every session the
 Claude desktop app has open, shows each one as a conversation you can arrow through, tells you
@@ -587,7 +587,7 @@ Checked with Claude Code 2.1.286 (issues #187 and #188):
 
 ## Limitations
 
-- The Mac version is new and hasn't had a full pass with VoiceOver. Edit boxes, lists and
+- On a Mac, edit boxes, lists and
   choices have their names under VoiceOver, as under JAWS and NVDA. But the text a screen reader
   reads for each row of the messages list (the whole message) uses MSAA, which wxPython has only
   on Windows, so VoiceOver reads the row's own text instead. The OS-specific parts are in
