@@ -3629,6 +3629,57 @@ def test_each_question_is_a_group_box_its_options_follow(frame):
         dialog.Destroy()
 
 
+def test_arrow_keys_move_through_a_question_s_options(frame):
+    # #121: on a Mac the arrows did nothing in the answer dialog's radio group.
+    from thechatplace.ui.dialogs import RADIO_ARROW_STEPS, QuestionDialog
+    assert RADIO_ARROW_STEPS == {wx.WXK_UP: -1, wx.WXK_LEFT: -1, wx.WXK_DOWN: 1, wx.WXK_RIGHT: 1}
+    dialog = QuestionDialog(frame, "Probe", _Questions())
+    try:
+        fired = []
+        dialog.Bind(wx.EVT_RADIOBUTTON, lambda e: fired.append(e.GetEventObject()._hub_label))
+        (_k1, first, _t1), (_k2, multi, _t2), _third, (_k4, fourth, _t4) = dialog._controls
+        red, blue, other = first
+        fourth[0].SetValue(True)
+        assert dialog.move_in_radio_group(red, 1)
+        assert blue.GetValue() and not red.GetValue()
+        assert dialog.move_in_radio_group(blue, 1) and other.GetValue()
+        assert dialog.move_in_radio_group(other, 1) and red.GetValue()  # wraps, as Windows does
+        assert dialog.move_in_radio_group(red, -1) and other.GetValue()
+        assert fired == ["Blue", "Other", "Red", "Other"]
+        assert fourth[0].GetValue()  # another question's answer is untouched
+        assert not dialog.move_in_radio_group(multi[0], 1)  # check boxes aren't a radio group
+    finally:
+        dialog.Destroy()
+
+
+def test_only_plain_arrows_on_a_radio_are_taken(frame, monkeypatch):
+    # #121's key hook keeps every other key, and arrows anywhere else, working.
+    from thechatplace.ui.dialogs import QuestionDialog
+    dialog = QuestionDialog(frame, "Probe", _Questions())
+    try:
+        (_k1, first, other_text), (_k2, multi, _t2), _third, _fourth = dialog._controls
+        red, blue, _other = first
+        red.SetValue(True)
+
+        def press(focus, key, control=False):
+            monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: focus))
+            event = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
+            event.SetKeyCode(key)
+            event.SetControlDown(control)
+            dialog._on_char_hook(event)
+            return event.GetSkipped()
+
+        assert not press(red, wx.WXK_DOWN) and blue.GetValue()  # taken: moves the choice
+        for focus, key, control in [(blue, wx.WXK_RETURN, False), (blue, wx.WXK_ESCAPE, False),
+                                    (blue, wx.WXK_TAB, False), (blue, wx.WXK_DOWN, True),
+                                    (other_text, wx.WXK_DOWN, False), (multi[0], wx.WXK_DOWN, False),
+                                    (None, wx.WXK_DOWN, False)]:
+            assert press(focus, key, control), (focus, key, control)
+        assert blue.GetValue()  # none of those moved it
+    finally:
+        dialog.Destroy()
+
+
 def test_settings_reading_messages_options_follow_their_group_box(frame):
     from thechatplace.ui.dialogs import SettingsDialog
     dialog = SettingsDialog(frame, speech.SpeechSettings(), speech.default_options())
