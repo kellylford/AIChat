@@ -6,12 +6,12 @@ The Chat Place is an independent project by Kelly Ford. It works with Claude Cod
 Claude desktop app, but it isn't made, sponsored or endorsed by Anthropic, and isn't affiliated
 with it. Claude and Claude Code are trademarks of Anthropic.
 
-New to The Chat Place? The [user guide](docs/user-guide.md) starts
+New to The Chat Place? The [user guide](https://kellylford.github.io/AIChat/user-guide.html) starts
 with the everyday things and goes deeper; it's also in the app, under Help, User Guide. This README
 has the full details.
 
-Keyboard shortcuts: [docs/keyboard-shortcuts.md](docs/keyboard-shortcuts.md) (also as
-[HTML](docs/keyboard-shortcuts.html) and [plain text](docs/keyboard-shortcuts.txt)), the same list
+Keyboard shortcuts: [a web page](https://kellylford.github.io/AIChat/keyboard-shortcuts.html), also as
+[Markdown](docs/keyboard-shortcuts.md) and [plain text](docs/keyboard-shortcuts.txt): the same list
 as Help, Keyboard Shortcuts (F1) in the app.
 
 > **Status: version 0.1.2, a pre-release** (0.1.0, the first release, came out on 7 October 2026). Used with JAWS on Kelly's PC; the

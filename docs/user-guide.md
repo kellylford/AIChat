@@ -378,5 +378,5 @@ support@theideaplace.net.
   Chat Place can read.
 
 For every keyboard shortcut, see Help, Keyboard Shortcuts (F1), or the
-[keyboard shortcuts page](https://github.com/kellylford/AIChat/blob/main/docs/keyboard-shortcuts.md).
+[keyboard shortcuts page](https://kellylford.github.io/AIChat/keyboard-shortcuts.html).
 The [README](https://github.com/kellylford/AIChat#readme) has the full details of everything here.
