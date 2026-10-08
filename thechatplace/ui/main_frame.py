@@ -51,7 +51,7 @@ import wx
 
 from ..changes import by_file, summary_text
 from ..codeblocks import find_code_blocks
-from .. import (__version__, announce, attachments, bugreport, signin, export, hub, platform_paths,
+from .. import (__version__, about_you, announce, attachments, bugreport, signin, export, hub, platform_paths,
                usage)
 from ..claude_cli import (MODELS, PERMISSION_MODES, PermissionRequest, ResumeRefused, TurnEvent,
                           TurnRunner, allow_response, answer_questions_response,
@@ -64,6 +64,7 @@ from ..hub import Snapshot, collect, finished_turns, last_reply_from_tail
 from ..own_store import OwnSession, OwnSessionStore
 from ..groups import GroupStore
 from ..hidden import HiddenStore
+from ..titles import MAX_TITLE, TitleStore, clean_title
 from ..sessions import (GROUP_VIEW_PREFIX, IDLE, NEEDS_YOU, SORT_ORDERS, SORT_SPOKEN,
                         VIEW_ALL, VIEW_NEEDS_YOU, VIEWS, WORKING,
                         SessionInfo, group_view, in_view, view_spoken)
@@ -77,7 +78,7 @@ from .notify import Notifier
 from .statusbar import StatusParts
 from ..rendering import html_page, message_page
 from ..ui_text import shortcuts_html
-from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, ChangesDialog, CodeBlocksDialog, FormattedMessageDialog,
+from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, AboutYouDialog, ChangesDialog, CodeBlocksDialog, FormattedMessageDialog,
                       BugReportDialog, CommandPickerDialog, MessageDialog, NewSessionDialog, PermissionDialog, PlanDialog,
                       ManageGroupsDialog, QuestionDialog, SettingsDialog, ShortcutsDialog,
                       formatted_view_available)
@@ -110,6 +111,7 @@ class MainFrame(wx.Frame):
         self.store = store or OwnSessionStore()
         self.groups = GroupStore()
         self.hidden = HiddenStore()
+        self.titles = TitleStore()  # names given to desktop app sessions (#93)
         self.updates = updates or UpdateService(__version__)
         self._update_busy = False
         self.speech = SpeechSettings.load()
@@ -197,6 +199,9 @@ class MainFrame(wx.Frame):
         if self.hidden.load_error:
             wx.CallAfter(wx.MessageBox, self.hidden.load_error, APP_NAME,
                          wx.OK | wx.ICON_WARNING, self)
+        if self.titles.load_error:
+            wx.CallAfter(wx.MessageBox, self.titles.load_error, APP_NAME,
+                         wx.OK | wx.ICON_WARNING, self)
         self.refresh_sessions()
         self._check_claude_version()
         # After the session list has been read, like the update check.
@@ -229,6 +234,9 @@ class MainFrame(wx.Frame):
         # as menu accelerators they were window-wide, so Delete in the
         # attachments list hid the loaded session instead of removing the file.
         # The keys are in the labels, without a tab, so they're still read out.
+        # Every letter of "Rename Session" is another item's access key
+        # already, so F2 (as in Explorer) is its only shortcut (#93).
+        self._item(session, "Rename Session...\tF2", lambda e: self.on_rename())
         self._item(session, "H&ide Session (Delete)", lambda e: self.on_hide())
         self._item(session, "&Bring Back Session", lambda e: self.on_unhide())
         self._item(session, "Delete Session &Permanently (Shift+Delete)...",
@@ -279,6 +287,9 @@ class MainFrame(wx.Frame):
         self._item(view, "Change&d Files...\tCtrl+Shift+D", lambda e: self.on_changes())
         self._item(view, "Repeat &Last Announcement\tCtrl+Shift+R",
                    lambda e: self._say(self._last_announcement, force=True))
+        view.AppendSeparator()
+        self._item(view, "What Claude &Knows About You...\tCtrl+Shift+K",
+                   lambda e: self.on_about_you())
         bar.Append(view, "&View")
 
         help_menu = wx.Menu()
@@ -317,6 +328,7 @@ class MainFrame(wx.Frame):
         set_accessible_name(self.session_list, "Session list")
         left.Add(self.session_list, 1, wx.EXPAND | wx.ALL, 8)
         self.session_list.Bind(wx.EVT_LISTBOX_DCLICK, self.on_open_session)
+        self.session_list.Bind(wx.EVT_CONTEXT_MENU, self._on_session_menu)
         outer.Add(left, 2, wx.EXPAND)
 
         vsizer = wx.BoxSizer(wx.VERTICAL)
@@ -625,6 +637,14 @@ class MainFrame(wx.Frame):
         # counts, announcements and notifications as well as the list.
         for info in snap.sessions:
             info.hidden = info.key in self.hidden
+            if not info.is_own and info.key in self.titles:
+                info.title = self.titles.get(info.key)  # your name for it (#93)
+            elif info.is_own:
+                # From the store as it is now: a read that began before a
+                # rename would otherwise bring the old name back.
+                own = self.store.get(info.cli_session_id)
+                if own is not None:
+                    info.title = own.title
         ended = [info for info in ended if info.key not in self.hidden]
         if not snap.desktop_groups.read_ok:
             snap.desktop_groups = previous_desktop_groups  # keep the last good read
@@ -823,6 +843,68 @@ class MainFrame(wx.Frame):
             return
         self._feedback(f"{info.title} is back in the list.")
         self._refresh_list_in_place()
+
+    def on_rename(self):
+        """File, Rename Session (F2, #93). One of The Chat Place's own
+        sessions is renamed in its own store. A desktop app session's files
+        are never written, so its new name is kept in titles.json and shows
+        only here; an empty name goes back to the desktop app's."""
+        info = self._selected_session()
+        if info is None:
+            self._feedback("No session selected.")
+            return
+        if info.is_own:
+            prompt = f"New name for {info.title}:"
+        else:
+            prompt = (f"New name for {info.title}. It shows only in The Chat Place; the "
+                      "Claude desktop app keeps its own name for it. Leave it empty to go "
+                      "back to that name.")
+        dialog = wx.TextEntryDialog(self, prompt, "Rename Session", info.title)
+        dialog.SetMaxLength(MAX_TITLE)
+        try:
+            if dialog.ShowModal() != wx.ID_OK:
+                return
+            title = clean_title(dialog.GetValue())
+        finally:
+            dialog.Destroy()
+        self.rename_session(info, title)
+
+    def rename_session(self, info: SessionInfo, title: str):
+        title = clean_title(title)
+        old = info.title
+        if info.is_own:
+            if not title:
+                self._feedback("A Chat Place session needs a name; it wasn't changed.")
+                return
+            if self.store.get(info.cli_session_id) is None:
+                # Its first turn is just reporting its id; there's nothing to rename yet.
+                self._feedback(f"Couldn't rename {old} just now. Try again in a moment.")
+                return
+            if not self._store_write(self.store.update, info.cli_session_id, title=title):
+                return
+        else:
+            if not title and info.key not in self.titles:
+                self._feedback(f"{old} already has the desktop app's name.")
+                return
+            try:
+                self.titles.set(info.key, title)
+            except OSError as exc:
+                wx.MessageBox(f"Couldn't save your session names: {exc}", APP_NAME,
+                              wx.OK | wx.ICON_WARNING, self)
+                return
+            if not title:
+                # Back to the desktop app's name, which the next read brings.
+                self._feedback(f"{old} goes back to the desktop app's name.")
+                self.refresh_sessions(force=False)
+                return
+        for each in [s for s in self._snapshot.sessions if s.key == info.key] + [info]:
+            each.title = title
+        if self._open is not None and self._open.key == info.key:
+            self._open.title = title
+            self._update_heading()
+        self._refresh_list_in_place()
+        self._feedback(f"Renamed {old} to {title}." if title != old
+                       else f"{title} keeps its name.")
 
     def on_delete_permanently(self):
         """File, Delete Session Permanently (Shift+Delete): one of The Chat
@@ -1402,6 +1484,41 @@ class MainFrame(wx.Frame):
         self._modal(CodeBlocksDialog(self, blocks, self._copy_code_block))
         self.chat_list.SetFocus()
 
+    def on_about_you(self):
+        """View, What Claude Knows About You (Ctrl+Shift+K, #92): your
+        instructions, memories, skills and the rest, read from Claude Code's
+        files, with the projects your sessions work in."""
+        cwds = sorted({s.cwd for s in self._snapshot.sessions if s.cwd})
+        self._feedback("Reading what Claude knows about you…")
+        # On the pool: a session folder on a disconnected or network drive
+        # can take seconds to answer.
+        self._read_about_you(cwds, lambda kinds: self._show_about_you(kinds, cwds))
+
+    def _read_about_you(self, cwds, done):
+        """``about_you.collect`` in the background, then ``done(kinds)`` on
+        the UI thread (or a message if it failed)."""
+        def work():
+            try:
+                kinds = about_you.collect(cwds)
+            except Exception as exc:  # noqa: BLE001
+                wx.CallAfter(self._feedback, f"Couldn't read what Claude knows about you: {exc}")
+                return
+            wx.CallAfter(done, kinds)
+        self._pool.submit(work)
+
+    def _show_about_you(self, kinds, cwds):
+        def copy(path: str):
+            self._feedback("Copied the file's location." if self._copy_text(path)
+                           else "Couldn't open the clipboard.")
+
+        def reload(done):
+            def reloaded(fresh):
+                self._feedback("Reloaded. " + about_you.summary(fresh))
+                done(fresh)
+            self._read_about_you(cwds, reloaded)
+        self._modal(AboutYouDialog(self, kinds, reload, platform_paths.edit_file,
+                                   platform_paths.show_in_folder, copy))
+
     def copy_last_code_block(self):
         """Ctrl+Shift+C: the last code block of the selected message, usually
         the one Claude means you to run or keep."""
@@ -1421,15 +1538,17 @@ class MainFrame(wx.Frame):
         else:
             self._feedback("Couldn't open the clipboard.")
 
-    def _message_menu_position(self, event=None) -> wx.Point:
-        """Where the menu opens: at the mouse for a right-click, at the
-        selected message for the Applications key or Shift+F10."""
+    def _message_menu_position(self, event=None, listbox=None) -> wx.Point:
+        """Where a list's menu opens: at the mouse for a right-click, at the
+        selected row for the Applications key or Shift+F10 where wx can say
+        where that row is (wxPython 4.3's ListBox can't: its top left)."""
+        listbox = listbox or self.chat_list
         position = event.GetPosition() if event is not None else wx.DefaultPosition
         if position != wx.DefaultPosition:
-            return self.chat_list.ScreenToClient(position)
-        index = self.chat_list.GetSelection()
+            return listbox.ScreenToClient(position)
+        index = listbox.GetSelection()
         try:
-            rect = self.chat_list.GetItemRect(max(index, 0))
+            rect = listbox.GetItemRect(max(index, 0))
             if rect.height > 0:
                 return wx.Point(rect.x + 8, rect.y + rect.height)
         except (AttributeError, NotImplementedError):
@@ -1442,6 +1561,68 @@ class MainFrame(wx.Frame):
             self.chat_list.PopupMenu(menu, self._message_menu_position(event))
         finally:
             menu.Destroy()
+
+    def _session_menu(self):
+        """The session list's context menu (#89), as (menu, {item id:
+        handler}). The commands are the File menu's, for the selected row."""
+        info = self._selected_session()
+        menu = wx.Menu()
+        actions = {}
+        if info is None:
+            return menu, actions
+
+        def add(label, handler, enable=True):
+            item = menu.Append(wx.ID_ANY, label)
+            item.Enable(enable)
+            actions[item.GetId()] = handler
+        add("&Load Session\tEnter", self.on_open_session)
+        add("Open in &Claude\tCtrl+O", self.on_open_in_claude, info.can_open_in_claude)
+        if not info.is_own:
+            add("Con&tinue Here...\tCtrl+Shift+N", self.on_continue_here)
+        add("Re&name Session...\tF2", self.on_rename)
+        menu.AppendSeparator()
+        add("Add to &Group...\tCtrl+G", self.on_add_to_group)
+        add("Remove from Gro&up...", self.on_remove_from_group,
+            bool(self.groups.groups_of(info.key)))
+        add("&Export Session...\tCtrl+E", self.on_export)
+        menu.AppendSeparator()
+        if info.key in self.hidden:
+            add("&Bring Back Session", self.on_unhide)
+        else:
+            add("H&ide Session\tDelete", self.on_hide)
+        if info.is_own:
+            add("Delete Session &Permanently...\tShift+Delete", self.on_delete_permanently)
+        return menu, actions
+
+    def _on_session_menu(self, event=None):
+        """Right-click, the Applications key or Shift+F10 in the session list.
+        The choice runs once the menu has closed and focus is back on the
+        list, so the command means the highlighted session, not the loaded
+        one (see _selected_session)."""
+        position = event.GetPosition() if event is not None else wx.DefaultPosition
+        if position != wx.DefaultPosition:
+            # A right-click: a list box neither selects the row clicked nor
+            # takes focus, so do both first, or the menu and its command
+            # would mean the loaded session or the old highlight.
+            row = self.session_list.HitTest(self.session_list.ScreenToClient(position))
+            if row == wx.NOT_FOUND:
+                return
+            self.session_list.SetSelection(row)
+        self.session_list.SetFocus()
+        menu, actions = self._session_menu()
+        if not actions:
+            menu.Destroy()
+            self._feedback("No session selected.")
+            return
+        try:
+            chosen = self.session_list.GetPopupMenuSelectionFromUser(
+                menu, self._message_menu_position(event, self.session_list))
+        finally:
+            menu.Destroy()
+        handler = actions.get(chosen)
+        if handler is not None:
+            self.session_list.SetFocus()
+            handler()
 
     def on_toggle_activity_menu(self, _event):
         self._set_activity(self.activity_item.IsChecked())
@@ -3327,6 +3508,16 @@ class MainFrame(wx.Frame):
         if key == wx.WXK_F6 and not ctrl and not event.AltDown():
             self.cycle_focus(forward=not event.ShiftDown())
             return
+        if self._is_menu_key(event) and focus in (self.session_list, self.chat_list):
+            # Opened here, on key-down, rather than left to Windows (#89).
+            # The session list had no menu of its own, so Windows took
+            # Shift+F10 as F10 and started the menu bar: focus went to the
+            # File menu for a moment and a screen reader said so.
+            if focus is self.session_list:
+                self._on_session_menu()
+            else:
+                self._on_message_menu()
+            return
         if self.status_parts.contains(focus) and not ctrl and key in (
                 wx.WXK_LEFT, wx.WXK_RIGHT, wx.WXK_HOME, wx.WXK_END):
             # Between the status bar's parts, as in QuickMail.
@@ -3370,6 +3561,14 @@ class MainFrame(wx.Frame):
                 self._copy_message()
             return
         event.Skip()
+
+    @staticmethod
+    def _is_menu_key(event: wx.KeyEvent) -> bool:
+        """Shift+F10 or the Applications key, the keyboard's right-click."""
+        key = event.GetKeyCode()
+        plain = not event.ControlDown() and not event.AltDown()
+        return plain and ((key == wx.WXK_F10 and event.ShiftDown())
+                          or (key == wx.WXK_WINDOWS_MENU and not event.ShiftDown()))
 
     # F6 and Shift+F6 (#10), as in QuickMail: the window's parts in order,
     # wrapping round. The reply stop is the reply box for The Chat Place's own
