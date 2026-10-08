@@ -645,6 +645,8 @@ class MainFrame(wx.Frame):
                 own = self.store.get(info.cli_session_id)
                 if own is not None:
                     info.title = own.title
+                    # On Remote Control (#96): in that view, and its row says so.
+                    info.remote = self._remote_control_on(own)
         ended = [info for info in ended if info.key not in self.hidden]
         if not snap.desktop_groups.read_ok:
             snap.desktop_groups = previous_desktop_groups  # keep the last good read
@@ -1111,6 +1113,10 @@ class MainFrame(wx.Frame):
                 kind += f" on {model_label(own.model)}"
                 if own.forked_from:
                     kind += f", continued from {own.forked_from}"
+                if self._remote_control_on(own):
+                    kind += ", Remote Control on"
+        elif info.remote:
+            kind += ", on Remote Control in the desktop app"
         state = info.state + (f": {info.detail}" if info.detail else "")
         self.session_heading.SetLabel(f"{info.title}, {info.repo}, {state}. {kind}.")
         self._update_messages_label()
@@ -1580,6 +1586,7 @@ class MainFrame(wx.Frame):
         if not info.is_own:
             add("Con&tinue Here...\tCtrl+Shift+N", self.on_continue_here)
         add("Re&name Session...\tF2", self.on_rename)
+        add("&Remote Control...", self.on_remote_control)
         menu.AppendSeparator()
         add("Add to &Group...\tCtrl+G", self.on_add_to_group)
         add("Remove from Gro&up...", self.on_remove_from_group,
@@ -1921,8 +1928,7 @@ class MainFrame(wx.Frame):
             self._feedback("No session selected.")
             return
         if not info.is_own:
-            self._feedback(f"{info.title} is a desktop app session: turn on its Remote "
-                           "Control in the desktop app.")
+            self._desktop_remote_control(info)
             return
         own = self.store.get(info.cli_session_id)
         if own is None:
@@ -1951,8 +1957,35 @@ class MainFrame(wx.Frame):
                                  remote_control=values[index]):
             return
         own = self.store.get(info.cli_session_id)
-        state = "on" if self._remote_control_on(own) else "off"
-        self._feedback(f"Remote Control {state} for {info.title}, from its next turn.")
+        on = self._remote_control_on(own)
+        for each in [s for s in self._snapshot.sessions if s.key == info.key] + [info]:
+            each.remote = on
+        if self._open is not None and self._open.key == info.key:
+            self._open.remote = on
+            self._update_heading()
+        self._refresh_list_in_place()
+        self._feedback(f"Remote Control {'on' if on else 'off'} for {info.title}, "
+                       "from its next turn.")
+
+    def _desktop_remote_control(self, info: SessionInfo):
+        """Remote Control for a desktop app session (#96). The Chat Place
+        never changes a desktop session, so it offers the two ways there
+        are: turn it on in the desktop app, or continue the session here as
+        a copy with Remote Control on from its first turn."""
+        now = (" It's on Remote Control in the desktop app now."
+               if info.remote else "")
+        choices, actions = [], []
+        if info.can_open_in_claude:
+            choices.append("Open it in the Claude desktop app, to turn on Remote Control there")
+            actions.append(self.on_open_in_claude)
+        choices.append("Continue it here as a copy, with Remote Control on")
+        actions.append(lambda: self.on_continue_here(remote_control="on"))
+        index = self._choose(
+            "Remote Control",
+            f"{info.title} is a Claude desktop app session, which The Chat Place doesn't "
+            f"change.{now} How do you want to reach it from claude.ai?", choices)
+        if index is not None:
+            actions[index]()
 
     def _on_remote_control(self, session_id: str, title: str, data: dict):
         """A turn's Remote Control answer: remembered, so the next turn joins
@@ -2299,8 +2332,10 @@ class MainFrame(wx.Frame):
         finally:
             wx.TheClipboard.Close()
 
-    def on_continue_here(self, _event=None):
-        """Carry on a desktop app session in The Chat Place, as a copy (#189)."""
+    def on_continue_here(self, _event=None, remote_control: str = ""):
+        """Carry on a desktop app session in The Chat Place, as a copy (#189).
+        ``remote_control`` "on" puts the copy on Remote Control from its
+        first turn (#96)."""
         info = self._selected_session()
         if info is None:
             self._feedback("No session selected.")
@@ -2341,7 +2376,8 @@ class MainFrame(wx.Frame):
             return
         own = OwnSession(cli_session_id=new_id, title=title, cwd=info.cwd,
                          permission_mode=mode, started=False, model=model,
-                         fork_source=info.cli_session_id, forked_from=info.title)
+                         fork_source=info.cli_session_id, forked_from=info.title,
+                         remote_control=remote_control)
         if not self._store_write(self.store.add, own):
             return
         self._start_turn(new_id, command, info.cwd, message, title)

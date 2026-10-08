@@ -70,7 +70,7 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   it to nothing (clear the box) goes back to the desktop app's name.
 - **The session's menu** (Applications key or Shift+F10 in the session list, or a right-click)
   has the File menu's commands for the selected session: load, open in Claude, continue here,
-  rename, groups, export, and hide or delete.
+  rename, Remote Control, groups, export, and hide or delete.
 - **What Claude knows about you** (Ctrl+Shift+K, View, What Claude Knows About You). Claude Code
   keeps what it knows about you in plain files, and this lists them by kind: your instructions
   (`CLAUDE.md`, yours and each project's), the memories Claude saved for each project, your
@@ -195,6 +195,11 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   where it stays (turning Remote Control off, or deleting the session, doesn't remove it;
   archive it on claude.ai). While a turn runs, anyone signed in to your account on claude.ai
   can type into it or answer its questions; a question answered there is cleared here.
+  It's also on the session's menu (Applications key). A session on Remote Control says so in
+  its row and heading, and View, Show Sessions, Remote Control Sessions lists it. For a Claude
+  desktop app session, File, Remote Control offers to open it in the desktop app, where its
+  Remote Control is turned on, or to continue it here as a copy with Remote Control on from the
+  first turn; The Chat Place never changes the desktop app's session itself.
 - **Claude asks, you answer.** In The Chat Place's own sessions, when Claude needs permission
   for something the permission mode doesn't allow, asks you a question, or has a plan for you
   to approve, the turn waits for you. It's announced ("Build needs you. Claude wants to run

@@ -92,6 +92,8 @@ class SessionInfo:
         parts.append(describe_age(self.last_activity_ms, now_ms))
         if self.is_own:
             parts.append("Chat Place session")
+        if self.remote:
+            parts.append("Remote Control")  # #96: say which can be reached from claude.ai
         if self.archived:
             parts.append("archived")
         if self.hidden:

@@ -28,7 +28,8 @@ One window, three parts, in Tab order: the session list; the messages of the loa
 | Alt+V, H | Show Sessions: all, needs you or working, needs you, desktop app, The Chat Place, Remote Control, archived, or one of your groups |
 | Ctrl+E | Export the selected (or loaded) session as Markdown, a web page or plain text |
 | F2 | Rename the selected session (a desktop app session's new name shows only in The Chat Place) |
-| Applications key / Shift+F10 | The session's menu: load, open in Claude, rename, groups, export, hide or delete |
+| Applications key / Shift+F10 | The session's menu: load, open in Claude, rename, Remote Control, groups, export, hide or delete |
+| Alt+F, O | Remote Control: reach the selected session from claude.ai and your phone (a desktop app session can be continued here with it on) |
 | Ctrl+G | Add the selected session to a group (or a new one); File, Remove from Group and Manage Groups are on the File menu |
 | Delete | Hide the selected session; View, Show Sessions, Hidden lists hidden sessions, and File, Bring Back Session returns one |
 | Shift+Delete | Delete one of The Chat Place's own sessions permanently, transcript and all, after you confirm (desktop app sessions can only be hidden) |

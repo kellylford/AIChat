@@ -44,7 +44,9 @@ SHORTCUTS = [
         ("F2", "Rename the selected session (a desktop app session's new name shows only "
                "in The Chat Place)"),
         ("Applications key / Shift+F10", "The session's menu: load, open in Claude, rename, "
-                                         "groups, export, hide or delete"),
+                                         "Remote Control, groups, export, hide or delete"),
+        ("Alt+F, O", "Remote Control: reach the selected session from claude.ai and your "
+                     "phone (a desktop app session can be continued here with it on)"),
         ("Ctrl+G", "Add the selected session to a group (or a new one); File, Remove "
                    "from Group and Manage Groups are on the File menu"),
         ("Delete", "Hide the selected session; View, Show Sessions, Hidden lists hidden "
