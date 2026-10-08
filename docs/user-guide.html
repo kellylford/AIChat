@@ -1,0 +1,287 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>The Chat Place User Guide</title><style>
+body { font: 16px/1.5 "Segoe UI", sans-serif; margin: 1em 1.5em; max-width: 60em; }
+pre { white-space: pre-wrap; background: #f3f3f3; padding: .6em; border-radius: 4px; }
+code { font-family: Consolas, monospace; }
+table { border-collapse: collapse; margin: .5em 0; }
+th, td { border: 1px solid #888; padding: .25em .6em; text-align: left; vertical-align: top; }
+@media (prefers-color-scheme: dark) {
+  body { background: #1e1e1e; color: #e8e8e8; }
+  pre { background: #2b2b2b; }
+  a { color: #8ab4f8; }
+}
+</style></head><body><main aria-label="The Chat Place User Guide"><h1>The Chat Place User Guide</h1>
+<p>The Chat Place is a keyboard and screen reader friendly home for your Claude Code chats. It lists
+the sessions the Claude desktop app has, shows each one as a conversation you can arrow through,
+tells you when a session answers, and can run sessions of its own that you read and reply to
+entirely from here.</p>
+<p>This guide starts with the everyday things and goes deeper as it goes on. Each part has its own
+heading, so your screen reader's heading keys move between them. For every key in one list, use
+Help, Keyboard Shortcuts (F1).</p>
+<p>The Chat Place is an independent project by Kelly Ford. It works with Claude Code and the Claude
+desktop app, but it isn't made, sponsored or endorsed by Anthropic, and isn't affiliated with it.</p>
+<h2>Before you start</h2>
+<p>You need:</p>
+<ul>
+<li>Windows 10 or 11, or a Mac with Apple silicon.</li>
+<li>Claude Code, installed with its native installer and signed in to your Claude subscription.
+  This is the <code>claude</code> command, using the same sign-in as the Claude desktop app. The npm version
+  of Claude Code isn't used.</li>
+</ul>
+<p>The Chat Place never uses an API key. Reading sessions costs nothing, because everything it reads
+is on your own computer. Messages you send in its own sessions are Claude Code turns, which count
+against your plan's monthly Agent SDK credit; past that credit, turns stop unless you've turned on
+extra usage, which is billed. View, Usage and Context (Ctrl+Shift+U) says where you stand.</p>
+<h3>Installing</h3>
+<p><strong>Windows:</strong> download <code>TheChatPlace-windows-Setup.exe</code> from the newest release on the
+<a href="https://github.com/kellylford/AIChat/releases">releases page</a> and run it. It installs for you
+only, needs no administrator rights, adds The Chat Place to the Start menu, and starts it. The
+portable zip from the same release runs without installing, but doesn't update itself.</p>
+<p><strong>Mac:</strong> download <code>TheChatPlace-macos-arm64.dmg</code>, open it, and drag The Chat Place onto
+Applications. The first time it speaks through VoiceOver, macOS asks whether The Chat Place may
+control VoiceOver: allow it, and turn on "Allow VoiceOver to be controlled with AppleScript" in
+VoiceOver Utility, General.</p>
+<p>If Claude Code isn't signed in, your sessions are still listed; only sending a message needs a
+sign-in. Help, Claude Code Sign-in says whether it is signed in, and offers to sign you in if not.</p>
+<h2>The window</h2>
+<p>The window has three parts, in Tab order:</p>
+<ol>
+<li>The <strong>session list</strong>: every session, one per line.</li>
+<li>The <strong>messages</strong> of the session you've loaded.</li>
+<li>The <strong>reply box</strong>, with Send and Stop. For a Claude desktop app session, the same place holds
+   a short note saying why you reply in Claude, with Open in Claude and Continue Here buttons.</li>
+</ol>
+<p>Tab and Shift+Tab move between them, and Ctrl+1, Ctrl+2 and Ctrl+3 go straight to each one. F6
+and Shift+F6 move between the parts and the <strong>status bar</strong>, which holds whatever was said last;
+Ctrl+9 goes straight to the status bar. Escape in the messages or the reply box takes you back to
+the session list, on the same session.</p>
+<h2>Reading a session</h2>
+<h3>Finding it in the list</h3>
+<p>Each line in the session list reads the session's title, its folder, its state (needs you,
+working or idle) and when it was last active, for example: "Fix the release build, QuickMail,
+needs you: Choose a version number, active 1 minute ago".</p>
+<p>By default, sessions that need you come first, then the ones that are working, then the rest,
+newest first. The list refreshes itself every few seconds. While you're in it, rows stay where
+they are, so nothing moves under you; F5 puts the list back in order.</p>
+<p>To find one session among many, press <strong>Ctrl+F</strong> in the list and type part of its title, its
+folder or what it needs. The list shows only the matches, and its name says so ("Session list,
+matching "build", 3 of 139"). Escape shows them all again.</p>
+<h3>Loading it</h3>
+<p>Arrowing through the list doesn't load anything. Press <strong>Enter</strong> on a session to load it: you move
+to its messages and hear, for example, "Loaded Fix the build, 12 messages." Pressing Enter on the
+session that's already loaded takes you back to where you were in it.</p>
+<h3>Reading the messages</h3>
+<p>The newest message is last, and you start on it. Each line shows "You:" or "Claude:" and the
+message's first line, but your screen reader reads the <strong>whole message</strong> as you arrow onto it.
+Headings and list items are read as sentences, and a code block is read as what it is, such as
+"Code block, Python, 14 lines". If you'd rather hear just the first line, turn that off in
+Settings, Reading messages.</p>
+<p>Press <strong>Enter</strong> on a message to read it as a formatted page. There, your screen reader's browse
+mode moves by heading (H), table (T), list (L) and code block (each code block is a region, so R
+moves to it). Links open in your browser. <strong>Read as Plain Text</strong> (Alt+P) shows the message in a
+plain text box instead, to read by line, word and character. Escape closes either one and puts
+you back on the same message. On Windows the formatted page needs Microsoft's Edge WebView2
+runtime, which comes with Windows 11; without it, the plain text box opens.</p>
+<p>Other things you can do with a message:</p>
+<ul>
+<li><strong>Ctrl+C</strong> copies the whole message.</li>
+<li><strong>Ctrl+Shift+B</strong> lists the message's code blocks, by language and size, with each one's code to
+  read and a Copy button for just that block. <strong>Ctrl+Shift+C</strong> copies the last code block at once.</li>
+<li><strong>Ctrl+F</strong> finds a message containing some text, searching each message's whole text. F3 and
+  Shift+F3 find the next and previous match.</li>
+<li>The Applications key (or Shift+F10) opens the message's menu.</li>
+</ul>
+<p>Claude's questions to you appear as "Claude asked: …" followed by "You answered: …". Tools Claude
+was refused appear as "Permission denied: …".</p>
+<h3>Seeing what Claude is doing</h3>
+<p>Claude's tool calls and their results are hidden until you turn on <strong>Show Tool Activity</strong>
+(Ctrl+T). With it on, the open session's tool calls are also spoken as they happen, so a long turn
+isn't silent: "Using Bash: git status; Read: main.py." A run of calls is gathered up and said
+together ("Using Read 4 times, then Bash."), and it never cuts off your screen reader.</p>
+<h2>Desktop app sessions and The Chat Place's own</h2>
+<p>There are two kinds of session in the list, and what you can do differs.</p>
+<p><strong>Claude desktop app sessions</strong> are read-only here. You can read them, find in them, export them
+and see what they changed, but you reply in the desktop app. That's deliberate: if two programs
+both worked in one session at the same time, its conversation would get tangled. <strong>Open in Claude</strong>
+(Ctrl+O) switches the desktop app to the session, to answer it, approve a permission or answer a
+question card.</p>
+<p><strong>The Chat Place's own sessions</strong> are ones you start here. You read and reply to them entirely in
+The Chat Place, and they don't appear in the desktop app.</p>
+<p>If you'd like to carry on a desktop app session here, use <strong>Continue Here</strong> (Ctrl+Shift+N, or the
+button beside Open in Claude). It makes a new Chat Place session in the same folder, with the
+whole conversation so far, and you type its first message. Its title starts as the original's,
+followed by "(continued)". The desktop app session isn't changed, and what you do in the copy
+doesn't appear in it.</p>
+<h2>Starting a session and replying</h2>
+<h3>A new session</h3>
+<p>Press <strong>Ctrl+N</strong> (File, New Session) and fill in:</p>
+<ul>
+<li><strong>Folder:</strong> the project folder Claude works in. It starts in your GitHub folder if you have one,
+  otherwise your home folder.</li>
+<li><strong>Title:</strong> optional; without one, it's made from the first words of your message.</li>
+<li><strong>Model:</strong> Default (your Claude Code setting), Opus, Sonnet or Haiku, each the latest of its
+  kind. File, Change Model changes it later, from the next turn. Fable isn't offered, because on
+  some plans it bills to usage credits without asking; if a turn would run on Fable anyway, The
+  Chat Place stops it before anything is sent, and says why.</li>
+<li><strong>Permission mode:</strong> how much Claude may do without asking. Auto, the default, lets Claude
+  decide what's safe to run. Accept edits lets it change files without asking. Manual asks before
+  anything that needs approval. Plan has Claude make a plan, without changing anything, for you
+  to approve.</li>
+<li><strong>First message:</strong> what you'd like Claude to do.</li>
+</ul>
+<p>If the first message never reaches Claude (Claude Code isn't signed in, for example), it goes back
+into the reply box, and Send starts the session again.</p>
+<h3>Replying</h3>
+<p>In one of The Chat Place's own sessions, type in the reply box and press <strong>Ctrl+Enter</strong> (or Send).
+You stay in the reply box, and you hear what was sent and where, such as "Sent to Fix the build:
+Run the tests." When Claude finishes, its answer is announced.</p>
+<p>While Claude is working, you can still send. Your message is queued ("Queued for Fix the build:
+…"), shown at the end of the messages as "Queued: …", and sent once the current turn finishes.
+On a queued message, Ctrl+Enter sends it now (Claude answers it straight away, in the same turn),
+and its menu can also edit or remove it. <strong>Stop</strong> (Ctrl+Period) ends the turn, and anything it
+started, such as a build; a queued message then goes back into the reply box.</p>
+<p><strong>Ctrl+Shift+T</strong> (Turn Status) says how long Claude has been working on this turn and what it last
+did. There's no time limit on a turn.</p>
+<h3>Commands, skills and attachments</h3>
+<p>These are for The Chat Place's own sessions:</p>
+<ul>
+<li><strong>Ctrl+/</strong> (or the Commands button) lists your skills and slash commands, then Claude Code's
+  own, such as /compact and /context, each with its description. Type to filter, Down to the list,
+  Enter to choose: it goes at the start of the reply box, ready to finish and send.</li>
+<li><strong>Ctrl+Shift+F</strong> (or Attach Files) adds files and pictures to your next message, and <strong>Ctrl+V</strong>
+  in the reply box attaches a picture on the clipboard, such as a screenshot. The attachments are
+  listed under the reply box, and Delete there removes one. Claude sees pictures as pictures, and
+  reads other files from where they are.</li>
+</ul>
+<h2>When Claude needs you</h2>
+<p>In one of The Chat Place's own sessions, when Claude needs a permission, asks you a question, or
+has a plan for you to approve, the turn waits for you. You hear it ("Fix the build needs you.
+Claude wants to run git push. Ctrl+Shift+A answers."), and the session shows as "needs you" in
+the list. Press <strong>Ctrl+Shift+A</strong> to answer:</p>
+<ul>
+<li><strong>A permission:</strong> read the whole request (the command, or the file and what would change), then
+  choose <strong>Allow</strong>, <strong>Deny</strong>, or, when Claude Code suggests a rule, <strong>Allow for this session</strong>,
+  named in full ("don't ask again this session for Bash(git push:*)"). Deny is the default button,
+  so pressing Enter by mistake never allows anything, and you can give a reason Claude reads.</li>
+<li><strong>A question:</strong> each question is a group of choices, with Other and a box for your own answer.
+  Send Answers, or Don't Answer.</li>
+<li><strong>A plan:</strong> read it (Read Formatted shows it as a page, by heading), then <strong>Approve</strong>, choosing
+  how Claude carries on, or <strong>Keep Planning</strong>, the default, with what to change.</li>
+</ul>
+<p><strong>Escape answers later.</strong> Nothing is allowed or refused by waiting: the turn keeps waiting, and
+Ctrl+Shift+A brings the same request back. "Allow for this session" lasts for the rest of that
+session, not just the turn. The Chat Place never changes Claude Code's own settings files.</p>
+<p>For a desktop app session, a "needs you" means the desktop app's summary of its latest turn says
+it's waiting on you. Answer it in the desktop app (Ctrl+O). The desktop app doesn't write that
+summary after every turn, so a desktop session can be waiting on you and still show as idle.</p>
+<h2>Organizing your sessions</h2>
+<p>With many sessions, these keep the list manageable.</p>
+<h3>Choosing which sessions are listed</h3>
+<p><strong>View, Show Sessions</strong> (Alt+V, H) chooses what the list shows: all sessions; the ones that need
+you or are working; just the ones that need you; desktop app sessions; The Chat Place's own;
+Remote Control sessions; ungrouped sessions; archived ones; hidden ones; or one of your groups.
+<strong>View, Sort Sessions</strong> (Alt+V, O) chooses the order: by status, newest first, oldest first, by
+title, or by folder. Both choices are remembered.</p>
+<h3>Groups</h3>
+<p>A group collects related sessions, such as everything for one project or everything you're
+waiting to hear back on, so you can show just those.</p>
+<ul>
+<li><strong>Ctrl+G</strong> (File, Add to Group) puts the selected session in a group, or in a new one.</li>
+<li>File, Remove from Group takes it out.</li>
+<li>File, Manage Groups lists your groups, with how many sessions each has, to make, rename or
+  delete them. Deleting a group never deletes its sessions.</li>
+</ul>
+<p>A session can be in several groups, and its line in the list says which ("group Work"). To see
+one group, choose it in View, Show Sessions. Ungrouped, in the same menu, lists the sessions that
+aren't in any group yet.</p>
+<p>The desktop app's own groups show here too: in View, Show Sessions, in each session's line, and in
+Add to Group. They can only be changed in the desktop app. Choosing one of them in Add to Group
+makes a Chat Place group of the same name, which is shown together with the desktop app's.</p>
+<h3>Renaming, hiding and deleting</h3>
+<ul>
+<li><strong>F2</strong> renames the selected session. One of The Chat Place's own sessions is renamed outright.
+  A desktop app session's new name shows only here, since the desktop app's files are never
+  changed; clear the name to go back to the desktop app's.</li>
+<li><strong>Delete</strong> hides a session without changing it. View, Show Sessions, Hidden lists hidden
+  sessions, and File, Bring Back Session returns one.</li>
+<li><strong>Shift+Delete</strong> deletes one of The Chat Place's own sessions permanently, conversation and all,
+  after you confirm (No is the default). Desktop app sessions can only be hidden here; delete
+  those in the desktop app.</li>
+</ul>
+<p>On a Mac laptop, Delete and Shift+Delete are Fn+Delete and Fn+Shift+Delete.</p>
+<p>The session's menu (the Applications key or Shift+F10 in the session list) has all of these, and
+the other commands for the selected session.</p>
+<h2>Announcements and notifications</h2>
+<p>When the open session gets a reply, when one of The Chat Place's sessions finishes a turn, or when
+any listed session stops working, it's announced through your screen reader (or a system voice)
+and put on the status bar. <strong>Ctrl+Shift+R</strong> repeats the last announcement.</p>
+<p><strong>Settings</strong> (Ctrl+Comma) chooses how much is said:</p>
+<ul>
+<li><strong>Full</strong> reads the whole reply.</li>
+<li><strong>Summary</strong> reads the session's name and the reply's first sentence.</li>
+<li><strong>Silent</strong> puts it on the status bar only.</li>
+</ul>
+<p>Settings also chooses whether every listed session is announced or just the open one, which
+speech engine and rate to use, and whether your own messages are read back when they're sent.</p>
+<p>When you're in another window, The Chat Place can show a notification when one of its sessions
+finishes a turn, fails or needs you, or when a desktop app session starts needing you. Choosing
+the notification brings The Chat Place forward with that session loaded. Settings, Windows
+notifications (on a Mac, Notifications) chooses every finished turn (the default), only when a
+session needs you, or off. While you're in The Chat Place, the announcement is enough and no
+notification is shown.</p>
+<h2>More things you can do</h2>
+<ul>
+<li><strong>Changed Files</strong> (Ctrl+Shift+D) lists the files Claude changed since your latest message, or in
+  the whole session, with how many lines were added and removed. Enter on a file reads its changes
+  line by line. It works for desktop app sessions too.</li>
+<li><strong>Usage and Context</strong> (Ctrl+Shift+U) says how full the session's context is ("Context 62% full:
+  124,000 of 200,000 tokens") and how much of your plan's limits are used. It's also said once,
+  unasked, when the context passes 80%, or a limit passes 90%.</li>
+<li><strong>Export</strong> (Ctrl+E) saves a session's conversation as Markdown, a web page or plain text.</li>
+<li><strong>What Claude Knows About You</strong> (Ctrl+Shift+K) lists what Claude Code keeps about you: your
+  instructions (CLAUDE.md files), the memories it saved, your skills, subagents, commands and
+  settings. Enter reads one, and Edit in Your Editor opens it in your own editor.</li>
+<li><strong>Remote Control</strong> (File, Remote Control) lets you reach one of The Chat Place's sessions from
+  claude.ai and your phone while a turn runs. Turning it on copies the conversation to claude.ai,
+  where it stays, and anyone signed in to your account there can type into it. Settings can make
+  it the default for The Chat Place's sessions.</li>
+</ul>
+<h2>Updates</h2>
+<p>The installed app checks for a new version shortly after it starts, and says so only if there is
+one. <strong>Help, Check for Updates</strong> asks right away and offers to install it (No is the default). It
+won't install while Claude is working in one of its sessions, and it warns you about a reply you
+haven't sent. Updating never touches your sessions or settings.</p>
+<h2>When something isn't right</h2>
+<p><strong>I don't see a session I expected.</strong> Check View, Show Sessions: you may be showing only some
+sessions, and archived and hidden sessions aren't in All. A Find (Ctrl+F) also narrows the list;
+Escape in the list clears it. F5 refreshes the list at once. Only Claude Code sessions are
+listed, not the desktop app's ordinary chats.</p>
+<p><strong>I can't reply to a session.</strong> It's a desktop app session. Press Ctrl+O to answer it in the
+desktop app, or Ctrl+Shift+N to continue it here as a copy.</p>
+<p><strong>Claude is waiting and nothing is happening.</strong> It may need you: press Ctrl+Shift+A. Ctrl+Shift+T
+says what the turn is doing.</p>
+<p><strong>A turn stopped with a usage limit.</strong> The announcement says which limit and when it resets.
+Ctrl+Shift+U shows how much of each limit is used.</p>
+<p><strong>An old session's messages are gone.</strong> Claude Code deletes old conversations after a while (its
+<code>cleanupPeriodDays</code> setting). The session can still be listed, and the messages list says its
+conversation is no longer there.</p>
+<p><strong>A reply is spoken twice.</strong> If you've installed ClaudeSpeak, its hook also speaks The Chat
+Place's turns.</p>
+<p><strong>Something else.</strong> Help, Report a Bug asks what happened and shows exactly what the report
+includes before it goes anywhere: version numbers and settings, never your sessions' titles,
+folders or messages. Open on GitHub files it; Copy Report copies it, to email to
+support@theideaplace.net.</p>
+<h2>Good to know</h2>
+<ul>
+<li>The Chat Place never writes to the desktop app's files or to any conversation. The only files it
+  writes are its own: on Windows in <code>%APPDATA%\TheChatPlace</code>, on a Mac in
+  <code>~/Library/Application Support/TheChatPlace</code>. The conversations themselves are Claude Code's.</li>
+<li>The Mac version is new, and hasn't had a full pass with VoiceOver yet. In particular, VoiceOver
+  reads each line of the messages list as shown, not the whole message; Enter still opens the
+  whole message.</li>
+<li>Conversations Claude hands to a subagent aren't shown.</li>
+<li>The desktop app's file formats aren't documented, so a desktop app update could change what The
+  Chat Place can read.</li>
+</ul>
+<p>For every keyboard shortcut, see Help, Keyboard Shortcuts (F1), or the
+<a href="https://github.com/kellylford/AIChat/blob/main/docs/keyboard-shortcuts.md">keyboard shortcuts page</a>.
+The <a href="https://github.com/kellylford/AIChat#readme">README</a> has the full details of everything here.</p></main></body></html>

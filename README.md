@@ -6,6 +6,10 @@ The Chat Place is an independent project by Kelly Ford. It works with Claude Cod
 Claude desktop app, but it isn't made, sponsored or endorsed by Anthropic, and isn't affiliated
 with it. Claude and Claude Code are trademarks of Anthropic.
 
+New to The Chat Place? The [user guide](docs/user-guide.md) ([HTML](docs/user-guide.html)) starts
+with the everyday things and goes deeper; it's also in the app, under Help, User Guide. This README
+has the full details.
+
 Keyboard shortcuts: [docs/keyboard-shortcuts.md](docs/keyboard-shortcuts.md) (also as
 [HTML](docs/keyboard-shortcuts.html) and [plain text](docs/keyboard-shortcuts.txt)), the same list
 as Help, Keyboard Shortcuts (F1) in the app.
@@ -276,6 +280,10 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
 - **Turn Status** (Ctrl+Shift+T) says how long Claude has been working on the current turn and what
   it last did. There's no time limit on a turn; Stop (Ctrl+Period) ends it, along with anything it
   started, such as a build.
+- **User Guide** (Help menu, Alt+H, G) shows the user guide as a page, read by heading like the
+  keyboard shortcuts, or as plain text (Alt+P). It's part of the app, so it works offline. It's
+  edited in `thechatplace/assets/user-guide.md`; `python tools/make_docs.py` makes the copies in
+  `docs/`.
 - **Claude Code Sign-in** (Help menu) says whether Claude Code is signed in, to which plan and
   as whom ("Claude Code is signed in to your Claude Max plan as …"). If it isn't, it offers to
   sign in: `claude auth login` opens in its own window and your browser shows Claude's sign-in

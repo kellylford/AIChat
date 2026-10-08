@@ -1882,6 +1882,59 @@ def test_f1_shows_the_shortcuts_page_or_the_text_box(frame, env, monkeypatch):
     assert len(shown2) == 1 and len(texts) == 1  # Read as Plain Text: the text box
 
 
+def test_help_user_guide_shows_the_guide_page_or_the_text_box(frame, env, monkeypatch):
+    # #104: the guide shipped in assets, as a page read by heading, or the
+    # text box on Read as Plain Text or without the formatted view.
+    from thechatplace.ui.dialogs import ID_PLAIN_TEXT, MessageDialog
+    texts = []
+    monkeypatch.setattr(frame, "_modal", lambda dialog: texts.append(dialog) or dialog.Destroy())
+    shown = _fake_viewer(monkeypatch, wx.ID_CANCEL)
+    frame.on_user_guide()
+    assert shown[0][0] == "User Guide"
+    assert "<h1>The Chat Place User Guide</h1>" in shown[0][1]
+    assert ">When Claude needs you</h2>" in shown[0][1] and texts == []
+    _fake_viewer(monkeypatch, ID_PLAIN_TEXT)
+    frame.on_user_guide()
+    assert len(texts) == 1 and isinstance(texts[0], MessageDialog)
+
+
+def test_help_user_guide_says_so_when_the_guide_is_missing(frame, env, monkeypatch, tmp_path):
+    from thechatplace.ui import main_frame
+    boxes = []
+    monkeypatch.setattr(main_frame.wx, "MessageBox",
+                        lambda message, caption, *a: boxes.append((message, caption)))
+    monkeypatch.setattr(platform_paths, "user_guide_path", lambda: tmp_path / "missing.md")
+    frame.on_user_guide()
+    assert boxes and boxes[0][0].startswith("Couldn't open the user guide")
+    assert boxes[0][1] == "The Chat Place"
+
+
+def test_no_menu_repeats_an_access_letter(frame):
+    # A letter two items share only moves between them (#104: User Guide
+    # first took Check for Updates' U). Each menu, and each submenu, on its own.
+    def letter(label):
+        label = label.replace("&&", "")
+        at = label.find("&")
+        return label[at + 1].lower() if 0 <= at < len(label) - 1 else None
+
+    def check(menu, where):
+        letters = {}
+        for item in menu.GetMenuItems():
+            if item.IsSeparator():
+                continue
+            label = item.GetItemLabel().split("\t")[0]
+            key = letter(label)
+            if key:
+                assert key not in letters, f"{where}: {label!r} and {letters[key]!r} share {key}"
+                letters[key] = label
+            if item.GetSubMenu():
+                check(item.GetSubMenu(), f"{where}, {item.GetItemLabelText()}")
+
+    bar = frame.GetMenuBar()
+    for i in range(bar.GetMenuCount()):
+        check(bar.GetMenu(i), bar.GetMenuLabelText(i))
+
+
 def test_shortcuts_and_messages_fall_back_to_the_text_box(frame, env, monkeypatch):
     from thechatplace.ui import main_frame
     texts = []
