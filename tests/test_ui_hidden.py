@@ -3652,6 +3652,34 @@ def test_arrow_keys_move_through_a_question_s_options(frame):
         dialog.Destroy()
 
 
+def test_only_plain_arrows_on_a_radio_are_taken(frame, monkeypatch):
+    # #121's key hook keeps every other key, and arrows anywhere else, working.
+    from thechatplace.ui.dialogs import QuestionDialog
+    dialog = QuestionDialog(frame, "Probe", _Questions())
+    try:
+        (_k1, first, other_text), (_k2, multi, _t2), _third, _fourth = dialog._controls
+        red, blue, _other = first
+        red.SetValue(True)
+
+        def press(focus, key, control=False):
+            monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: focus))
+            event = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
+            event.SetKeyCode(key)
+            event.SetControlDown(control)
+            dialog._on_char_hook(event)
+            return event.GetSkipped()
+
+        assert not press(red, wx.WXK_DOWN) and blue.GetValue()  # taken: moves the choice
+        for focus, key, control in [(blue, wx.WXK_RETURN, False), (blue, wx.WXK_ESCAPE, False),
+                                    (blue, wx.WXK_TAB, False), (blue, wx.WXK_DOWN, True),
+                                    (other_text, wx.WXK_DOWN, False), (multi[0], wx.WXK_DOWN, False),
+                                    (None, wx.WXK_DOWN, False)]:
+            assert press(focus, key, control), (focus, key, control)
+        assert blue.GetValue()  # none of those moved it
+    finally:
+        dialog.Destroy()
+
+
 def test_settings_reading_messages_options_follow_their_group_box(frame):
     from thechatplace.ui.dialogs import SettingsDialog
     dialog = SettingsDialog(frame, speech.SpeechSettings(), speech.default_options())
