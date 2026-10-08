@@ -242,6 +242,49 @@ def open_url(url: str) -> None:
         subprocess.Popen(["xdg-open", url])
 
 
+def _windows_program(*parts: str) -> str:
+    """A Windows program by its full path, never found by searching the
+    current folder or the app's own first."""
+    return os.path.join(os.environ.get("SystemRoot") or r"C:\Windows", *parts)
+
+
+def edit_file(path: Path) -> None:
+    """Open a text file in your own editor (What Claude Knows About You's
+    Edit, #92): The Chat Place itself never writes to Claude Code's files.
+    Windows tries the file type's Edit verb, then Open, then Notepad, since
+    a ``.md`` file often has no program set for it. Raises OSError if none
+    of them could start."""
+    import subprocess
+
+    if sys.platform == "win32":
+        for verb in ("edit", "open"):
+            try:
+                os.startfile(str(path), verb)  # type: ignore[attr-defined]  # noqa: S606
+                return
+            except OSError:
+                continue
+        subprocess.Popen([_windows_program("System32", "notepad.exe"), str(path)])
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", "-t", str(path)])  # the default text editor
+    else:
+        subprocess.Popen(["xdg-open", str(path)])
+
+
+def show_in_folder(path: Path) -> None:
+    """Show a file selected in Explorer or the Finder."""
+    import subprocess
+
+    if sys.platform == "win32":
+        # One command line, so the path keeps its own quotes: given as a list
+        # item, Python quotes "/select,C:\a b\x.md" whole, and Explorer
+        # opens Documents instead.
+        subprocess.Popen(f'"{_windows_program("explorer.exe")}" /select,"{path}"')
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", str(path)])
+    else:
+        subprocess.Popen(["xdg-open", str(Path(path).parent)])
+
+
 class ClaudeLookup:
     """Where ``claude`` is, or why it can't be used."""
 

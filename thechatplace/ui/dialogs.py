@@ -1110,3 +1110,161 @@ class ChangesDialog(wx.Dialog):
             self.text.SetFocus()  # Enter: read the file's changes
             return
         event.Skip()
+
+
+class AboutYouDialog(wx.Dialog):
+    """What Claude knows about you (#92): your instructions, memories,
+    skills, subagents, slash commands, output styles and settings, read from
+    Claude Code's own files. A list of kinds, the chosen kind's items, and
+    the selected item's file to read by line. The Chat Place only reads them:
+    Edit opens the file in your own editor, and Reload shows what changed."""
+
+    def __init__(self, parent, kinds, load, edit, show, copy):
+        """``kinds`` is what was found; ``load(done)`` reads it all again
+        in the background and calls ``done(kinds)`` on the UI thread."""
+        super().__init__(parent, title="What Claude Knows About You", size=(860, 640),
+                         style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+        self._load, self._edit, self._show_file, self._copy = load, edit, show, copy
+        self._kinds = list(kinds)
+        self._items = []
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer.Add(wx.StaticText(self, label=(
+            "Read from Claude Code's own files on this computer. The Chat Place only reads "
+            "them: Edit opens a file in your editor, and Reload shows your changes.")),
+            0, wx.LEFT | wx.TOP | wx.RIGHT, 8)
+        sizer.Add(wx.StaticText(self, label="&Kind:"), 0, wx.LEFT | wx.TOP, 8)
+        self.kinds = wx.ListBox(self, style=wx.LB_SINGLE)
+        set_accessible_name(self.kinds, "Kind")
+        self.kinds.SetMinSize((-1, 120))
+        sizer.Add(self.kinds, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        sizer.Add(wx.StaticText(self, label="&Items:"), 0, wx.LEFT | wx.TOP, 8)
+        self.items = wx.ListBox(self, style=wx.LB_SINGLE)
+        set_accessible_name(self.items, "Items")
+        self.items.SetMinSize((-1, 140))
+        sizer.Add(self.items, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        row = wx.BoxSizer(wx.HORIZONTAL)
+        row.Add(wx.StaticText(self, label="Locatio&n:"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
+        self.location = wx.TextCtrl(self, style=wx.TE_READONLY)
+        set_accessible_name(self.location, "Location")
+        row.Add(self.location, 1)
+        sizer.Add(row, 0, wx.EXPAND | wx.LEFT | wx.TOP | wx.RIGHT, 8)
+        sizer.Add(wx.StaticText(self, label="C&ontents:"), 0, wx.LEFT | wx.TOP, 8)
+        self.text = _read_only_text(self, "", "Contents", min_height=200)
+        sizer.Add(self.text, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        buttons = wx.BoxSizer(wx.HORIZONTAL)
+        self.edit_btn = wx.Button(self, label="&Edit in Your Editor")
+        self.show_btn = wx.Button(self, label="Show in Fol&der")
+        self.copy_btn = wx.Button(self, label="Copy &Path")
+        self.reload_btn = reload_btn = wx.Button(self, label="&Reload")
+        for button in (self.edit_btn, self.show_btn, self.copy_btn, reload_btn):
+            buttons.Add(button, 0, wx.RIGHT, 6)
+        buttons.Add(wx.Button(self, wx.ID_CANCEL, "C&lose"), 0)
+        sizer.Add(buttons, 0, wx.ALIGN_RIGHT | wx.ALL, 8)
+        self.SetSizer(sizer)
+        self.SetEscapeId(wx.ID_CANCEL)
+        self.kinds.Bind(wx.EVT_LISTBOX, lambda e: self._fill_items())
+        self.kinds.Bind(wx.EVT_KEY_DOWN, self._on_kinds_key)
+        self.items.Bind(wx.EVT_LISTBOX, lambda e: self._show())
+        self.items.Bind(wx.EVT_LISTBOX_DCLICK, lambda e: self.text.SetFocus())
+        self.items.Bind(wx.EVT_KEY_DOWN, self._on_items_key)
+        self.edit_btn.Bind(wx.EVT_BUTTON, lambda e: self.edit_selected())
+        self.show_btn.Bind(wx.EVT_BUTTON, lambda e: self.show_selected())
+        self.copy_btn.Bind(wx.EVT_BUTTON, lambda e: self.copy_selected())
+        reload_btn.Bind(wx.EVT_BUTTON, lambda e: self.reload())
+        self._fill_kinds()
+        wx.CallAfter(self.kinds.SetFocus)
+
+    def reload(self):
+        """Read everything again (in the background), keeping your place
+        where it still exists."""
+        self.reload_btn.Disable()
+        self._load(self._reloaded)
+
+    def _reloaded(self, kinds):
+        if not self:
+            return  # closed while reading
+        self.reload_btn.Enable()
+        self._kinds = list(kinds)
+        self._fill_kinds()
+
+    def _fill_kinds(self):
+        kind_index = max(self.kinds.GetSelection(), 0)
+        selected = self.selected_item()
+        # Each kind says what it is, since focus never reaches a label.
+        self.kinds.Set([f"{k.row()}: {k.about}" for k in self._kinds])
+        if self._kinds:
+            self.kinds.SetSelection(min(kind_index, len(self._kinds) - 1))
+        self._fill_items(keep=selected.path if selected is not None else None)
+
+    def _fill_items(self, keep=None):
+        index = self.kinds.GetSelection()
+        kind = self._kinds[index] if 0 <= index < len(self._kinds) else None
+        self._items = list(kind.items) if kind is not None else []
+        self.items.Set([i.row() for i in self._items] or ["Nothing here yet."])
+        name = kind.name if kind is not None else "Items"
+        set_accessible_name(self.items, f"{name}, {len(self._items)}")
+        paths = [i.path for i in self._items]
+        self.items.SetSelection(paths.index(keep) if keep in paths else 0)
+        self._show()
+
+    def selected_item(self):
+        index = self.items.GetSelection() if self._items else -1
+        return self._items[index] if 0 <= index < len(self._items) else None
+
+    def _show(self):
+        from ..about_you import read_text
+
+        item = self.selected_item()
+        for button in (self.edit_btn, self.show_btn, self.copy_btn):
+            button.Enable(item is not None)
+        if item is None:
+            self.location.ChangeValue("")
+            self.text.ChangeValue("")
+            set_accessible_name(self.text, "Contents")
+            return
+        try:
+            text = read_text(item.path)
+        except OSError as exc:
+            text = f"Couldn't read this file: {exc}"
+        self.location.ChangeValue(str(item.path))
+        self.text.ChangeValue(text)
+        self.text.SetInsertionPoint(0)
+        # Tabbing in says whose file it is.
+        set_accessible_name(self.text, f"Contents of {item.name}")
+
+    def _on_kinds_key(self, event):
+        if event.GetKeyCode() in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER):
+            self.items.SetFocus()  # Enter: into the kind's items
+            return
+        event.Skip()
+
+    def _on_items_key(self, event):
+        if event.GetKeyCode() in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER):
+            self.text.SetFocus()  # Enter: read the file
+            return
+        event.Skip()
+
+    def edit_selected(self):
+        item = self.selected_item()
+        if item is None:
+            return
+        try:
+            self._edit(item.path)
+        except OSError as exc:
+            wx.MessageBox(f"Couldn't open {item.path} in an editor: {exc}",
+                          "What Claude Knows About You", wx.OK | wx.ICON_WARNING, self)
+
+    def show_selected(self):
+        item = self.selected_item()
+        if item is None:
+            return
+        try:
+            self._show_file(item.path)
+        except OSError as exc:
+            wx.MessageBox(f"Couldn't show {item.path}: {exc}",
+                          "What Claude Knows About You", wx.OK | wx.ICON_WARNING, self)
+
+    def copy_selected(self):
+        item = self.selected_item()
+        if item is not None:
+            self._copy(str(item.path))

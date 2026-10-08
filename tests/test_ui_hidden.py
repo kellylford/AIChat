@@ -78,6 +78,11 @@ def env(tmp_path, monkeypatch, app):
     monkeypatch.setattr(dialogs, "formatted_view_available", lambda: False)
     opened = []
     monkeypatch.setattr(platform_paths, "open_url", lambda url: opened.append(url))
+    # Nor real Claude Code files, an editor or Explorer (#92).
+    monkeypatch.setattr(platform_paths, "claude_home", lambda: tmp_path / "claude")
+    monkeypatch.setattr(platform_paths, "edit_file", lambda path: opened.append(("edit", path)))
+    monkeypatch.setattr(platform_paths, "show_in_folder",
+                        lambda path: opened.append(("show", path)))
     boxes = []
     monkeypatch.setattr(wx, "MessageBox", lambda *a, **k: boxes.append(a[0]) or wx.YES)
     # No real Windows notifications (#20): they're recorded. The hidden test
@@ -3789,3 +3794,365 @@ def test_a_hidden_session_is_not_said_counted_or_notified(frame, env, monkeypatc
     again = dataclasses.replace(blocked, state="needs you", detail="Pick a name")
     frame._apply_snapshot(frame._snapshot, [again], {}, False)
     assert env["notified"] == [] and len(env["spoken"]) == spoken
+
+
+# -- rename (#93) ------------------------------------------------------------------------
+
+
+def test_rename_an_own_session_renames_it_in_its_store(frame, env):
+    select(frame, "Hub probe")
+    frame.session_list.SetFocus()
+    frame.rename_session(frame._selected_session(), "  Probe  two ")
+    assert frame.store.get("own-1").title == "Probe two"
+    assert not (env["tmp"] / "appdata" / "titles.json").exists()  # never needed for our own
+    assert any(r.startswith("Probe two") for r in frame.session_list.GetStrings())
+    assert env["feedback"][-1] == "Renamed Hub probe to Probe two."
+    frame.refresh_sessions(force=True)
+    settle(frame)
+    assert any(r.startswith("Probe two") for r in frame.session_list.GetStrings())
+
+
+def test_rename_an_own_session_to_nothing_is_refused(frame, env):
+    select(frame, "Hub probe")
+    frame.rename_session(frame._selected_session(), "   ")
+    assert frame.store.get("own-1").title == "Hub probe"
+    assert "needs a name" in env["feedback"][-1]
+
+
+def test_rename_a_desktop_session_only_here(frame, env):
+    metadata = env["desktop"] / "local_a" / "org" / "local_a.json"
+    before = metadata.read_bytes()
+    select(frame, "Quiet one")
+    frame.rename_session(frame._selected_session(), "Calm one")
+    assert metadata.read_bytes() == before  # the desktop app's file is never written
+    saved = json.loads((env["tmp"] / "appdata" / "titles.json").read_text(encoding="utf-8"))
+    assert saved["titles"] == {"local_a": "Calm one"}
+    assert env["feedback"][-1] == "Renamed Quiet one to Calm one."
+    # It survives the next read of the desktop app's files.
+    frame.refresh_sessions(force=True)
+    settle(frame)
+    rows = list(frame.session_list.GetStrings())
+    assert any(r.startswith("Calm one") for r in rows)
+    assert not any(r.startswith("Quiet one") for r in rows)
+    # Empty goes back to the desktop app's name.
+    select(frame, "Calm one")
+    frame.rename_session(frame._selected_session(), "")
+    assert env["feedback"][-1] == "Calm one goes back to the desktop app's name."
+    settle(frame)
+    frame.refresh_sessions(force=True)
+    settle(frame)
+    assert any(r.startswith("Quiet one") for r in frame.session_list.GetStrings())
+
+
+def test_clearing_a_name_never_given_says_so(frame, env):
+    select(frame, "Quiet one")
+    frame.rename_session(frame._selected_session(), "")
+    assert env["feedback"][-1] == "Quiet one already has the desktop app's name."
+
+
+def test_a_read_begun_before_a_rename_doesnt_bring_the_old_name_back(frame, env):
+    # The list's own refresh copies the store when it starts; one that lands
+    # after the rename must still show the new name.
+    stale = hub.collect(frame.store.all(), set())
+    select(frame, "Hub probe")
+    frame.rename_session(frame._selected_session(), "Probe two")
+    frame._apply_snapshot(stale, [], {}, False)
+    rows = list(frame.session_list.GetStrings())
+    assert any(r.startswith("Probe two") for r in rows)
+    assert not any(r.startswith("Hub probe") for r in rows)
+
+
+def test_rename_the_loaded_session_updates_its_heading(frame, env):
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    assert pump(lambda: frame._open is not None)
+    frame.rename_session(frame._open, "Calm one")
+    assert frame._open.title == "Calm one"
+    assert frame.session_heading.GetLabel().startswith("Calm one,")
+
+
+def test_rename_says_so_when_titles_cant_be_saved(frame, env, monkeypatch):
+    def fail(key, title):
+        raise OSError("disk full")
+    monkeypatch.setattr(frame.titles, "set", fail)
+    select(frame, "Quiet one")
+    frame.rename_session(frame._selected_session(), "Calm one")
+    assert env["boxes"] and "disk full" in env["boxes"][-1]
+    assert any(r.startswith("Quiet one") for r in frame.session_list.GetStrings())
+
+
+def test_rename_asks_for_the_name_with_the_old_one_filled_in(frame, env, monkeypatch):
+    asked = []
+
+    class FakeEntry:
+        def __init__(self, parent, prompt, title, value):
+            asked.append((prompt, title, value))
+
+        def SetMaxLength(self, n):
+            self.max = n
+
+        def ShowModal(self):
+            return wx.ID_OK
+
+        def GetValue(self):
+            return "Calm one"
+
+        def Destroy(self):
+            pass
+    from thechatplace.ui import main_frame
+    monkeypatch.setattr(main_frame.wx, "TextEntryDialog", FakeEntry)
+    select(frame, "Quiet one")
+    frame.session_list.SetFocus()
+    frame.on_rename()
+    prompt, title, value = asked[0]
+    assert title == "Rename Session" and value == "Quiet one"
+    assert "only in The Chat Place" in prompt
+    assert frame.titles.get("local_a") == "Calm one"
+
+
+def test_f2_is_rename_on_the_file_menu(frame):
+    labels = [item.GetItemLabel() for item in frame.GetMenuBar().GetMenu(0).GetMenuItems()]
+    assert "Rename Session...\tF2" in labels
+
+
+# -- the session menu and Shift+F10 (#89) ---------------------------------------------------
+
+
+def _menu_key(code, shift=False, kind=None):
+    event = wx.KeyEvent(kind or wx.wxEVT_CHAR_HOOK)
+    event.SetKeyCode(code)
+    event.SetShiftDown(shift)
+    return event
+
+
+@pytest.mark.parametrize("code,shift", [(wx.WXK_F10, True), (wx.WXK_WINDOWS_MENU, False)])
+def test_menu_keys_open_the_lists_menus_themselves(frame, monkeypatch, code, shift):
+    calls = []
+    monkeypatch.setattr(frame, "_on_session_menu", lambda event=None: calls.append("sessions"))
+    monkeypatch.setattr(frame, "_on_message_menu", lambda event=None: calls.append("messages"))
+    for focus in (frame.session_list, frame.chat_list):
+        monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda f=focus: f))
+        event = _menu_key(code, shift)
+        event.Skip(False)
+        frame._on_char_hook(event)
+        # Not handed on to Windows, which took Shift+F10 as F10 and started the menu bar.
+        assert not event.GetSkipped()
+    assert calls == ["sessions", "messages"]
+
+
+def test_plain_f10_and_ctrl_shift_f10_are_left_alone(frame, monkeypatch):
+    calls = []
+    monkeypatch.setattr(frame, "_on_session_menu", lambda event=None: calls.append("menu"))
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    plain = _menu_key(wx.WXK_F10)  # F10 alone is the menu bar, as ever
+    frame._on_char_hook(plain)
+    assert plain.GetSkipped()
+    event = _menu_key(wx.WXK_F10, shift=True)
+    event.SetControlDown(True)
+    frame._on_char_hook(event)
+    assert calls == []
+
+
+def _labels(menu):
+    return [i.GetItemLabel().split("\t")[0] for i in menu.GetMenuItems() if not i.IsSeparator()]
+
+
+def _enabled(menu, label):
+    return next(i for i in menu.GetMenuItems() if i.GetItemLabel().startswith(label)).IsEnabled()
+
+
+def test_session_menu_for_an_own_and_a_desktop_session(frame, monkeypatch):
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    select(frame, "Hub probe")
+    menu, actions = frame._session_menu()
+    own = _labels(menu)
+    assert "Re&name Session..." in own and "Delete Session &Permanently..." in own
+    assert "Con&tinue Here..." not in own
+    assert not _enabled(menu, "Open in &Claude")  # never opened in the desktop app
+    assert not _enabled(menu, "Remove from Gro&up")  # in no group
+    menu.Destroy()
+    select(frame, "Quiet one")
+    menu, actions = frame._session_menu()
+    desktop = _labels(menu)
+    assert "Con&tinue Here..." in desktop and "Delete Session &Permanently..." not in desktop
+    assert "H&ide Session" in desktop and _enabled(menu, "Open in &Claude")
+    menu.Destroy()
+
+
+def test_session_menu_with_nothing_selected_says_so(frame, env, monkeypatch):
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    frame.session_list.SetSelection(wx.NOT_FOUND)
+    shown = []
+    monkeypatch.setattr(frame.session_list, "GetPopupMenuSelectionFromUser",
+                        lambda menu, position: shown.append(menu) or wx.ID_NONE)
+    frame._on_session_menu()
+    assert shown == [] and env["feedback"][-1] == "No session selected."
+
+
+def test_session_menu_runs_the_choice_on_the_highlighted_session(frame, env, monkeypatch):
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    select(frame, "Quiet one")
+
+    def pick(menu, position):
+        return next(i.GetId() for i in menu.GetMenuItems()
+                    if i.GetItemLabel().startswith("H&ide Session"))
+    monkeypatch.setattr(frame.session_list, "GetPopupMenuSelectionFromUser", pick)
+    frame._on_session_menu()
+    assert "local_a" in frame.hidden
+    # Dismissing the menu does nothing.
+    monkeypatch.setattr(frame.session_list, "GetPopupMenuSelectionFromUser",
+                        lambda menu, position: wx.ID_NONE)
+    frame._on_session_menu()
+    assert frame.hidden.keys() == ["local_a"]
+
+
+class _RightClick:
+    def GetPosition(self):
+        return wx.Point(40, 40)
+
+
+def test_a_right_click_means_the_row_under_the_mouse(frame, env, monkeypatch):
+    # A list box neither selects the row right-clicked nor takes focus: with
+    # Quiet one highlighted and focus in the messages, right-clicking Blocked
+    # one must hide Blocked one.
+    select(frame, "Quiet one")
+    target = next(i for i in range(frame.session_list.GetCount())
+                  if frame.session_list.GetString(i).startswith("Blocked one"))
+    monkeypatch.setattr(frame.session_list, "HitTest", lambda point: target)
+    focus = {"on": frame.chat_list}
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: focus["on"]))
+    monkeypatch.setattr(frame.session_list, "SetFocus",
+                        lambda: focus.update(on=frame.session_list))
+
+    def pick(menu, position):
+        return next(i.GetId() for i in menu.GetMenuItems()
+                    if i.GetItemLabel().startswith("H&ide Session"))
+    monkeypatch.setattr(frame.session_list, "GetPopupMenuSelectionFromUser", pick)
+    frame._on_session_menu(_RightClick())
+    assert "local_b" in frame.hidden and "local_a" not in frame.hidden
+
+
+def test_a_right_click_below_the_rows_does_nothing(frame, env, monkeypatch):
+    monkeypatch.setattr(frame.session_list, "HitTest", lambda point: wx.NOT_FOUND)
+    shown = []
+    monkeypatch.setattr(frame.session_list, "GetPopupMenuSelectionFromUser",
+                        lambda menu, position: shown.append(menu) or wx.ID_NONE)
+    frame._on_session_menu(_RightClick())
+    assert shown == []
+
+
+# -- what Claude knows about you (#92) ------------------------------------------------------
+
+
+def _about_you_home(env):
+    home = env["tmp"] / "claude"
+    (home / "agents").mkdir(parents=True)
+    (home / "CLAUDE.md").write_text("# Be brief\n", encoding="utf-8")
+    (home / "agents" / "reviewer.md").write_text(
+        "---\nname: code-reviewer\ndescription: Reviews code\n---\nBody text\n",
+        encoding="utf-8")
+    return home
+
+
+def _dialog(frame, env, home, edit=None, show=None):
+    from thechatplace import about_you
+    from thechatplace.ui.dialogs import AboutYouDialog
+
+    def collect():
+        return about_you.collect([], home=home, user_home="")
+    return AboutYouDialog(frame, collect(), lambda done: done(collect()),
+                          edit or platform_paths.edit_file,
+                          show or platform_paths.show_in_folder, env["copied"].append)
+
+
+def test_about_you_dialog_lists_kinds_items_and_reads_a_file(frame, env):
+    home = _about_you_home(env)
+    dialog = _dialog(frame, env, home)
+    try:
+        # Each kind says what it is: focus never reaches a label.
+        assert dialog.kinds.GetString(0).startswith("Instructions, 1 item: What you've told")
+        assert dialog.items.GetString(0).startswith("Your instructions for every session")
+        assert dialog.text.GetValue() == "# Be brief\n"
+        assert dialog.location.GetValue() == str(home / "CLAUDE.md")
+        dialog.kinds.SetSelection(3)  # Subagents
+        dialog._fill_items()
+        assert dialog.items.GetString(0) == "code-reviewer — Reviews code"
+        assert "Body text" in dialog.text.GetValue()
+        dialog.edit_selected()
+        dialog.show_selected()
+        dialog.copy_selected()
+        path = home / "agents" / "reviewer.md"
+        assert env["opened"][-2:] == [("edit", path), ("show", path)]
+        assert env["copied"][-1] == str(path)
+        # Reload keeps your place and shows the change.
+        path.write_text("---\nname: code-reviewer\ndescription: Changed\n---\n",
+                        encoding="utf-8")
+        dialog.reload()
+        assert dialog.kinds.GetSelection() == 3 and dialog.reload_btn.IsEnabled()
+        assert dialog.items.GetString(0) == "code-reviewer — Changed"
+        # An empty kind says so and has nothing to edit.
+        dialog.kinds.SetSelection(1)
+        dialog._fill_items()
+        assert dialog.items.GetString(0) == "Nothing here yet."
+        assert not dialog.edit_btn.IsEnabled() and dialog.selected_item() is None
+    finally:
+        dialog.Destroy()
+
+
+def test_about_you_dialog_says_why_a_file_cant_be_opened(frame, env):
+    home = _about_you_home(env)
+
+    def fail(path):
+        raise OSError("no editor")
+    dialog = _dialog(frame, env, home, edit=fail, show=fail)
+    try:
+        dialog.edit_selected()
+        dialog.show_selected()
+        assert len(env["boxes"]) == 2 and "no editor" in env["boxes"][0]
+        (home / "CLAUDE.md").unlink()
+        dialog._show()
+        assert dialog.text.GetValue().startswith("Couldn't read this file")
+    finally:
+        dialog.Destroy()
+
+
+def test_about_you_reads_in_the_background_with_the_sessions_folders(frame, env, monkeypatch):
+    import threading
+    from thechatplace import about_you
+    from thechatplace.ui import main_frame
+    _about_you_home(env)
+    seen = {}
+    real = about_you.collect
+
+    def collect(cwds):
+        seen["cwds"] = list(cwds)
+        seen["thread"] = threading.current_thread()
+        return real(cwds)
+    monkeypatch.setattr(main_frame.about_you, "collect", collect)
+    shown = []
+
+    def modal(self, dialog):
+        shown.append(dialog.kinds.GetString(0))
+        dialog.reload()  # Reload reads again, also in the background
+        assert pump(lambda: dialog.reload_btn.IsEnabled())
+        dialog.Destroy()
+    monkeypatch.setattr(main_frame.MainFrame, "_modal", modal)
+    frame.on_about_you()
+    assert env["feedback"][-1] == "Reading what Claude knows about you…"
+    assert pump(lambda: shown)
+    assert seen["thread"] is not threading.main_thread()
+    assert seen["cwds"] == ["C:\\G\\Repo", "C:\\G\\Scratch"]
+    assert shown[0].startswith("Instructions, 1 item")
+    assert env["feedback"][-1].startswith("Reloaded. Found: Instructions 1")
+    labels = [i.GetItemLabel() for i in frame.GetMenuBar().GetMenu(1).GetMenuItems()]
+    assert "What Claude &Knows About You...\tCtrl+Shift+K" in labels
+
+
+def test_about_you_says_so_when_reading_fails(frame, env, monkeypatch):
+    from thechatplace.ui import main_frame
+
+    def broken(cwds):
+        raise RuntimeError("bad disk")
+    monkeypatch.setattr(main_frame.about_you, "collect", broken)
+    frame.on_about_you()
+    assert pump(lambda: "bad disk" in env["feedback"][-1])
