@@ -526,6 +526,48 @@ def bring_window_forward(title_matches) -> bool:
     return bool(user32.SetForegroundWindow(hwnd))
 
 
+def bring_last_popup_forward(hwnd: int) -> bool:
+    """Bring forward ``hwnd``'s open dialog: the frontmost visible, enabled
+    window it owns, directly or through another dialog, so the innermost of
+    nested dialogs, native message and file dialogs included (#103). For a
+    main window that was activated while disabled behind a dialog. Windows
+    only; False elsewhere, or if there is none.
+
+    Not GetLastActivePopup: activating the main window makes it its own last
+    active popup, so that answered with the main window (seen in the VM)."""
+    if sys.platform != "win32" or not hwnd:
+        return False
+    import ctypes
+    from ctypes import wintypes
+
+    user32 = ctypes.windll.user32
+    user32.GetWindow.restype = wintypes.HWND
+    user32.GetWindow.argtypes = (wintypes.HWND, wintypes.UINT)
+    gw_owner = 4
+    found = []
+
+    def owned_by_main(window) -> bool:
+        for _ in range(8):  # a dialog over a dialog over the main window
+            window = user32.GetWindow(window, gw_owner)
+            if not window:
+                return False
+            if window == hwnd:
+                return True
+        return False
+
+    @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    def callback(window, _lparam):
+        # EnumWindows goes front to back, so the first match is the front one.
+        if (window != hwnd and user32.IsWindowVisible(window)
+                and user32.IsWindowEnabled(window) and owned_by_main(window)):
+            found.append(window)
+            return False
+        return True
+
+    user32.EnumWindows(callback, 0)
+    return bool(found) and bool(user32.SetForegroundWindow(found[0]))
+
+
 def hidden_window_flags() -> int:
     """creationflags that keep a console window from flashing up on Windows."""
     if sys.platform == "win32":

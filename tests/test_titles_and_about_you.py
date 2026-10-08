@@ -244,3 +244,11 @@ def test_edit_file_tries_edit_then_open_then_notepad(monkeypatch):
     monkeypatch.setattr(sys, "platform", "darwin")
     platform_paths.edit_file("/Users/p/CLAUDE.md")
     assert started == [["open", "-t", "/Users/p/CLAUDE.md"]]
+
+
+def test_bring_last_popup_forward_is_windows_only(monkeypatch):
+    import sys
+    monkeypatch.setattr(sys, "platform", "darwin")
+    assert platform_paths.bring_last_popup_forward(1234) is False
+    monkeypatch.setattr(sys, "platform", "win32")
+    assert platform_paths.bring_last_popup_forward(0) is False
