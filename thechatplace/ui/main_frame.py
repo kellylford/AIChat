@@ -127,6 +127,10 @@ class MainFrame(wx.Frame):
         self._runners: Dict[str, TurnRunner] = {}
         self._denials: Dict[str, List[str]] = {}
         self._pending_refresh: Optional[bool] = None
+        # Set once the window is closing (_on_close). Its destruction waits
+        # for idle time, so a menu VO+Shift+M scheduled just before Cmd+Q
+        # would otherwise still open, on a hidden window that has stopped.
+        self._closing = False
         self._claude_version = ""  # for bug reports; found in the background
         # Slash commands and skills per folder (#23), fetched in the background.
         self._commands: Dict[str, List[dict]] = {}  # by _folder_key
@@ -1592,9 +1596,20 @@ class MainFrame(wx.Frame):
         return wx.Point(8, 8)
 
     def _on_message_menu(self, event=None):
-        # As the session list does: VO+Shift+M can open the menu from the
-        # VoiceOver cursor while keyboard focus is elsewhere, and afterwards
-        # focus should be on the message the menu was for.
+        """Right-click, the Applications key, Shift+F10 or VO+Shift+M in the
+        messages list. As in the session list (_on_session_menu), the menu
+        is for the row clicked, and focus goes to the list: VO+Shift+M can
+        open it from the VoiceOver cursor while focus is elsewhere."""
+        if self._closing:
+            return
+        position = event.GetPosition() if event is not None else wx.DefaultPosition
+        if position != wx.DefaultPosition:
+            # A list box doesn't select the row right-clicked, so the menu
+            # meant the old highlight while the mouse was on another message.
+            row = self.chat_list.HitTest(self.chat_list.ScreenToClient(position))
+            if row == wx.NOT_FOUND:
+                return
+            self.chat_list.SetSelection(row)
         self.chat_list.SetFocus()
         menu = self._message_menu()
         try:
@@ -1640,6 +1655,8 @@ class MainFrame(wx.Frame):
         The choice runs once the menu has closed and focus is back on the
         list, so the command means the highlighted session, not the loaded
         one (see _selected_session)."""
+        if self._closing:
+            return
         position = event.GetPosition() if event is not None else wx.DefaultPosition
         if position != wx.DefaultPosition:
             # A right-click: a list box neither selects the row clicked nor
@@ -3861,6 +3878,7 @@ class MainFrame(wx.Frame):
             if answer != wx.YES:
                 event.Veto()
                 return
+        self._closing = True
         for runner in list(self._runners.values()):
             runner.cancel()
         self._clear_activity()

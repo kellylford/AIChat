@@ -99,7 +99,13 @@ def set_voiceover_menu(listbox: wx.ListBox, open_menu) -> None:
     doesn't connect to EVT_CONTEXT_MENU on a Mac. ``open_menu()`` is called
     as for the Applications key, with no event, and after VoiceOver's request
     has been answered (see ``mac_a11y.set_show_menu``). Nothing elsewhere."""
-    if not mac_a11y.set_show_menu(listbox, lambda: wx.CallAfter(open_menu)):
+    def open_if_alive():
+        # The window can close between VO+Shift+M and this call, and a menu
+        # for a deleted list would end in a RuntimeError.
+        if listbox:
+            open_menu()
+
+    if not mac_a11y.set_show_menu(listbox, lambda: wx.CallAfter(open_if_alive)):
         return
 
     def forget(event):
