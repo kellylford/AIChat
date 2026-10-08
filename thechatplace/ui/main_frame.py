@@ -1581,6 +1581,10 @@ class MainFrame(wx.Frame):
         return wx.Point(8, 8)
 
     def _on_message_menu(self, event=None):
+        # As the session list does: VO+Shift+M can open the menu from the
+        # VoiceOver cursor while keyboard focus is elsewhere, and afterwards
+        # focus should be on the message the menu was for.
+        self.chat_list.SetFocus()
         menu = self._message_menu()
         try:
             self.chat_list.PopupMenu(menu, self._message_menu_position(event))

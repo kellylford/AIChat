@@ -3880,6 +3880,28 @@ def test_voiceover_opens_the_lists_context_menus(frame, env, monkeypatch):
 
 
 @voiceover
+def test_voiceover_menu_by_the_newer_call_and_only_for_live_lists(frame, monkeypatch):
+    import ctypes
+    from thechatplace.ui import mac_a11y
+    popped = []
+    monkeypatch.setattr(frame.chat_list, "PopupMenu",
+                        lambda menu, position: popped.append(menu) or True)
+    view = mac_a11y._target_view(frame.chat_list)
+    assert mac_a11y._send(view, "accessibilityPerformShowMenu", restype=ctypes.c_bool)
+    assert pump(lambda: popped)
+    # Another list box is left as it was, and a destroyed one is forgotten,
+    # so a new view at its address doesn't open the old list's menu.
+    other = wx.ListBox(frame, choices=["one"])
+    assert "AXShowMenu" not in _voiceover_actions(other)
+    from thechatplace.ui.a11y import set_voiceover_menu
+    set_voiceover_menu(other, lambda: None)
+    address = mac_a11y._target_view(other).value
+    assert address in mac_a11y._menu_handlers
+    other.Destroy()
+    assert address not in mac_a11y._menu_handlers
+
+
+@voiceover
 def test_voiceover_reads_dialog_labels(frame):
     from thechatplace.ui.dialogs import (BugReportDialog, ChangesDialog, CommandPickerDialog,
                                          NewSessionDialog, SettingsDialog)
