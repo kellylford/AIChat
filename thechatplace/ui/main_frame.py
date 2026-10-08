@@ -183,6 +183,7 @@ class MainFrame(wx.Frame):
         self._status("Loading sessions…")
         self.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
         self.Bind(wx.EVT_CLOSE, self._on_close)
+        self.Bind(wx.EVT_ACTIVATE, self._on_activate)
 
         self._list_timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, lambda e: self.refresh_sessions(), self._list_timer)
@@ -1871,6 +1872,40 @@ class MainFrame(wx.Frame):
         dialogs (the frame alone says no while a dialog has the focus)."""
         return wx.GetActiveWindow() is not None
 
+    @staticmethod
+    def _open_modal() -> Optional[wx.Dialog]:
+        """The modal wx dialog in front now (Code Blocks, Settings, a
+        question from Claude…), or None. With one dialog over another, the
+        inner one: the outer is still modal but disabled under it. Native
+        message and file dialogs aren't wx windows and never show here."""
+        modals = [w for w in wx.GetTopLevelWindows()
+                  if isinstance(w, wx.Dialog) and w.IsModal()]
+        return next((w for w in reversed(modals) if w.IsEnabled()), None)
+
+    def _on_activate(self, event: wx.ActivateEvent):
+        """Coming back to The Chat Place with a dialog open (#103): if
+        Windows activated the main window, which is disabled behind the
+        dialog, every key went nowhere and the app seemed hung. The dialog
+        is brought forward instead, with focus where you left it."""
+        event.Skip()
+        if event.GetActive():
+            # A timer, not CallAfter: a native message box runs Windows' own
+            # loop, which never runs wx's pending calls but does deliver timers.
+            wx.CallLater(1, self._raise_open_modal)
+
+    def _raise_open_modal(self):
+        # Only when the main window itself is active and disabled, which is
+        # only ever the case behind a dialog: if the dialog came forward
+        # properly, or you've switched away again, there is nothing to do.
+        if not self or self.IsEnabled() or wx.GetActiveWindow() is not self:
+            return
+        # Windows knows the innermost dialog, native ones included.
+        if platform_paths.bring_last_popup_forward(self.GetHandle()):
+            return
+        modal = self._open_modal()
+        if modal is not None:
+            modal.Raise()  # activating it gives focus back to its last control
+
     def _go_to_session(self, key: Optional[str]):
         """A notification was chosen: The Chat Place comes forward with that
         session loaded. With one of its dialogs open, the dialog comes
@@ -1880,8 +1915,7 @@ class MainFrame(wx.Frame):
         if self.IsIconized():
             self.Iconize(False)
         self.Show()
-        modal = next((w for w in wx.GetTopLevelWindows()
-                      if isinstance(w, wx.Dialog) and w.IsModal()), None)
+        modal = self._open_modal()
         (modal or self).Raise()
         mac_a11y.activate_app()  # Raise alone leaves a Mac's menu bar with the last app
         if not self._app_is_active():

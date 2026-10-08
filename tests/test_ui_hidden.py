@@ -3185,6 +3185,9 @@ def test_choosing_a_notification_with_a_dialog_open_leaves_the_session(frame, en
         def IsModal(self):
             return True
 
+        def IsEnabled(self):
+            return True
+
         def Raise(self):
             Modal.raised = True
     monkeypatch.setattr(wx, "GetTopLevelWindows", lambda: [frame, Modal()])
@@ -4339,3 +4342,106 @@ def test_ctrl_shift_b_opens_code_blocks_from_the_messages(frame, monkeypatch):
     labels = [i.GetItemLabel() for i in menu.GetMenuItems()]
     menu.Destroy()
     assert "Code &Blocks...\tCtrl+Shift+B" in labels
+
+
+# -- coming back with a dialog open (#103) ---------------------------------------------------
+
+
+class _FakeModal(wx.Dialog):
+    raised = 0
+    enabled = True
+
+    def IsModal(self):
+        return True
+
+    def IsEnabled(self):
+        return self.enabled
+
+    def Raise(self):
+        self.raised += 1
+
+
+def _activate(frame, monkeypatch, active=True):
+    """Through the frame's own event handling, so a lost Bind fails the test.
+    The fix runs from a timer, which a hidden test window never fires, so the
+    timer runs at once here; the real one is checked by hand (#103)."""
+    from thechatplace.ui import main_frame
+    timers = []
+    monkeypatch.setattr(main_frame.wx, "CallLater",
+                        lambda ms, fn, *a: timers.append(ms) or fn(*a))
+    event = wx.ActivateEvent(wx.wxEVT_ACTIVATE, active)
+    event.SetEventObject(frame)
+    frame.GetEventHandler().ProcessEvent(event)
+    return timers
+
+
+@pytest.fixture
+def behind_a_dialog(frame, monkeypatch):
+    """The main window active but disabled, as it is behind a modal dialog."""
+    monkeypatch.setattr(wx, "GetActiveWindow", lambda: frame)
+    monkeypatch.setattr(frame, "IsEnabled", lambda: False)
+    popups = []
+    monkeypatch.setattr(platform_paths, "bring_last_popup_forward",
+                        lambda hwnd: popups.append(hwnd) and False)
+    return popups
+
+
+def test_coming_back_to_the_main_window_brings_its_dialog_forward(frame, behind_a_dialog,
+                                                                 monkeypatch):
+    dialog = _FakeModal(frame)
+    try:
+        # A timer, which a native message box's loop still runs; CallAfter wouldn't.
+        assert _activate(frame, monkeypatch) == [1]
+        assert behind_a_dialog == [frame.GetHandle()]  # Windows asked first
+        assert dialog.raised == 1  # and wx's own dialog when Windows had none
+        _activate(frame, monkeypatch, active=False)  # leaving: nothing to do
+        assert dialog.raised == 1
+    finally:
+        dialog.Destroy()
+
+
+def test_with_a_dialog_over_a_dialog_the_inner_one_comes_forward(frame, behind_a_dialog,
+                                                                 monkeypatch):
+    outer, inner = _FakeModal(frame), _FakeModal(frame)
+    outer.enabled = False  # disabled under the inner one
+    try:
+        _activate(frame, monkeypatch)
+        assert (outer.raised, inner.raised) == (0, 1)
+    finally:
+        inner.Destroy()
+        outer.Destroy()
+
+
+def test_when_windows_finds_the_popup_wx_isnt_asked(frame, behind_a_dialog, monkeypatch):
+    monkeypatch.setattr(platform_paths, "bring_last_popup_forward", lambda hwnd: True)
+    dialog = _FakeModal(frame)
+    try:
+        _activate(frame, monkeypatch)
+        assert dialog.raised == 0  # a native message box, say, came forward
+    finally:
+        dialog.Destroy()
+
+
+def test_nothing_happens_unless_the_disabled_main_window_is_active(frame, monkeypatch):
+    calls = []
+    monkeypatch.setattr(platform_paths, "bring_last_popup_forward",
+                        lambda hwnd: calls.append(hwnd) or True)
+    dialog = _FakeModal(frame)
+    try:
+        # The dialog came forward properly (or you switched away again).
+        monkeypatch.setattr(wx, "GetActiveWindow", lambda: dialog)
+        monkeypatch.setattr(frame, "IsEnabled", lambda: False)
+        _activate(frame, monkeypatch)
+        # No dialog at all: the main window is enabled; wx restores its focus.
+        monkeypatch.setattr(wx, "GetActiveWindow", lambda: frame)
+        monkeypatch.setattr(frame, "IsEnabled", lambda: True)
+        _activate(frame, monkeypatch)
+        assert calls == [] and dialog.raised == 0
+    finally:
+        dialog.Destroy()
+
+
+def test_activation_is_still_skipped_for_wx(frame):
+    event = wx.ActivateEvent(wx.wxEVT_ACTIVATE, True)
+    frame._on_activate(event)
+    assert event.GetSkipped()  # wx still restores the last focus itself
