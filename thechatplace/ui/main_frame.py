@@ -3606,6 +3606,14 @@ class MainFrame(wx.Frame):
             if not ctrl and focus is self.chat_list:
                 self.on_read_message()
                 return
+            if (wx.Platform == "__WXMAC__" and isinstance(focus, wx.Button)
+                    and not event.HasAnyModifiers()):
+                # A Mac presses a focused button only with Space; Return did
+                # nothing on Send and the rest. Windows presses it itself.
+                click = wx.CommandEvent(wx.wxEVT_BUTTON, focus.GetId())
+                click.SetEventObject(focus)
+                focus.GetEventHandler().ProcessEvent(click)
+                return
         if (key == wx.WXK_INSERT and event.ShiftDown() and not ctrl
                 and focus is self.reply_text):
             # Shift+Insert pastes like Ctrl+V, so a picture is attached
