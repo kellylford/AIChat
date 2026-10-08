@@ -393,6 +393,29 @@ def test_enter_on_a_message_opens_its_full_text_and_returns_to_it(frame, env, mo
     assert frame.chat_list.GetSelection() == 1  # same message
 
 
+def test_return_on_a_focused_button_presses_it_on_a_mac(frame, monkeypatch):
+    # On a Mac, Return on Send did nothing; only Space pressed it.
+    monkeypatch.setattr(wx, "Platform", "__WXMAC__")
+    pressed = []
+    for button in (frame.send_btn, frame.attach_btn):
+        button.Bind(wx.EVT_BUTTON, lambda e, b=button: pressed.append(b))
+
+    def press(focus, key=wx.WXK_RETURN, shift=False):
+        monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: focus))
+        event = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
+        event.SetKeyCode(key)
+        event.SetShiftDown(shift)
+        frame._on_char_hook(event)
+        return event.GetSkipped()
+
+    assert not press(frame.send_btn) and pressed == [frame.send_btn]
+    assert not press(frame.attach_btn, wx.WXK_NUMPAD_ENTER) and pressed[-1] is frame.attach_btn
+    assert press(frame.send_btn, shift=True) and len(pressed) == 2  # modified: left alone
+    monkeypatch.setattr(wx, "Platform", "__WXMSW__")
+    press(frame.send_btn)
+    assert len(pressed) == 2  # Windows presses the button itself
+
+
 def test_message_dialog_is_a_labelled_read_only_rich_edit(frame):
     from thechatplace.ui.dialogs import MessageDialog
     dialog = MessageDialog(frame, "Claude", "Line one\nLine two")
