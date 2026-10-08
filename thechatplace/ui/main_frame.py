@@ -73,7 +73,7 @@ from ..transcript import (ASSISTANT, ERROR, PLAN, QUESTION, QUEUED, TOOL, ChatMe
                           TranscriptReader)
 from ..updater import AVAILABLE, FAILED, CheckResult, UpdateService
 from . import mac_a11y
-from .a11y import set_accessible_name, set_list_items_accessible
+from .a11y import set_accessible_name, set_list_items_accessible, set_voiceover_menu
 from .notify import Notifier
 from .statusbar import StatusParts
 from ..rendering import html_page, message_page
@@ -331,6 +331,7 @@ class MainFrame(wx.Frame):
         left.Add(self.session_list, 1, wx.EXPAND | wx.ALL, 8)
         self.session_list.Bind(wx.EVT_LISTBOX_DCLICK, self.on_open_session)
         self.session_list.Bind(wx.EVT_CONTEXT_MENU, self._on_session_menu)
+        set_voiceover_menu(self.session_list, self._on_session_menu)
         outer.Add(left, 2, wx.EXPAND)
 
         vsizer = wx.BoxSizer(wx.VERTICAL)
@@ -348,6 +349,7 @@ class MainFrame(wx.Frame):
         self._spoken: Dict[str, tuple] = {}  # message key -> (text, spoken words)
         vsizer.Add(self.chat_list, 2, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
         self.chat_list.Bind(wx.EVT_CONTEXT_MENU, self._on_message_menu)
+        set_voiceover_menu(self.chat_list, self._on_message_menu)
         self.chat_list.Bind(wx.EVT_LISTBOX_DCLICK, lambda e: self.on_read_message())
 
         # Where the reply goes: one panel for The Chat Place's sessions, one for
