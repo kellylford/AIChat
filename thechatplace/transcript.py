@@ -24,11 +24,18 @@ What the chat shows, and why:
   summaries and harness events (``<task-notification>`` and friends) are
   "activity": hidden unless the reader turns on Show Tool Activity.
 * Sidechain (subagent) records are left out; they live in their own files.
+* Messages from other Claude sessions (``SendMessage``), on this computer or
+  another one through Remote Control, are shown as from that session (#123),
+  not as something you typed. One that arrives while Claude is working is an
+  ``attachment`` record (``queued_command`` with ``origin.kind == "peer"``);
+  one that starts a turn is a user message wrapped in
+  ``<cross-session-message from="..." from-name="...">``.
 
 No wx imports: everything here is testable on its own.
 """
 from __future__ import annotations
 
+import html
 import json
 import re
 from dataclasses import dataclass, field
@@ -47,6 +54,8 @@ PLAN = "plan"
 ERROR = "error"
 INTERRUPTED = "interrupted"
 TOOL = "tool"
+#: A message from another Claude session (#123). ``ChatMessage.sender`` names it.
+PEER = "peer"
 #: Not from the transcript: a message of yours waiting for the turn to end
 #: (#50), shown at the end of the messages list.
 QUEUED = "queued"
@@ -64,6 +73,7 @@ LABELS = {
     ERROR: "Error",
     INTERRUPTED: "Interrupted",
     TOOL: "Tool",
+    PEER: "From another session",
     QUEUED: "Queued",
     TOOL_RESULT: "Tool result",
     CONTEXT: "Context",
@@ -80,9 +90,13 @@ class ChatMessage:
     text: str
     timestamp: str = ""
     key: str = ""  # stable identity (record uuid, or message id for merged replies)
+    #: For PEER messages: the session it came from, as that session named itself.
+    sender: str = ""
 
     @property
     def label(self) -> str:
+        if self.kind == PEER and self.sender:
+            return f"From {self.sender}"
         return LABELS.get(self.kind, self.kind.capitalize())
 
     @property
@@ -145,6 +159,9 @@ _HARNESS_TAG = re.compile(r"^\s*<([A-Za-z][A-Za-z0-9_-]*)>")
 _SYSTEM_REMINDER = re.compile(r"<system-reminder>.*?</system-reminder>", re.DOTALL)
 _ANY_TAG = re.compile(r"</?[A-Za-z][A-Za-z0-9_-]*>")
 _INTERRUPT = re.compile(r"^\[Request interrupted by user[^\]]*\]", re.IGNORECASE)
+_CROSS_SESSION = re.compile(r"^\s*<cross-session-message\b([^>]*)>(.*?)(?:</cross-session-message>\s*)?$",
+                            re.DOTALL)
+_ATTRIBUTE = re.compile(r'([A-Za-z][A-Za-z0-9_-]*)="([^"]*)"')
 
 # Tool input fields worth naming in a one-line activity summary, in order.
 _TOOL_SUMMARY_FIELDS = ("description", "command", "file_path", "path", "pattern",
@@ -208,8 +225,10 @@ class TranscriptParser:
             trigger = meta.get("trigger") if isinstance(meta, dict) else ""
             how = {"manual": " (you asked)", "auto": " (the context was full)"}.get(trigger, "")
             return [self._add(EVENT, f"Conversation compacted{how}.", record)]
+        if kind == "attachment":
+            return self._attachment(record)
         if kind not in ("user", "assistant"):
-            return []  # attachment, custom-title, pr-link, ...: not conversation
+            return []  # custom-title, pr-link, ...: not conversation
         message = record.get("message")
         if not isinstance(message, dict):
             raise _Unreadable()
@@ -274,7 +293,52 @@ class TranscriptParser:
             added.extend(self._user_text("\n".join(texts), record))
         return added
 
+    def _attachment(self, record: dict) -> List[ChatMessage]:
+        """Only one kind of attachment is conversation: a message from another
+        session that arrived while Claude was working (#123)."""
+        attachment = record.get("attachment")
+        if not isinstance(attachment, dict) or attachment.get("type") != "queued_command":
+            return []
+        origin = attachment.get("origin")
+        if not isinstance(origin, dict) or origin.get("kind") != "peer":
+            return []
+        # A subagent's report coming back to its session has the same shape
+        # (origin.handback, senderTaskId, an <agent-message> prompt). That's
+        # Claude's own helper, not another session: leave it out.
+        prompt = str(attachment.get("prompt") or "")
+        if (origin.get("handback") or origin.get("senderTaskId")
+                or attachment.get("senderTaskId")
+                or prompt.lstrip().startswith("<agent-message")):
+            return []
+        parsed = _cross_session(prompt)
+        body = origin.get("body")
+        if not isinstance(body, str) or not body.strip():
+            if parsed is None:
+                return []
+            body = parsed[1]
+        # The session's own name. An address ("bridge:session_...", a pipe)
+        # is noise to listen to, so without a name it's "another session".
+        sender = str(origin.get("name") or (parsed[0] if parsed else "") or "")
+        key = str(attachment.get("delivery_id") or record.get("uuid") or "")
+        return self._peer(sender, body, record, key)
+
+    def _peer(self, sender: str, body: str, record: dict, key: str = "") -> List[ChatMessage]:
+        body = _SYSTEM_REMINDER.sub("", body).strip()
+        if not body:
+            return []
+        item = self._add(PEER, body, record, key=key)
+        item.sender = " ".join(sender.split()) or "another session"
+        return [item]
+
     def _user_text(self, text: str, record: dict) -> List[ChatMessage]:
+        peer = _cross_session(text)
+        if peer is not None:
+            # Another session's message started this turn. It counts as a
+            # turn, so the files Claude changes for it are listed with it.
+            added = self._peer(peer[0], peer[1], record)
+            if added:
+                self.transcript.turns += 1
+            return added
         tag = _HARNESS_TAG.match(text)
         if tag:
             # <task-notification>, <ci-monitor-event>, <command-name>, ...:
@@ -374,6 +438,27 @@ class TranscriptParser:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _cross_session(text: str) -> Optional[Tuple[str, str]]:
+    """``(sender, body)`` from a ``<cross-session-message ...>`` wrapper, or None.
+
+    The sender is ``from-name`` (``name`` in older versions), or "" when the
+    message doesn't name it. ``encoded="1"`` means the body is HTML-escaped.
+    Claude Code always writes a ``from`` address, so text you typed that merely
+    starts with the tag isn't taken for a message from another session.
+    """
+    match = _CROSS_SESSION.match(text)
+    if not match:
+        return None
+    attributes = {k: html.unescape(v) for k, v in _ATTRIBUTE.findall(match.group(1))}
+    if not attributes.get("from"):
+        return None
+    sender = attributes.get("from-name") or attributes.get("name") or ""
+    body = match.group(2)
+    if attributes.get("encoded") == "1":
+        body = html.unescape(body)
+    return sender, body.strip()
 
 
 def _plain_text(content) -> str:
