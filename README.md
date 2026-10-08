@@ -114,33 +114,29 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   restart, until its next turn starts.
 - **Messages:** newest last, with focus on the newest. Each row shows "You:" or "Claude:" and its
   first line, but your screen reader reads the **whole message** as you arrow onto it, as words
-  (headings and list items as sentences, and each code block as what it is: "Code block,
-  Python, 14 lines"). Settings, Reading
-  messages turns that off, to hear just the first line. The list's name says the session's state
-  and whether it's read-only. **Enter**
-  (or the context menu's Read Full Message, with the Applications key or Shift+F10) shows the
-  whole message as a formatted page, so your screen reader's browse mode moves by heading (H),
-  table (T, then its cell commands), list (L) and code block (each is a region: R in JAWS, D in
-  NVDA, named like
-  "Code block, Python, 14 lines"). Links open in your browser. **Read as Plain Text** (Alt+P)
-  switches to a read-only text box, to read by line, word and character, and Settings can make
-  that the default. Escape closes either, back on the same message. The page needs Microsoft's
-  Edge WebView2 runtime, which comes with Windows 11; without it, the text box opens. Nothing in
-  the page is fetched from the internet, and HTML in a message is shown as text, never run.
-  **Code Blocks** (**Ctrl+Shift+B**, or on the context menu) lists the message's code blocks by
-  language and size, with the selected one's code in a box to read by line (Enter on a block
-  goes there) and a Copy button for just that block;
-  **Ctrl+Shift+C** copies the message's last code block straight away.
-  Question cards read as "Claude asked: Which version?" with the
-  options in the full text, then "You answered: ...". Refused tools read "Permission denied:
-  ...". Tool calls and tool results are hidden unless you turn on Show Tool Activity (Ctrl+T).
-  With it on, the open session's tool calls are also **spoken as they happen**, so a long turn
-  isn't silent: "Using Bash: git status; Read: main.py." In The Chat Place's own sessions, what
-  Claude writes between tool calls ("Let me check the build.") is spoken too. A run of calls is
-  gathered for a moment and said together, counted when there are many ("Using Read 4 times,
-  then Bash."), and never cuts off your screen reader. At the summary level tools are always
-  counted; at silent only the status bar shows them. Tool results aren't spoken.
-  New messages arrive at the end without moving you.
+  (headings and list items as sentences, and each code block as what it is: "Code block, Python, 14
+  lines"). Settings, Reading messages turns that off, to hear just the first line. The list's name
+  says the session's state and whether it's read-only. **Enter** (or the context menu's Read Full
+  Message, with the Applications key, Shift+F10, VO+Shift+M or a right-click) shows the whole
+  message as a formatted page, so your screen reader's browse mode moves by heading (H), table (T,
+  then its cell commands), list (L) and code block (each is a region: R in JAWS, D in NVDA, named
+  like "Code block, Python, 14 lines"). Links open in your browser. **Read as Plain Text** (Alt+P)
+  switches to a read-only text box, to read by line, word and character, and Settings can make that
+  the default. Escape closes either, back on the same message. The page needs Microsoft's Edge
+  WebView2 runtime, which comes with Windows 11; without it, the text box opens. Nothing in the
+  page is fetched from the internet, and HTML in a message is shown as text, never run. **Code
+  Blocks** (**Ctrl+Shift+B**, or on the context menu) lists the message's code blocks by language
+  and size, with the selected one's code in a box to read by line (Enter on a block goes there) and
+  a Copy button for just that block; **Ctrl+Shift+C** copies the message's last code block straight
+  away. Question cards read as "Claude asked: Which version?" with the options in the full text,
+  then "You answered: ...". Refused tools read "Permission denied: ...". Tool calls and tool
+  results are hidden unless you turn on Show Tool Activity (Ctrl+T). With it on, the open session's
+  tool calls are also **spoken as they happen**, so a long turn isn't silent: "Using Bash: git
+  status; Read: main.py." In The Chat Place's own sessions, what Claude writes between tool calls
+  ("Let me check the build.") is spoken too. A run of calls is gathered for a moment and said
+  together, counted when there are many ("Using Read 4 times, then Bash."), and never cuts off your
+  screen reader. At the summary level tools are always counted; at silent only the status bar shows
+  them. Tool results aren't spoken. New messages arrive at the end without moving you.
 - **Reply box:** for The Chat Place's own sessions, type and press Ctrl+Enter (or Send). You stay in
   the reply box. For desktop app sessions the same place holds a read-only note saying why
   replying happens in Claude, and an Open in Claude button.

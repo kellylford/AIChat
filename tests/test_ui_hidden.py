@@ -4277,6 +4277,21 @@ def test_the_messages_menu_from_the_keyboard_keeps_the_highlight(frame, monkeypa
     assert seen == [1] and focus["on"] is frame.chat_list
 
 
+def test_no_menu_opens_once_the_window_is_closing(frame, monkeypatch):
+    # A menu scheduled by VO+Shift+M can come due after Cmd+Q, before the
+    # window is destroyed.
+    shown = []
+    monkeypatch.setattr(frame.chat_list, "PopupMenu",
+                        lambda menu, position: shown.append(menu))
+    monkeypatch.setattr(frame.session_list, "GetPopupMenuSelectionFromUser",
+                        lambda menu, position: shown.append(menu) or wx.ID_NONE)
+    select(frame, "Quiet one")
+    frame._closing = True
+    frame._on_message_menu()
+    frame._on_session_menu()
+    assert shown == []
+
+
 def test_a_right_click_below_the_rows_does_nothing(frame, env, monkeypatch):
     monkeypatch.setattr(frame.session_list, "HitTest", lambda point: wx.NOT_FOUND)
     shown = []

@@ -350,6 +350,10 @@ class MainFrame(wx.Frame):
         set_list_items_accessible(self.chat_list, self.chat_list.GetName,
                                   self._message_item_text)
         self._spoken: Dict[str, tuple] = {}  # message key -> (text, spoken words)
+        # Set once the window is closing (_on_close). Its destruction waits
+        # for idle time, so a menu VO+Shift+M scheduled just before Cmd+Q
+        # would otherwise still open, on a hidden window that has stopped.
+        self._closing = False
         vsizer.Add(self.chat_list, 2, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
         self.chat_list.Bind(wx.EVT_CONTEXT_MENU, self._on_message_menu)
         set_voiceover_menu(self.chat_list, self._on_message_menu)
@@ -1596,6 +1600,8 @@ class MainFrame(wx.Frame):
         messages list. As in the session list (_on_session_menu), the menu
         is for the row clicked, and focus goes to the list: VO+Shift+M can
         open it from the VoiceOver cursor while focus is elsewhere."""
+        if self._closing:
+            return
         position = event.GetPosition() if event is not None else wx.DefaultPosition
         if position != wx.DefaultPosition:
             # A list box doesn't select the row right-clicked, so the menu
@@ -1649,6 +1655,8 @@ class MainFrame(wx.Frame):
         The choice runs once the menu has closed and focus is back on the
         list, so the command means the highlighted session, not the loaded
         one (see _selected_session)."""
+        if self._closing:
+            return
         position = event.GetPosition() if event is not None else wx.DefaultPosition
         if position != wx.DefaultPosition:
             # A right-click: a list box neither selects the row clicked nor
@@ -3870,6 +3878,7 @@ class MainFrame(wx.Frame):
             if answer != wx.YES:
                 event.Veto()
                 return
+        self._closing = True
         for runner in list(self._runners.values()):
             runner.cancel()
         self._clear_activity()
