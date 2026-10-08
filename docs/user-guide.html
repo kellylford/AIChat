@@ -1,13 +1,16 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>The Chat Place User Guide</title><style>
-body { font: 16px/1.5 "Segoe UI", sans-serif; margin: 1em 1.5em; max-width: 60em; }
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>The Chat Place User Guide</title><style>
+body { font: 100%/1.5 "Segoe UI", sans-serif; margin: 1em 1.5em; max-width: 60em;
+       overflow-wrap: break-word; }
 pre { white-space: pre-wrap; background: #f3f3f3; padding: .6em; border-radius: 4px; }
-code { font-family: Consolas, monospace; }
+code { font-family: Consolas, monospace; overflow-wrap: anywhere; }
 table { border-collapse: collapse; margin: .5em 0; }
 th, td { border: 1px solid #888; padding: .25em .6em; text-align: left; vertical-align: top; }
+a:focus-visible { outline: 3px solid; outline-offset: 2px; }
 @media (prefers-color-scheme: dark) {
   body { background: #1e1e1e; color: #e8e8e8; }
   pre { background: #2b2b2b; }
   a { color: #8ab4f8; }
+  a:visited { color: #c58af9; }
 }
 </style></head><body><main aria-label="The Chat Place User Guide"><h1>The Chat Place User Guide</h1>
 <p>The Chat Place is a keyboard and screen reader friendly home for your Claude Code chats. It lists
@@ -19,7 +22,7 @@ heading, so your screen reader's heading keys move between them. For every key i
 Help, Keyboard Shortcuts (F1).</p>
 <p>The Chat Place is an independent project by Kelly Ford. It works with Claude Code and the Claude
 desktop app, but it isn't made, sponsored or endorsed by Anthropic, and isn't affiliated with it.</p>
-<h2>Before you start</h2>
+<nav aria-labelledby="contents"><h2 id="contents">Contents</h2><ul><li><a href="#before-you-start">Before you start</a></li><li><a href="#the-window">The window</a></li><li><a href="#reading-a-session">Reading a session</a></li><li><a href="#desktop-app-sessions-and-the-chat-place-s-own">Desktop app sessions and The Chat Place's own</a></li><li><a href="#starting-a-session-and-replying">Starting a session and replying</a></li><li><a href="#when-claude-needs-you">When Claude needs you</a></li><li><a href="#organizing-your-sessions">Organizing your sessions</a></li><li><a href="#announcements-and-notifications">Announcements and notifications</a></li><li><a href="#more-things-you-can-do">More things you can do</a></li><li><a href="#updates">Updates</a></li><li><a href="#when-something-isn-t-right">When something isn't right</a></li><li><a href="#good-to-know">Good to know</a></li></ul></nav><h2 id="before-you-start">Before you start</h2>
 <p>You need:</p>
 <ul>
 <li>Windows 10 or 11, or a Mac with Apple silicon.</li>
@@ -42,7 +45,7 @@ control VoiceOver: allow it, and turn on "Allow VoiceOver to be controlled with 
 VoiceOver Utility, General.</p>
 <p>If Claude Code isn't signed in, your sessions are still listed; only sending a message needs a
 sign-in. Help, Claude Code Sign-in says whether it is signed in, and offers to sign you in if not.</p>
-<h2>The window</h2>
+<h2 id="the-window">The window</h2>
 <p>The window has three parts, in Tab order:</p>
 <ol>
 <li>The <strong>session list</strong>: every session, one per line.</li>
@@ -63,7 +66,7 @@ the session list, on the same session.</p>
   menu, The Chat Place.</li>
 <li>A context menu, the Applications key on Windows, is VO+Shift+M.</li>
 </ul>
-<h2>Reading a session</h2>
+<h2 id="reading-a-session">Reading a session</h2>
 <h3>Finding it in the list</h3>
 <p>Each line in the session list reads the session's title, its folder, its state (needs you,
 working or idle) and when it was last active, for example: "Fix the release build, QuickMail,
@@ -106,7 +109,7 @@ was refused appear as "Permission denied: …".</p>
 (Ctrl+T). With it on, the open session's tool calls are also spoken as they happen, so a long turn
 isn't silent: "Using Bash: git status; Read: main.py." A run of calls is gathered up and said
 together ("Using Read 4 times, then Bash."), and it never cuts off your screen reader.</p>
-<h2>Desktop app sessions and The Chat Place's own</h2>
+<h2 id="desktop-app-sessions-and-the-chat-place-s-own">Desktop app sessions and The Chat Place's own</h2>
 <p>There are two kinds of session in the list, and what you can do differs.</p>
 <p><strong>Claude desktop app sessions</strong> are read-only here. You can read them, find in them, export them
 and see what they changed, but you reply in the desktop app. That's deliberate: if two programs
@@ -120,7 +123,7 @@ button beside Open in Claude). It makes a new Chat Place session in the same fol
 whole conversation so far, and you type its first message. Its title starts as the original's,
 followed by "(continued)". The desktop app session isn't changed, and what you do in the copy
 doesn't appear in it.</p>
-<h2>Starting a session and replying</h2>
+<h2 id="starting-a-session-and-replying">Starting a session and replying</h2>
 <h3>A new session</h3>
 <p>Press <strong>Ctrl+N</strong> (File, New Session) and fill in:</p>
 <ul>
@@ -161,7 +164,7 @@ did. There's no time limit on a turn.</p>
   listed under the reply box, and Delete there removes one. Claude sees pictures as pictures, and
   reads other files from where they are.</li>
 </ul>
-<h2>When Claude needs you</h2>
+<h2 id="when-claude-needs-you">When Claude needs you</h2>
 <p>In one of The Chat Place's own sessions, when Claude needs a permission, asks you a question, or
 has a plan for you to approve, the turn waits for you. You hear it ("Fix the build needs you.
 Claude wants to run git push. Ctrl+Shift+A answers."), and the session shows as "needs you" in
@@ -182,7 +185,7 @@ session, not just the turn. The Chat Place never changes Claude Code's own setti
 <p>For a desktop app session, a "needs you" means the desktop app's summary of its latest turn says
 it's waiting on you. Answer it in the desktop app (Ctrl+O). The desktop app doesn't write that
 summary after every turn, so a desktop session can be waiting on you and still show as idle.</p>
-<h2>Organizing your sessions</h2>
+<h2 id="organizing-your-sessions">Organizing your sessions</h2>
 <p>With many sessions, these keep the list manageable.</p>
 <h3>Choosing which sessions are listed</h3>
 <p><strong>View, Show Sessions</strong> (Alt+V, H) chooses what the list shows: all sessions; the ones that need
@@ -219,7 +222,7 @@ makes a Chat Place group of the same name, which is shown together with the desk
 <p>On a Mac laptop, Delete and Shift+Delete are Fn+Delete and Fn+Shift+Delete.</p>
 <p>The session's menu (the Applications key or Shift+F10 in the session list) has all of these, and
 the other commands for the selected session.</p>
-<h2>Announcements and notifications</h2>
+<h2 id="announcements-and-notifications">Announcements and notifications</h2>
 <p>When the open session gets a reply, when one of The Chat Place's sessions finishes a turn, or when
 any listed session stops working, it's announced through your screen reader (or a system voice)
 and put on the status bar. <strong>Ctrl+Shift+R</strong> repeats the last announcement.</p>
@@ -238,7 +241,7 @@ the notification brings The Chat Place forward with that session loaded. Setting
 notifications (on a Mac, Notifications) chooses every finished turn (the default), only when a
 session needs you, or off. While you're in The Chat Place, the announcement is enough and no
 notification is shown.</p>
-<h2>More things you can do</h2>
+<h2 id="more-things-you-can-do">More things you can do</h2>
 <ul>
 <li><strong>Changed Files</strong> (Ctrl+Shift+D) lists the files Claude changed since your latest message, or in
   the whole session, with how many lines were added and removed. Enter on a file reads its changes
@@ -255,12 +258,12 @@ notification is shown.</p>
   where it stays, and anyone signed in to your account there can type into it. Settings can make
   it the default for The Chat Place's sessions.</li>
 </ul>
-<h2>Updates</h2>
+<h2 id="updates">Updates</h2>
 <p>The installed app checks for a new version shortly after it starts, and says so only if there is
 one. <strong>Help, Check for Updates</strong> asks right away and offers to install it (No is the default). It
 won't install while Claude is working in one of its sessions, and it warns you about a reply you
 haven't sent. Updating never touches your sessions or settings.</p>
-<h2>When something isn't right</h2>
+<h2 id="when-something-isn-t-right">When something isn't right</h2>
 <p><strong>I don't see a session I expected.</strong> Check View, Show Sessions: you may be showing only some
 sessions, and archived and hidden sessions aren't in All. A Find (Ctrl+F) also narrows the list;
 Escape in the list clears it. F5 refreshes the list at once. Only Claude Code sessions are
@@ -280,7 +283,7 @@ Place's turns.</p>
 includes before it goes anywhere: version numbers and settings, never your sessions' titles,
 folders or messages. Open on GitHub files it; Copy Report copies it, to email to
 support@theideaplace.net.</p>
-<h2>Good to know</h2>
+<h2 id="good-to-know">Good to know</h2>
 <ul>
 <li>The Chat Place never writes to the desktop app's files or to any conversation. The only files it
   writes are its own: on Windows in <code>%APPDATA%\TheChatPlace</code>, on a Mac in

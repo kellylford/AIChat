@@ -15,6 +15,8 @@ tests/test_docs.py fails if these are out of date.
 """
 from __future__ import annotations
 
+import html
+import re
 import sys
 from pathlib import Path
 from typing import Dict
@@ -23,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from thechatplace.platform_paths import user_guide_path  # noqa: E402
-from thechatplace.rendering import html_page, message_page  # noqa: E402
+from thechatplace.rendering import html_page, markdown_to_html  # noqa: E402
 from thechatplace.ui_text import LAYOUT, SHORTCUTS, shortcuts_html, shortcuts_text  # noqa: E402
 
 DOCS = ROOT / "docs"
@@ -41,6 +43,27 @@ def _markdown() -> str:
     return "\n".join(lines)
 
 
+_H2 = re.compile(r"<h2>(.*?)</h2>")
+
+
+def _with_contents(body: str) -> str:
+    """The guide's body with a Contents list before its first section, each
+    section's heading given an id to link to. Only for the published page: in
+    the app, links within the page are blocked, and H moves by heading."""
+    entries = []
+
+    def anchor(match: "re.Match[str]") -> str:
+        slug = re.sub(r"[^a-z0-9]+", "-", html.unescape(match.group(1)).lower()).strip("-")
+        entries.append(f'<li><a href="#{slug}">{match.group(1)}</a></li>')
+        return f'<h2 id="{slug}">{match.group(1)}</h2>'
+
+    body = _H2.sub(anchor, body)
+    nav = ('<nav aria-labelledby="contents"><h2 id="contents">Contents</h2><ul>'
+           + "".join(entries) + "</ul></nav>")
+    first = body.find("<h2 id=")
+    return body[:first] + nav + body[first:]
+
+
 def documents() -> Dict[str, str]:
     """Each file's name and what it should hold."""
     guide = user_guide_path().read_text(encoding="utf-8")
@@ -48,7 +71,7 @@ def documents() -> Dict[str, str]:
         "keyboard-shortcuts.html": html_page(TITLE, shortcuts_html()) + "\n",
         "keyboard-shortcuts.md": _markdown(),
         "keyboard-shortcuts.txt": f"{TITLE}\n\n{shortcuts_text()}\n",
-        "user-guide.html": message_page(GUIDE_TITLE, guide) + "\n",
+        "user-guide.html": html_page(GUIDE_TITLE, _with_contents(markdown_to_html(guide))) + "\n",
         "user-guide.md": guide,
     }
 

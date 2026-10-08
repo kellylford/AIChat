@@ -41,16 +41,23 @@ LANGUAGE_NAMES = {
     "md": "Markdown", "markdown": "Markdown", "diff": "Diff", "text": "Text", "toml": "TOML",
 }
 
+#: WCAG 2.2 AA, checked for the published user guide (#102): the reader's own
+#: text size (100%, not px), no sideways scrolling at 320px (long paths wrap),
+#: a focus ring that shows on every link, and dark-mode links, visited ones
+#: too, at 6.6:1 or better (the browser's default visited purple was 1.6:1).
 _STYLE = """
-body { font: 16px/1.5 "Segoe UI", sans-serif; margin: 1em 1.5em; max-width: 60em; }
+body { font: 100%/1.5 "Segoe UI", sans-serif; margin: 1em 1.5em; max-width: 60em;
+       overflow-wrap: break-word; }
 pre { white-space: pre-wrap; background: #f3f3f3; padding: .6em; border-radius: 4px; }
-code { font-family: Consolas, monospace; }
+code { font-family: Consolas, monospace; overflow-wrap: anywhere; }
 table { border-collapse: collapse; margin: .5em 0; }
 th, td { border: 1px solid #888; padding: .25em .6em; text-align: left; vertical-align: top; }
+a:focus-visible { outline: 3px solid; outline-offset: 2px; }
 @media (prefers-color-scheme: dark) {
   body { background: #1e1e1e; color: #e8e8e8; }
   pre { background: #2b2b2b; }
   a { color: #8ab4f8; }
+  a:visited { color: #c58af9; }
 }
 """
 
@@ -103,6 +110,7 @@ def html_page(title: str, body_html: str) -> str:
     ``title`` is the window's and the page's name."""
     name = html.escape(title, quote=True)
     return ("<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
             "<meta http-equiv=\"Content-Security-Policy\" "
             "content=\"default-src 'none'; style-src 'unsafe-inline'\">"
             f"<title>{name}</title><style>{_STYLE}</style></head>"
