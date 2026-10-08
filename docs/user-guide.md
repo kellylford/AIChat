@@ -294,10 +294,14 @@ notification is shown.
 - **What Claude Knows About You** (Ctrl+Shift+K) lists what Claude Code keeps about you: your
   instructions (CLAUDE.md files), the memories it saved, your skills, subagents, commands and
   settings. Enter reads one, and Edit in Your Editor opens it in your own editor.
-- **Remote Control** (File, Remote Control) lets you reach one of The Chat Place's sessions from
-  claude.ai and your phone while a turn runs. Turning it on copies the conversation to claude.ai,
-  where it stays, and anyone signed in to your account there can type into it. Settings can make
-  it the default for The Chat Place's sessions.
+- **Remote Control** (File, Remote Control) lets you follow one of The Chat Place's sessions
+  away from your computer, on claude.ai or in the Claude app on your phone. It works only while
+  Claude is answering: you can watch, type, or answer Claude's questions there. Once Claude
+  finishes, it shows as offline there until you send your next message from The Chat Place. The
+  session itself stays on your computer: another copy of The Chat Place, on another computer,
+  doesn't list it. Turning Remote Control on copies the conversation to claude.ai, where it stays
+  even if you turn Remote Control off, and anyone signed in to your account there can type into
+  it. Settings can make it the default for The Chat Place's sessions.
 
 ## Updates
 
@@ -339,9 +343,9 @@ support@theideaplace.net.
 - The Chat Place never writes to the desktop app's files or to any conversation. The only files it
   writes are its own: on Windows in `%APPDATA%\TheChatPlace`, on a Mac in
   `~/Library/Application Support/TheChatPlace`. The conversations themselves are Claude Code's.
-- The Mac version is new, and hasn't had a full pass with VoiceOver yet. In particular, VoiceOver
-  reads each line of the messages list as shown, not the whole message; Enter still opens the
-  whole message.
+- With VoiceOver, each line of the messages list reads as it's shown, "You:" or "Claude:" and
+  the first line, not the whole message, because reading the whole message on each line uses a
+  Windows feature. Enter opens the whole message.
 - Conversations Claude hands to a subagent aren't shown.
 - The desktop app's file formats aren't documented, so a desktop app update could change what The
   Chat Place can read.
