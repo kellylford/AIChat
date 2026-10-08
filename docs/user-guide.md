@@ -294,14 +294,41 @@ notification is shown.
 - **What Claude Knows About You** (Ctrl+Shift+K) lists what Claude Code keeps about you: your
   instructions (CLAUDE.md files), the memories it saved, your skills, subagents, commands and
   settings. Enter reads one, and Edit in Your Editor opens it in your own editor.
-- **Remote Control** (File, Remote Control) lets you follow one of The Chat Place's sessions
-  away from your computer, on claude.ai or in the Claude app on your phone. It works only while
-  Claude is answering: you can watch, type, or answer Claude's questions there. Once Claude
-  finishes, it shows as offline there until you send your next message from The Chat Place. The
-  session itself stays on your computer: another copy of The Chat Place, on another computer,
-  doesn't list it. Turning Remote Control on copies the conversation to claude.ai, where it stays
-  even if you turn Remote Control off, and anyone signed in to your account there can type into
-  it. Settings can make it the default for The Chat Place's sessions.
+
+## Remote Control
+
+Remote Control lets you keep an eye on one of The Chat Place's own sessions when you're away from
+your computer, on claude.ai or in the Claude app on your phone. Turn it on with File, Remote
+Control, or from the session's menu. Its line in the session list then says "Remote Control", and
+File, Remote Control copies the session's claude.ai address.
+
+**What you can do today:**
+
+- While Claude is working on a message you sent from The Chat Place, open the session on
+  claude.ai or your phone to follow what it's doing.
+- Answer Claude there. If it asks a question or wants permission, you can answer on your phone
+  instead of at your computer, and it can ask again later in the same answer, as often as it
+  needs. Whichever place you answer first counts, and the other one stops waiting.
+- Type to Claude there while it's working.
+
+**What you can't do yet:**
+
+- Start a new message from your phone. Once Claude finishes answering, the session shows as
+  offline on claude.ai until you send your next message from The Chat Place.
+- See the session from another computer's copy of The Chat Place. The session lives on the
+  computer that started it; claude.ai is how you reach it from elsewhere.
+- Reach a session on another computer from here, even with Remote Control on. If you turned on
+  Remote Control for a session on another computer, for example in the Claude desktop app there, The Chat Place on
+  this computer doesn't list it. Open it on claude.ai or in the Claude app instead.
+
+**Good to know:** turning Remote Control on copies the conversation to claude.ai, and it stays
+there even if you turn Remote Control off or delete the session here (you can archive it on
+claude.ai). While Claude is working, anyone signed in to your Claude account can type into it.
+Settings can turn Remote Control on for all of The Chat Place's sessions; then a session's line
+says so once it has connected.
+
+For a Claude desktop app session, File, Remote Control offers to open it in the desktop app, where
+you turn Remote Control on, or to continue it here as a copy with Remote Control on.
 
 ## Updates
 
