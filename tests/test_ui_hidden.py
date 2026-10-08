@@ -4339,3 +4339,47 @@ def test_ctrl_shift_b_opens_code_blocks_from_the_messages(frame, monkeypatch):
     labels = [i.GetItemLabel() for i in menu.GetMenuItems()]
     menu.Destroy()
     assert "Code &Blocks...\tCtrl+Shift+B" in labels
+
+
+# -- coming back with a dialog open ---------------------------------------------------------
+
+
+class _FakeModal(wx.Dialog):
+    raised = 0
+    active = False
+
+    def IsModal(self):
+        return True
+
+    def IsActive(self):
+        return self.active
+
+    def Raise(self):
+        self.raised += 1
+
+
+def test_coming_back_to_the_main_window_brings_its_open_dialog_forward(frame):
+    dialog = _FakeModal(frame)
+    try:
+        frame._on_activate(wx.ActivateEvent(wx.wxEVT_ACTIVATE, True))
+        pump(lambda: dialog.raised)
+        assert dialog.raised == 1
+        # Already active (Windows did it right), or leaving: nothing to do.
+        dialog.active = True
+        frame._on_activate(wx.ActivateEvent(wx.wxEVT_ACTIVATE, True))
+        pump(lambda: False, timeout=0.3)
+        dialog.active = False
+        frame._on_activate(wx.ActivateEvent(wx.wxEVT_ACTIVATE, False))
+        pump(lambda: False, timeout=0.3)
+        assert dialog.raised == 1
+    finally:
+        dialog.Destroy()
+
+
+def test_coming_back_with_no_dialog_leaves_focus_alone(frame, monkeypatch):
+    calls = []
+    monkeypatch.setattr(frame, "_raise_open_modal", lambda: calls.append(True))
+    event = wx.ActivateEvent(wx.wxEVT_ACTIVATE, True)
+    frame._on_activate(event)
+    pump(lambda: False, timeout=0.3)
+    assert calls == [] and event.GetSkipped()  # wx still restores the last focus itself

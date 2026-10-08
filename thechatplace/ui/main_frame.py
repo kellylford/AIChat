@@ -183,6 +183,7 @@ class MainFrame(wx.Frame):
         self._status("Loading sessions…")
         self.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
         self.Bind(wx.EVT_CLOSE, self._on_close)
+        self.Bind(wx.EVT_ACTIVATE, self._on_activate)
 
         self._list_timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, lambda e: self.refresh_sessions(), self._list_timer)
@@ -1871,6 +1872,28 @@ class MainFrame(wx.Frame):
         dialogs (the frame alone says no while a dialog has the focus)."""
         return wx.GetActiveWindow() is not None
 
+    @staticmethod
+    def _open_modal() -> Optional[wx.Dialog]:
+        """The modal dialog showing now (Code Blocks, Settings, a question
+        from Claude…), or None."""
+        return next((w for w in wx.GetTopLevelWindows()
+                     if isinstance(w, wx.Dialog) and w.IsModal()), None)
+
+    def _on_activate(self, event: wx.ActivateEvent):
+        """Coming back to The Chat Place with a dialog open (Alt+Tab, the
+        taskbar): the dialog comes forward, with focus where you left it. If
+        Windows activated the main window instead, which is disabled behind
+        the dialog, every key went nowhere and the app seemed hung."""
+        event.Skip()
+        if event.GetActive() and self._open_modal() is not None:
+            wx.CallAfter(self._raise_open_modal)
+
+    def _raise_open_modal(self):
+        modal = self._open_modal()
+        if not self or modal is None or modal.IsActive():
+            return
+        modal.Raise()  # activating it gives focus back to its last control
+
     def _go_to_session(self, key: Optional[str]):
         """A notification was chosen: The Chat Place comes forward with that
         session loaded. With one of its dialogs open, the dialog comes
@@ -1880,8 +1903,7 @@ class MainFrame(wx.Frame):
         if self.IsIconized():
             self.Iconize(False)
         self.Show()
-        modal = next((w for w in wx.GetTopLevelWindows()
-                      if isinstance(w, wx.Dialog) and w.IsModal()), None)
+        modal = self._open_modal()
         (modal or self).Raise()
         mac_a11y.activate_app()  # Raise alone leaves a Mac's menu bar with the last app
         if not self._app_is_active():
