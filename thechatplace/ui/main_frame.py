@@ -1592,9 +1592,18 @@ class MainFrame(wx.Frame):
         return wx.Point(8, 8)
 
     def _on_message_menu(self, event=None):
-        # As the session list does: VO+Shift+M can open the menu from the
-        # VoiceOver cursor while keyboard focus is elsewhere, and afterwards
-        # focus should be on the message the menu was for.
+        """Right-click, the Applications key, Shift+F10 or VO+Shift+M in the
+        messages list. As in the session list (_on_session_menu), the menu
+        is for the row clicked, and focus goes to the list: VO+Shift+M can
+        open it from the VoiceOver cursor while focus is elsewhere."""
+        position = event.GetPosition() if event is not None else wx.DefaultPosition
+        if position != wx.DefaultPosition:
+            # A list box doesn't select the row right-clicked, so the menu
+            # meant the old highlight while the mouse was on another message.
+            row = self.chat_list.HitTest(self.chat_list.ScreenToClient(position))
+            if row == wx.NOT_FOUND:
+                return
+            self.chat_list.SetSelection(row)
         self.chat_list.SetFocus()
         menu = self._message_menu()
         try:

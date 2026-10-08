@@ -3896,11 +3896,17 @@ def test_voiceover_menu_by_the_newer_call_and_only_for_live_lists(frame, monkeyp
     other = wx.ListBox(frame, choices=["one"])
     assert "AXShowMenu" not in _voiceover_actions(other)
     from thechatplace.ui.a11y import set_voiceover_menu
-    set_voiceover_menu(other, lambda: None)
+    opened = []
+    set_voiceover_menu(other, lambda: opened.append(True))
     address = mac_a11y._target_view(other).value
     assert address in mac_a11y._menu_handlers
+    # VO+Shift+M, then the list goes before the menu's turn comes: nothing
+    # opens and nothing raises.
+    mac_a11y._menu_handlers[address]()
     other.Destroy()
     assert address not in mac_a11y._menu_handlers
+    wx.GetApp().ProcessPendingEvents()
+    assert opened == []
 
 
 @voiceover
@@ -4236,6 +4242,39 @@ def test_a_right_click_means_the_row_under_the_mouse(frame, env, monkeypatch):
     monkeypatch.setattr(frame.session_list, "GetPopupMenuSelectionFromUser", pick)
     frame._on_session_menu(_RightClick())
     assert "local_b" in frame.hidden and "local_a" not in frame.hidden
+
+
+def test_a_right_click_in_the_messages_means_the_message_under_the_mouse(frame, monkeypatch):
+    # The messages list didn't select the row right-clicked either, so the
+    # menu acted on the highlighted message, not the one clicked.
+    frame.chat_list.Set(["first", "second", "third"])
+    frame.chat_list.SetSelection(0)
+    monkeypatch.setattr(frame.chat_list, "HitTest", lambda point: 2)
+    focus = {"on": frame.reply_text}
+    monkeypatch.setattr(frame.chat_list, "SetFocus", lambda: focus.update(on=frame.chat_list))
+    seen = []
+    monkeypatch.setattr(frame.chat_list, "PopupMenu",
+                        lambda menu, position: seen.append(frame.chat_list.GetSelection()))
+    frame._on_message_menu(_RightClick())
+    assert seen == [2] and focus["on"] is frame.chat_list
+    # Below the last message, nothing opens and the highlight stays.
+    monkeypatch.setattr(frame.chat_list, "HitTest", lambda point: wx.NOT_FOUND)
+    frame._on_message_menu(_RightClick())
+    assert seen == [2] and frame.chat_list.GetSelection() == 2
+
+
+def test_the_messages_menu_from_the_keyboard_keeps_the_highlight(frame, monkeypatch):
+    # The Applications key and VO+Shift+M (no mouse position) use the
+    # highlighted message and move focus to the list, even from the reply box.
+    frame.chat_list.Set(["first", "second"])
+    frame.chat_list.SetSelection(1)
+    focus = {"on": frame.reply_text}
+    monkeypatch.setattr(frame.chat_list, "SetFocus", lambda: focus.update(on=frame.chat_list))
+    seen = []
+    monkeypatch.setattr(frame.chat_list, "PopupMenu",
+                        lambda menu, position: seen.append(frame.chat_list.GetSelection()))
+    frame._on_message_menu()
+    assert seen == [1] and focus["on"] is frame.chat_list
 
 
 def test_a_right_click_below_the_rows_does_nothing(frame, env, monkeypatch):
