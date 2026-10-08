@@ -1898,6 +1898,17 @@ def test_help_user_guide_shows_the_guide_page_or_the_text_box(frame, env, monkey
     assert len(texts) == 1 and isinstance(texts[0], MessageDialog)
 
 
+def test_help_user_guide_text_box_has_no_markdown(frame, env, monkeypatch):
+    # Without the formatted view (a Mac, or no WebView2): straight to the text
+    # box, as clean text.
+    seen = []
+    monkeypatch.setattr(frame, "_modal",
+                        lambda dialog: seen.append(dialog.text.GetValue()) or dialog.Destroy())
+    frame.on_user_guide()
+    assert seen and seen[0].startswith("The Chat Place User Guide")
+    assert "**" not in seen[0] and "](" not in seen[0]
+
+
 def test_help_user_guide_says_so_when_the_guide_is_missing(frame, env, monkeypatch, tmp_path):
     from thechatplace.ui import main_frame
     boxes = []

@@ -77,7 +77,7 @@ from .a11y import set_accessible_name, set_list_items_accessible
 from .notify import Notifier
 from .statusbar import StatusParts
 from ..rendering import html_page, message_page
-from ..ui_text import shortcuts_html
+from ..ui_text import markdown_as_text, shortcuts_html
 from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, AboutYouDialog, ChangesDialog, CodeBlocksDialog, FormattedMessageDialog,
                       BugReportDialog, CommandPickerDialog, MessageDialog, NewSessionDialog, PermissionDialog, PlanDialog,
                       ManageGroupsDialog, QuestionDialog, SettingsDialog, ShortcutsDialog,
@@ -1438,7 +1438,7 @@ class MainFrame(wx.Frame):
             return
         if self._show_page("User Guide", message_page("User Guide", text)):
             return
-        self._modal(MessageDialog(self, "User Guide", text))
+        self._modal(MessageDialog(self, "User Guide", markdown_as_text(text)))
 
     def on_shortcuts(self, _event=None):
         """The keyboard shortcuts as a page: a heading and a table per group.

@@ -6,7 +6,7 @@ The Chat Place is an independent project by Kelly Ford. It works with Claude Cod
 Claude desktop app, but it isn't made, sponsored or endorsed by Anthropic, and isn't affiliated
 with it. Claude and Claude Code are trademarks of Anthropic.
 
-New to The Chat Place? The [user guide](docs/user-guide.md) ([HTML](docs/user-guide.html)) starts
+New to The Chat Place? The [user guide](docs/user-guide.md) starts
 with the everyday things and goes deeper; it's also in the app, under Help, User Guide. This README
 has the full details.
 
@@ -120,7 +120,8 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   and whether it's read-only. **Enter**
   (or the context menu's Read Full Message, with the Applications key or Shift+F10) shows the
   whole message as a formatted page, so your screen reader's browse mode moves by heading (H),
-  table (T, then its cell commands), list (L) and code block (each is a region, R, named like
+  table (T, then its cell commands), list (L) and code block (each is a region: R in JAWS, D in
+  NVDA, named like
   "Code block, Python, 14 lines"). Links open in your browser. **Read as Plain Text** (Alt+P)
   switches to a read-only text box, to read by line, word and character, and Settings can make
   that the default. Escape closes either, back on the same message. The page needs Microsoft's
@@ -471,6 +472,7 @@ shows it as plain text instead.
 | Reply box | Ctrl+Shift+T | Turn status: how long it has been working, and on what |
 | Anywhere | Ctrl+Shift+A | Answer Claude: a permission request, a question or a plan |
 | Anywhere | F1 | Keyboard shortcuts |
+| Anywhere | Alt+H, G | The user guide |
 | Anywhere | Ctrl+Comma | Settings |
 | Anywhere | Ctrl+Shift+R | Repeat the last announcement |
 | Anywhere | Alt+F4 | Quit |
@@ -478,6 +480,9 @@ shows it as plain text instead.
 Menus are File (Alt+F), View (Alt+V) and Help (Alt+H). Controls have their own Alt letters
 (Alt+L the session list, Alt+M the messages, Alt+Y the reply box, Alt+D Send), and none of them
 takes a menu's letter.
+
+On a Mac, Ctrl is the Command key, the menus are in the menu bar (VO+M) rather than on Alt, and
+Settings is in the app menu.
 
 ## How it works
 

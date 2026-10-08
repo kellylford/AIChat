@@ -68,8 +68,9 @@ from . import platform_paths
 #: (value passed to --permission-mode, label shown in the New Session dialog)
 PERMISSION_MODES = [
     ("auto", "Auto: Claude decides what is safe to run without asking"),
-    ("acceptEdits", "Accept edits: file edits allowed, commands that need approval are refused"),
-    ("manual", "Manual: anything that needs approval is refused"),
+    ("acceptEdits", "Accept edits: file edits allowed; Claude asks before commands that need "
+                    "approval"),
+    ("manual", "Manual: Claude asks before anything that needs approval"),
     ("plan", "Plan: Claude plans but does not change anything"),
 ]
 PERMISSION_MODE_VALUES = [value for value, _label in PERMISSION_MODES]

@@ -55,6 +55,16 @@ and Shift+F6 move between the parts and the **status bar**, which holds whatever
 Ctrl+9 goes straight to the status bar. Escape in the messages or the reply box takes you back to
 the session list, on the same session.
 
+### On a Mac
+
+This guide gives the Windows keys. On a Mac:
+
+- Ctrl is the Command key: Command+N for a new session, Command+Enter to send, and so on.
+- Menus are in the menu bar, which VoiceOver reaches with VO+M, rather than with Alt. Where this
+  guide says View, Show Sessions, that's the View menu's Show Sessions. Settings is in the app
+  menu, The Chat Place.
+- A context menu, the Applications key on Windows, is VO+Shift+M.
+
 ## Reading a session
 
 ### Finding it in the list
@@ -86,11 +96,11 @@ Headings and list items are read as sentences, and a code block is read as what 
 Settings, Reading messages.
 
 Press **Enter** on a message to read it as a formatted page. There, your screen reader's browse
-mode moves by heading (H), table (T), list (L) and code block (each code block is a region, so R
-moves to it). Links open in your browser. **Read as Plain Text** (Alt+P) shows the message in a
-plain text box instead, to read by line, word and character. Escape closes either one and puts
-you back on the same message. On Windows the formatted page needs Microsoft's Edge WebView2
-runtime, which comes with Windows 11; without it, the plain text box opens.
+mode moves by heading (H), table (T), list (L) and code block (each code block is a region: R in
+JAWS, D in NVDA). Links open in your browser. **Read as Plain Text** (Alt+P) shows the message in
+a plain text box instead, to read by line, word and character. Escape closes either one and puts
+you back on the same message. The formatted page needs Microsoft's Edge WebView2 runtime, which
+comes with Windows 11. On a Mac, and on Windows without it, Enter opens the plain text box.
 
 Other things you can do with a message:
 
@@ -192,7 +202,7 @@ the list. Press **Ctrl+Shift+A** to answer:
   so pressing Enter by mistake never allows anything, and you can give a reason Claude reads.
 - **A question:** each question is a group of choices, with Other and a box for your own answer.
   Send Answers, or Don't Answer.
-- **A plan:** read it (Read Formatted shows it as a page, by heading), then **Approve**, choosing
+- **A plan:** read it (on Windows, Read Formatted shows it as a page, by heading), then **Approve**, choosing
   how Claude carries on, or **Keep Planning**, the default, with what to change.
 
 **Escape answers later.** Nothing is allowed or refused by waiting: the turn keeps waiting, and
@@ -264,8 +274,9 @@ and put on the status bar. **Ctrl+Shift+R** repeats the last announcement.
 Settings also chooses whether every listed session is announced or just the open one, which
 speech engine and rate to use, and whether your own messages are read back when they're sent.
 
-When you're in another window, The Chat Place can show a notification when one of its sessions
-finishes a turn, fails or needs you, or when a desktop app session starts needing you. Choosing
+When you're in another window, The Chat Place can show a notification: when one of its sessions
+finishes a turn, fails or needs you, when the session you have loaded finishes, or when a desktop
+app session starts needing you. Choosing
 the notification brings The Chat Place forward with that session loaded. Settings, Windows
 notifications (on a Mac, Notifications) chooses every finished turn (the default), only when a
 session needs you, or off. While you're in The Chat Place, the announcement is enough and no
@@ -308,8 +319,8 @@ desktop app, or Ctrl+Shift+N to continue it here as a copy.
 **Claude is waiting and nothing is happening.** It may need you: press Ctrl+Shift+A. Ctrl+Shift+T
 says what the turn is doing.
 
-**A turn stopped with a usage limit.** The announcement says which limit and when it resets.
-Ctrl+Shift+U shows how much of each limit is used.
+**A turn stopped with a usage limit.** The announcement says when the limit resets.
+Ctrl+Shift+U shows which limits are used, and how much of each.
 
 **An old session's messages are gone.** Claude Code deletes old conversations after a while (its
 `cleanupPeriodDays` setting). The session can still be listed, and the messages list says its

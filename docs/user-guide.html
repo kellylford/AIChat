@@ -54,6 +54,15 @@ sign-in. Help, Claude Code Sign-in says whether it is signed in, and offers to s
 and Shift+F6 move between the parts and the <strong>status bar</strong>, which holds whatever was said last;
 Ctrl+9 goes straight to the status bar. Escape in the messages or the reply box takes you back to
 the session list, on the same session.</p>
+<h3>On a Mac</h3>
+<p>This guide gives the Windows keys. On a Mac:</p>
+<ul>
+<li>Ctrl is the Command key: Command+N for a new session, Command+Enter to send, and so on.</li>
+<li>Menus are in the menu bar, which VoiceOver reaches with VO+M, rather than with Alt. Where this
+  guide says View, Show Sessions, that's the View menu's Show Sessions. Settings is in the app
+  menu, The Chat Place.</li>
+<li>A context menu, the Applications key on Windows, is VO+Shift+M.</li>
+</ul>
 <h2>Reading a session</h2>
 <h3>Finding it in the list</h3>
 <p>Each line in the session list reads the session's title, its folder, its state (needs you,
@@ -76,11 +85,11 @@ Headings and list items are read as sentences, and a code block is read as what 
 "Code block, Python, 14 lines". If you'd rather hear just the first line, turn that off in
 Settings, Reading messages.</p>
 <p>Press <strong>Enter</strong> on a message to read it as a formatted page. There, your screen reader's browse
-mode moves by heading (H), table (T), list (L) and code block (each code block is a region, so R
-moves to it). Links open in your browser. <strong>Read as Plain Text</strong> (Alt+P) shows the message in a
-plain text box instead, to read by line, word and character. Escape closes either one and puts
-you back on the same message. On Windows the formatted page needs Microsoft's Edge WebView2
-runtime, which comes with Windows 11; without it, the plain text box opens.</p>
+mode moves by heading (H), table (T), list (L) and code block (each code block is a region: R in
+JAWS, D in NVDA). Links open in your browser. <strong>Read as Plain Text</strong> (Alt+P) shows the message in
+a plain text box instead, to read by line, word and character. Escape closes either one and puts
+you back on the same message. The formatted page needs Microsoft's Edge WebView2 runtime, which
+comes with Windows 11. On a Mac, and on Windows without it, Enter opens the plain text box.</p>
 <p>Other things you can do with a message:</p>
 <ul>
 <li><strong>Ctrl+C</strong> copies the whole message.</li>
@@ -164,7 +173,7 @@ the list. Press <strong>Ctrl+Shift+A</strong> to answer:</p>
   so pressing Enter by mistake never allows anything, and you can give a reason Claude reads.</li>
 <li><strong>A question:</strong> each question is a group of choices, with Other and a box for your own answer.
   Send Answers, or Don't Answer.</li>
-<li><strong>A plan:</strong> read it (Read Formatted shows it as a page, by heading), then <strong>Approve</strong>, choosing
+<li><strong>A plan:</strong> read it (on Windows, Read Formatted shows it as a page, by heading), then <strong>Approve</strong>, choosing
   how Claude carries on, or <strong>Keep Planning</strong>, the default, with what to change.</li>
 </ul>
 <p><strong>Escape answers later.</strong> Nothing is allowed or refused by waiting: the turn keeps waiting, and
@@ -222,8 +231,9 @@ and put on the status bar. <strong>Ctrl+Shift+R</strong> repeats the last announ
 </ul>
 <p>Settings also chooses whether every listed session is announced or just the open one, which
 speech engine and rate to use, and whether your own messages are read back when they're sent.</p>
-<p>When you're in another window, The Chat Place can show a notification when one of its sessions
-finishes a turn, fails or needs you, or when a desktop app session starts needing you. Choosing
+<p>When you're in another window, The Chat Place can show a notification: when one of its sessions
+finishes a turn, fails or needs you, when the session you have loaded finishes, or when a desktop
+app session starts needing you. Choosing
 the notification brings The Chat Place forward with that session loaded. Settings, Windows
 notifications (on a Mac, Notifications) chooses every finished turn (the default), only when a
 session needs you, or off. While you're in The Chat Place, the announcement is enough and no
@@ -259,8 +269,8 @@ listed, not the desktop app's ordinary chats.</p>
 desktop app, or Ctrl+Shift+N to continue it here as a copy.</p>
 <p><strong>Claude is waiting and nothing is happening.</strong> It may need you: press Ctrl+Shift+A. Ctrl+Shift+T
 says what the turn is doing.</p>
-<p><strong>A turn stopped with a usage limit.</strong> The announcement says which limit and when it resets.
-Ctrl+Shift+U shows how much of each limit is used.</p>
+<p><strong>A turn stopped with a usage limit.</strong> The announcement says when the limit resets.
+Ctrl+Shift+U shows which limits are used, and how much of each.</p>
 <p><strong>An old session's messages are gone.</strong> Claude Code deletes old conversations after a while (its
 <code>cleanupPeriodDays</code> setting). The session can still be listed, and the messages list says its
 conversation is no longer there.</p>
