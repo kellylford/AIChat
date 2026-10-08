@@ -527,6 +527,8 @@ class PermissionDialog(wx.Dialog):
 
 
 OTHER = "Other"
+# How far each arrow key moves in a group of radio buttons (#121).
+RADIO_ARROW_STEPS = {wx.WXK_UP: -1, wx.WXK_LEFT: -1, wx.WXK_DOWN: 1, wx.WXK_RIGHT: 1}
 
 
 class QuestionDialog(wx.Dialog):
@@ -613,10 +615,39 @@ class QuestionDialog(wx.Dialog):
             # give the focus to the last group first, and a screen reader
             # would begin reading the wrong question.
             self.Bind(wx.EVT_INIT_DIALOG, self._on_init_dialog)
+        if wx.Platform == "__WXMAC__":
+            # On a Mac the arrow keys did nothing in a group of radio buttons,
+            # and Tab treats the group as one stop, so only the first option
+            # could be reached (#121). Windows moves through the group itself.
+            self.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
 
     def _on_init_dialog(self, event):
         event.Skip()
         self._first.SetFocus()
+
+    def _on_char_hook(self, event):
+        step = RADIO_ARROW_STEPS.get(event.GetKeyCode())
+        focus = wx.Window.FindFocus()
+        if (step is None or event.HasAnyModifiers() or not isinstance(focus, wx.RadioButton)
+                or not self.move_in_radio_group(focus, step)):
+            event.Skip()
+
+    def move_in_radio_group(self, radio, step: int) -> bool:
+        """Choose and focus the option `step` places from `radio` in its
+        question, wrapping at the ends as Windows does, and send the
+        EVT_RADIOBUTTON a click would. False if `radio` isn't one of ours."""
+        for kind, controls, _other_text in self._controls:
+            if kind == "single" and radio in controls:
+                target = controls[(controls.index(radio) + step) % len(controls)]
+                target.SetValue(True)
+                # Focus follows the choice, so VoiceOver reads the new option.
+                target.SetFocus()
+                event = wx.CommandEvent(wx.wxEVT_RADIOBUTTON, target.GetId())
+                event.SetEventObject(target)
+                event.SetInt(1)
+                target.GetEventHandler().ProcessEvent(event)
+                return True
+        return False
 
     def _on_decline(self, _event):
         self.declined = True
