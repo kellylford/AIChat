@@ -207,10 +207,18 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   desktop app session, File, Remote Control offers to open it in the desktop app, where its
   Remote Control is turned on, or to continue it here as a copy with Remote Control on from the
   first turn; The Chat Place never changes the desktop app's session itself.
-- **Messages from other sessions.** Claude can send a message to another Claude Code
-  session, including one on another of your computers if both are on Remote Control. Ask
-  in your own words, for example "send the session called Mac Hub a message asking for its
-  hostname". A message that comes back shows in the messages list as **From** and the
+- **Other machines (File, Other Machines, Ctrl+Shift+M).** Your Claude Code sessions on
+  your other computers, reached through Claude in the loaded Chat Place session, which needs
+  Remote Control on (as do they). It lists them from Claude's latest look: their names and
+  whether each is idle, busy or offline. "Offline" often only means between turns, and a
+  message waits for it. **Refresh the list** asks Claude to look again, as a turn in the
+  session, and the list is there next time you press Ctrl+Shift+M. Choose a session, type
+  your message, and Claude sends it word for word; its reply comes back to the same session.
+  Only Claude can reach other computers, and only what they send back can be shown: their
+  own conversations can't be read from here. It works between turns, not during one.
+- **Messages from other sessions.** Claude can also send a message to another Claude Code
+  session when you ask in your own words, for example "send the session called Mac Hub a
+  message asking for its hostname". A message that comes back shows in the messages list as **From** and the
   session's name ("From Mac Hub: ..."), not as something you typed, and it's announced in
   any open session. Other sessions reach a Chat Place session by its title, which stays the
   same every turn, so rename it to something they can find. A Chat Place session only acts on
@@ -464,6 +472,7 @@ shows it as plain text instead.
 | Anywhere | Ctrl+E | Export the session to a file |
 | Reply box | Ctrl+/ | Insert a slash command or skill |
 | Anywhere | Ctrl+Shift+F | Attach files or images to the next message |
+| Anywhere | Ctrl+Shift+M | Other machines: list your sessions on other computers and message one |
 | Anywhere | Ctrl+Shift+D | Changed files, and each change to read by line |
 | Anywhere | Ctrl+Shift+U | Usage and context: how full the context is, and plan limits |
 | Anywhere | Alt+V, H | Show Sessions: choose which sessions are listed |

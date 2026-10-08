@@ -4629,3 +4629,104 @@ def test_filing_a_session_takes_it_out_of_ungrouped(frame, env, monkeypatch):
     assert "Quiet one" not in _titles(frame)
     if next_title:
         assert frame.session_list.GetStringSelection().startswith(next_title)
+
+
+# -- other machines (#123) -----------------------------------------------------------
+
+
+def _load_hub_probe_with_listing(frame, listing=None):
+    from thechatplace.transcript import TOOL_RESULT, ChatMessage
+    frame.store.update("own-1", remote_control="on")
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame._chat_messages = [ChatMessage("user", "hello", "", "u1")]
+    if listing is not None:
+        frame._chat_messages.append(ChatMessage(TOOL_RESULT, "ListAgents returned: " + listing,
+                                                "", "r1"))
+
+
+class _FakeTextDialog:
+    value = ""
+
+    def __init__(self, parent, prompt, title, value="", style=0):
+        _FakeTextDialog.prompt = prompt
+
+    def ShowModal(self):
+        return wx.ID_OK
+
+    def GetValue(self):
+        return _FakeTextDialog.value
+
+    def Destroy(self):
+        pass
+
+
+def test_other_machines_needs_an_own_session_with_remote_control(frame, env, fake_runner):
+    frame.on_other_machines()  # nothing loaded
+    assert "Load one first" in env["boxes"][-1]
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame.store.update("own-1", remote_control="off")
+    frame.on_other_machines()
+    assert "Remote Control is off for Hub probe" in env["boxes"][-1]
+    assert fake_runner.instances == []
+
+
+def test_other_machines_refresh_asks_claude_for_the_list(frame, env, fake_runner, monkeypatch):
+    _load_hub_probe_with_listing(frame)
+    seen = {}
+    monkeypatch.setattr(frame, "_choose",
+                        lambda title, prompt, choices: seen.update(p=prompt, c=choices) or 0)
+    frame.on_other_machines()
+    assert "hasn't listed" in seen["p"]
+    assert seen["c"] == ["Refresh the list (asks Claude)"]
+    runner = fake_runner.instances[-1]
+    assert "Call ListAgents" in runner.prompt and runner.remote_control
+    assert "Ctrl+Shift+M again" in env["feedback"][-1]
+
+
+def test_other_machines_sends_your_words_to_the_chosen_session(frame, env, fake_runner,
+                                                             monkeypatch):
+    from thechatplace.ui import main_frame
+    _load_hub_probe_with_listing(
+        frame, "Peer sessions (2):\n  Surface Hub [66e038]  ·  Remote Control  ·  offline\n"
+               "  Mac work [a03676]  ·  Remote Control  ·  idle")
+    seen = {}
+    monkeypatch.setattr(frame, "_choose",
+                        lambda title, prompt, choices: seen.update(c=choices) or 1)
+    _FakeTextDialog.value = "What's your hostname?"
+    monkeypatch.setattr(main_frame.wx, "TextEntryDialog", _FakeTextDialog)
+    frame.on_other_machines()
+    assert seen["c"] == ["Surface Hub, offline", "Mac work, idle",
+                         "Refresh the list (asks Claude)"]
+    assert _FakeTextDialog.prompt == "Message to Mac work (Enter sends):"
+    runner = fake_runner.instances[-1]
+    assert '"Mac work"' in runner.prompt
+    assert runner.prompt.endswith("<<<MESSAGE\nWhat's your hostname?\nMESSAGE>>>")
+    # The instructions aren't read back, or given back if the turn fails.
+    assert runner.typed == ""
+    assert not any("SendMessage" in said for said in env["feedback"])
+    assert env["feedback"][-1].endswith("A reply shows here as from Mac work.")
+
+
+def test_other_machines_not_during_a_turn(frame, env, fake_runner, monkeypatch):
+    _load_hub_probe_with_listing(frame)
+    frame._runners["own-1"] = FakeRunner([], "", "", None)
+    monkeypatch.setattr(frame, "_choose", lambda title, prompt, choices: 0)
+    frame.on_other_machines()
+    # Not queued, where Claude's instructions would show as your message.
+    assert not frame._queued.get("own-1")
+    assert env["feedback"][-1] == ("Hub probe is working. Use Other Machines again when "
+                                   "the turn ends.")
+
+
+def test_other_machines_empty_message_sends_nothing(frame, env, fake_runner, monkeypatch):
+    from thechatplace.ui import main_frame
+    _load_hub_probe_with_listing(
+        frame, "Peer sessions (1):\n  Mac work [a03676]  ·  Remote Control  ·  idle")
+    monkeypatch.setattr(frame, "_choose", lambda title, prompt, choices: 0)
+    _FakeTextDialog.value = "   "
+    monkeypatch.setattr(main_frame.wx, "TextEntryDialog", _FakeTextDialog)
+    frame.on_other_machines()
+    assert fake_runner.instances == []
+    assert env["feedback"][-1] == "Nothing sent: the message was empty."

@@ -52,7 +52,7 @@ import wx
 from ..changes import by_file, summary_text
 from ..codeblocks import find_code_blocks
 from .. import (__version__, about_you, announce, attachments, bugreport, signin, export, hub, platform_paths,
-               usage)
+               remote, usage)
 from ..claude_cli import (MODELS, PERMISSION_MODES, PermissionRequest, ResumeRefused, TurnEvent,
                           TurnRunner, allow_response, answer_questions_response,
                           build_fork_command, build_new_command, build_resume_command,
@@ -69,8 +69,8 @@ from ..sessions import (GROUP_VIEW_PREFIX, IDLE, NEEDS_YOU, SORT_ORDERS, SORT_SP
                         VIEW_ALL, VIEW_NEEDS_YOU, VIEWS, WORKING,
                         SessionInfo, group_view, in_view, view_spoken)
 from ..speech import ANNOUNCE_FULL, NOTIFY_ALL, NOTIFY_OFF, SpeechSettings, default_options, list_speech_options, speaker
-from ..transcript import (ASSISTANT, ERROR, PEER, PLAN, QUESTION, QUEUED, TOOL, ChatMessage,
-                          TranscriptReader)
+from ..transcript import (ASSISTANT, ERROR, PEER, PLAN, QUESTION, QUEUED, TOOL, TOOL_RESULT,
+                          ChatMessage, TranscriptReader)
 from ..updater import AVAILABLE, FAILED, CheckResult, UpdateService
 from . import mac_a11y
 from .a11y import set_accessible_name, set_list_items_accessible
@@ -229,6 +229,9 @@ class MainFrame(wx.Frame):
         self._item(session, "&New Session...\tCtrl+N", self.on_new_session)
         self._item(session, "Change Mo&del...", lambda e: self.on_change_model())
         self._item(session, "Rem&ote Control...", lambda e: self.on_remote_control())
+        # As with Rename Session, every letter is taken, so the key is its shortcut.
+        self._item(session, "Other Machines...\tCtrl+Shift+M",
+                   lambda e: self.on_other_machines())
         self._item(session, "&Refresh\tF5",
                    lambda e: self.refresh_sessions(force=True, resort=True))
         # Delete and Shift+Delete belong to the session list (its char hook):
@@ -2031,6 +2034,85 @@ class MainFrame(wx.Frame):
         self._refresh_list_in_place()
         self._feedback(f"Remote Control {'on' if on else 'off'} for {info.title}, "
                        "from its next turn.")
+
+    def on_other_machines(self):
+        """File, Other Machines (Ctrl+Shift+M, #123): your sessions on other
+        computers, listed and messaged through Claude in the loaded session.
+        Only Claude can reach them (ListAgents, SendMessage), and only with
+        Remote Control on; see remote.py for why it's done this way."""
+        info = self._open
+        if info is None or not info.is_own:
+            wx.MessageBox("Other machines are reached through one of The Chat Place's own "
+                          "sessions with Remote Control on. Load one first, or start one "
+                          "with File, New Session.", APP_NAME,
+                          wx.OK | wx.ICON_INFORMATION, self)
+            return
+        own = self.store.get(info.cli_session_id)
+        if own is None:
+            self._feedback(f"Couldn't find {info.title} in The Chat Place's sessions.")
+            return
+        if not self._remote_control_on(own):
+            wx.MessageBox(f"Remote Control is off for {info.title}, and Claude can only "
+                          "reach your other computers with it on. Turn it on with File, "
+                          "Remote Control, then try again.", APP_NAME,
+                          wx.OK | wx.ICON_INFORMATION, self)
+            return
+        found = remote.latest_list(m.text for m in self._chat_messages
+                                   if m.kind == TOOL_RESULT)
+        sessions = found or []
+        refresh = "Refresh the list (asks Claude)"
+        if found is None:
+            prompt = (f"{info.title} hasn't listed your other computers' sessions yet. "
+                      "Refresh asks Claude for them; the list is here next time:")
+        elif not sessions:
+            prompt = ("Claude's latest list had no sessions on other computers. Each needs "
+                      "Remote Control on, and its computer awake:")
+        else:
+            prompt = ("Send a message to which session? From Claude's latest list. "
+                      "Offline often only means between turns; a message waits for it:")
+        index = self._choose("Other Machines", prompt,
+                             [s.describe() for s in sessions] + [refresh])
+        if index is None:
+            return
+        if index == len(sessions):
+            self._send_generated(info, remote.LIST_PROMPT,
+                                 f"Asking Claude in {info.title} for your other computers' "
+                                 "sessions. Ctrl+Shift+M again once it has answered.")
+            return
+        target = sessions[index]
+        address = remote.addresses(sessions)[index]
+        # One line, so Enter sends.
+        dialog = wx.TextEntryDialog(self, f"Message to {target.name} (Enter sends):",
+                                    "Other Machines", "")
+        try:
+            if dialog.ShowModal() != wx.ID_OK:
+                return
+            text = dialog.GetValue().strip()
+        finally:
+            dialog.Destroy()
+        if not text:
+            self._feedback("Nothing sent: the message was empty.")
+            return
+        self._send_generated(info, remote.send_prompt(address, text),
+                             f"Claude in {info.title} is sending your message to "
+                             f"{target.name}. A reply shows here as from {target.name}.")
+
+    def _send_generated(self, info: SessionInfo, message: str, said: str):
+        """Send a message The Chat Place wrote for you (Other Machines) into
+        an own session. It isn't read back, or given back to the reply box if
+        the turn fails (``spoken=""``): it's instructions to Claude, not your
+        words, and ``said`` tells you what happened instead. It isn't queued
+        either, where it would show and be editable as if you'd typed it."""
+        session_id = info.cli_session_id
+        if session_id in self._runners:
+            self._feedback(f"{info.title} is working. Use Other Machines again when "
+                           "the turn ends.")
+            return
+        problem = self._send_now(session_id, message, spoken="")
+        if problem:
+            wx.MessageBox(problem, APP_NAME, wx.OK | wx.ICON_WARNING, self)
+            return
+        self._feedback(said)
 
     def _desktop_remote_control(self, info: SessionInfo):
         """Remote Control for a desktop app session (#96). The Chat Place
