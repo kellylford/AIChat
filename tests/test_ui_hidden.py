@@ -4319,3 +4319,23 @@ def test_remote_control_for_a_desktop_session_cancelled_does_nothing(frame, env,
     monkeypatch.setattr(frame, "_choose", lambda title, prompt, choices, selection=None: None)
     frame.on_remote_control()
     assert env["opened"] == [] and len(frame.store.all()) == 1
+
+
+def test_ctrl_shift_b_opens_code_blocks_from_the_messages(frame, monkeypatch):
+    calls = []
+    monkeypatch.setattr(frame, "on_code_blocks", lambda: calls.append("blocks"))
+    # AltGr arrives as Ctrl+Alt on Windows, so Ctrl+Alt+Shift+B must do nothing.
+    for focus, shift, alt in ((frame.chat_list, True, False), (frame.chat_list, False, False),
+                              (frame.session_list, True, False), (frame.chat_list, True, True)):
+        monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda f=focus: f))
+        event = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
+        event.SetKeyCode(ord("B"))
+        event.SetControlDown(True)
+        event.SetShiftDown(shift)
+        event.SetAltDown(alt)
+        frame._on_char_hook(event)
+    assert calls == ["blocks"]  # only Ctrl+Shift+B, only in the messages
+    menu = frame._message_menu()
+    labels = [i.GetItemLabel() for i in menu.GetMenuItems()]
+    menu.Destroy()
+    assert "Code &Blocks...\tCtrl+Shift+B" in labels
