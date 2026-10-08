@@ -298,7 +298,6 @@ class MainFrame(wx.Frame):
         bar.Append(view, "&View")
 
         help_menu = wx.Menu()
-        self._item(help_menu, "&User Guide", self.on_user_guide)
         self._item(help_menu, "&Keyboard Shortcuts\tF1", self.on_shortcuts)
         self._item(help_menu, "Check for &Updates...", lambda e: self.check_for_updates(True))
         self._item(help_menu, "Claude Code &Sign-in...", lambda e: self.on_sign_in())
@@ -1325,22 +1324,6 @@ class MainFrame(wx.Frame):
         title = (f"Message from {message.label}" if message.label in ("Claude", "You")
                  else message.label)
         return self._show_page(title, message_page(title, message.text))
-
-    def on_user_guide(self, _event=None):
-        """The user guide (Help → User Guide): open in the default browser."""
-        guide_path = platform_paths.docs_path() / "USER_GUIDE.html"
-        if not guide_path.exists():
-            wx.MessageBox(
-                "The user guide is not installed. For the latest version, visit:\n"
-                "https://github.com/kellylford/AIChat/blob/main/docs/USER_GUIDE.md",
-                "User Guide Not Found", wx.OK | wx.ICON_INFORMATION, self)
-            return
-        try:
-            platform_paths.open_url(guide_path)
-            self._feedback("User guide opened.")
-        except OSError as exc:
-            wx.MessageBox(f"Couldn't open the user guide: {exc}", "User Guide",
-                          wx.OK | wx.ICON_ERROR, self)
 
     def on_shortcuts(self, _event=None):
         """The keyboard shortcuts as a page: a heading and a table per group.
