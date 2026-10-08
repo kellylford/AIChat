@@ -225,3 +225,13 @@ def test_spoken_markdown_reads_a_whole_message():
     assert spoken_markdown("## Summary\nThe build **passes**.\n\n- one\n- two\n\n```py\nx=1\n```\nDone") == (
         "Summary. The build passes. one. two. Code block omitted. Done.")
     assert spoken_markdown("") == "" and spoken_markdown("```\nonly code\n```") == "Code block omitted."
+
+
+def test_peer_message_announcement():
+    """#123: a message from another session names it; silent says nothing."""
+    assert announce.peer_text("Hub", "coordinate", "PR is up. CI running.", ANNOUNCE_FULL) ==         "Hub: message from coordinate. PR is up. CI running."
+    assert announce.peer_text("Hub", "coordinate", "PR is up. CI running.",
+                              ANNOUNCE_SUMMARY) == "Hub: message from coordinate: PR is up."
+    assert announce.peer_text("Hub", "", "hi", ANNOUNCE_FULL) ==         "Hub: message from another session. hi"
+    assert announce.peer_text("Hub", "x", "hi", ANNOUNCE_SILENT) is None
+    assert announce.peer_text("Hub", "x", "  ", ANNOUNCE_FULL) is None

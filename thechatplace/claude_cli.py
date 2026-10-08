@@ -290,11 +290,21 @@ def build_fork_command(executable: str, source_id: str, new_id: str, title: str,
 def build_resume_command(executable: str, session_id: str, permission_mode: str,
                          own_ids: Collection[str],
                          desktop_ids: Collection[str], model: str = "",
-                         allowed_tools: Collection[str] = ()) -> List[str]:
-    """Command for a later turn. Refuses anything but The Chat Place's own sessions."""
+                         allowed_tools: Collection[str] = (), title: str = "") -> List[str]:
+    """Command for a later turn. Refuses anything but The Chat Place's own sessions.
+
+    ``--name`` goes on every turn, not just the first (#123). Other sessions
+    address this one by that name (``SendMessage``); without it each resumed
+    turn got a new made-up name ("project-37", then "project-36"), so a reply
+    sent to the name seen earlier never arrived. Checked with Claude Code
+    2.1.286: ``--resume`` with ``--name`` is accepted and keeps the title.
+    """
     check_resume_allowed(session_id, own_ids, desktop_ids)
-    return [executable, *_common_flags(permission_mode, model, allowed_tools),
-            "--resume", session_id]
+    command = [executable, *_common_flags(permission_mode, model, allowed_tools)]
+    title = " ".join((title or "").split())
+    if title:
+        command += ["--name", title]
+    return command + ["--resume", session_id]
 
 
 # ---------------------------------------------------------------------------

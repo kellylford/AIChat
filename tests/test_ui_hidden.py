@@ -1559,6 +1559,8 @@ def test_a_later_turn_keeps_the_sessions_model(frame, env, fake_runner):
     command = fake_runner.instances[-1].command
     assert command[-2:] == ["--resume", "own-1"]
     assert command[command.index("--model") + 1] == "sonnet"
+    # The session's name goes too, so other sessions can keep reaching it (#123).
+    assert command[command.index("--name") + 1] == "Hub probe"
 
 
 def test_an_old_session_without_a_model_uses_the_default(frame, env, fake_runner):

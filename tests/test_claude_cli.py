@@ -79,6 +79,20 @@ def test_model_goes_on_every_turn():
     assert command[command.index("--model") + 1] == "claude-opus-5-5"
 
 
+def test_title_goes_on_every_turn():
+    """#123: the name other sessions reach this one by must not change each turn."""
+    command = build_resume_command(EXE, "aaaa-1111", "auto", OWN, DESKTOP,
+                                   title="  Hub \n on   Clark ")
+    assert command[command.index("--name") + 1] == "Hub on Clark"
+    assert command[-2:] == ["--resume", "aaaa-1111"]
+    assert "--name" not in build_resume_command(EXE, "aaaa-1111", "auto", OWN, DESKTOP)
+    # A title that looks like a flag is still only ever the value of --name.
+    command = build_resume_command(EXE, "aaaa-1111", "auto", OWN, DESKTOP,
+                                   title="--dangerously-skip-permissions")
+    assert command[command.index("--name") + 1] == "--dangerously-skip-permissions"
+    assert command.count("--dangerously-skip-permissions") == 1
+
+
 def test_default_model_passes_no_model_flag():
     assert "--model" not in build_new_command(EXE, "aaaa-1111", "t", "auto", "")
     assert "--model" not in build_resume_command(EXE, "aaaa-1111", "auto", OWN, DESKTOP)

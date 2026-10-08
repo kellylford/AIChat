@@ -275,3 +275,115 @@ def test_parser_state_survives_feeds():
         "questions": [{"question": "Go?", "options": [{"label": "Yes"}]}]}, "q1"), "m")))
     parser.feed(lines(tool_result("q1", "Your questions have been answered: Yes")))
     assert [m.kind for m in parser.transcript.messages] == [t.QUESTION, t.ANSWER]
+
+
+# -- messages from other sessions (#123) ----------------------------------------
+
+
+def peer_attachment(name, body, delivery_id="d-1", **origin_extra):
+    """A message from another session that arrived while Claude was working,
+    shaped like Claude Code 2.1.286's (synthetic content)."""
+    origin = {"kind": "peer", "from": "bridge:session_X", "name": name,
+              "fromMode": "prompting", "body": body, **origin_extra}
+    return other("attachment", attachment={
+        "type": "queued_command", "commandMode": "prompt", "delivery_id": delivery_id,
+        "prompt": f'<cross-session-message from="bridge:session_X" from-name="{name}">\n'
+                  f"{body}\n</cross-session-message>",
+        "origin": origin}, isMeta=True)
+
+
+def test_peer_message_mid_turn_is_shown_from_its_session():
+    tr = parse_lines(lines(
+        user_text("Ask the Surface"),
+        peer_attachment("Coordinating Agent", "Roll call: SURFACE-TEST."),
+        assistant_block(text_block("It answered."), "msg_1"),
+    ))
+    assert [m.list_line() for m in tr.visible()] == [
+        "You: Ask the Surface",
+        "From Coordinating Agent: Roll call: SURFACE-TEST.",
+        "Claude: It answered."]
+    peer = tr.visible()[1]
+    assert peer.kind == t.PEER and peer.sender == "Coordinating Agent"
+    assert peer.key == "d-1" and not peer.is_activity
+    assert peer.full_text() == "From Coordinating Agent:\nRoll call: SURFACE-TEST."
+    # Arriving mid-turn, it isn't a turn of its own.
+    assert tr.turns == 1
+
+
+def test_peer_message_without_body_falls_back_to_the_prompt():
+    record = peer_attachment("coordinate", "")
+    record["attachment"]["origin"].pop("name")
+    record["attachment"]["prompt"] = ('<cross-session-message from="bridge:session_Y" '
+                                      'from-name="Mac test">\nPR is up\n</cross-session-message>')
+    tr = parse_lines(lines(record))
+    assert [m.list_line() for m in tr.visible()] == ["From Mac test: PR is up"]
+
+
+def test_other_attachments_are_still_skipped():
+    tr = parse_lines(lines(
+        other("attachment", attachment={"type": "deferred_tools_record", "entries": []}),
+        other("attachment", attachment={"type": "queued_command", "prompt": "typed later",
+                                        "origin": {"kind": "human"}}),
+        other("attachment", attachment="not a dict"),
+    ))
+    assert tr.visible(show_activity=True) == [] and tr.unreadable_lines == 0
+
+
+def test_peer_message_that_starts_a_turn_is_not_shown_as_yours():
+    tr = parse_lines(lines(
+        user_text('<cross-session-message from="bridge:session_X" from-name="Hub &amp; co" '
+                  'from-mode="prompting">\nPlease reply with your hostname.\n'
+                  "</cross-session-message>"),
+        assistant_block(text_block("TEST-HOST"), "msg_1"),
+    ))
+    assert [m.list_line() for m in tr.visible()] == [
+        "From Hub & co: Please reply with your hostname.", "Claude: TEST-HOST"]
+    # It started a turn, so changes Claude makes for it belong to that turn.
+    assert tr.turns == 1
+
+
+def test_older_peer_wrapper_with_name_and_encoded_body():
+    tr = parse_lines(lines(user_text(
+        '<cross-session-message from="local_1" name="Review session" encoded="1">\n'
+        "a &lt; b &amp;&amp; c\n</cross-session-message>")))
+    assert [m.list_line() for m in tr.visible()] == ["From Review session: a < b && c"]
+
+
+def test_peer_without_a_name_is_from_another_session_not_an_address():
+    tr = parse_lines(lines(user_text(
+        '<cross-session-message from="bridge:session_Z">hi</cross-session-message>')))
+    assert tr.visible()[0].list_line() == "From another session: hi"
+    record = peer_attachment("", "hello")
+    record["attachment"]["origin"]["from"] = r"uds:\\.\pipe\cc-msg-1"
+    record["attachment"]["prompt"] = '<cross-session-message from="x">hello</cross-session-message>'
+    tr = parse_lines(lines(record))
+    assert tr.visible()[0].list_line() == "From another session: hello"
+
+
+def test_subagent_handback_is_not_a_message_from_another_session():
+    """Same attachment shape as a peer message, but it's Claude's own helper reporting."""
+    handback = other("attachment", attachment={
+        "type": "queued_command", "commandMode": "prompt", "delivery_id": "d-9",
+        "prompt": '<agent-message from="a6005b96fca1385c5">\nReport text\n</agent-message>',
+        "origin": {"kind": "peer", "from": "a6005b96fca1385c5", "name": "general-purpose",
+                   "body": "Report text", "handback": True, "senderTaskId": "a6005b96"}},
+        isMeta=True)
+    no_flags = json.loads(json.dumps(handback))
+    del no_flags["attachment"]["origin"]["handback"]
+    del no_flags["attachment"]["origin"]["senderTaskId"]
+    tr = parse_lines(lines(handback, no_flags))
+    assert tr.visible(show_activity=True) == [] and tr.unreadable_lines == 0
+
+
+def test_empty_peer_message_adds_nothing():
+    tr = parse_lines(lines(
+        user_text('<cross-session-message from="b"></cross-session-message>'),
+        user_text('<cross-session-message from="b"><system-reminder>x</system-reminder>'
+                  "</cross-session-message>"),
+        peer_attachment("Mac", "   ")))
+    assert tr.visible(show_activity=True) == [] and tr.turns == 0
+
+
+def test_typed_text_starting_with_the_tag_is_still_yours():
+    tr = parse_lines(lines(user_text("<cross-session-message>what is this tag?")))
+    assert [m.kind for m in tr.visible(show_activity=True)] != [t.PEER]

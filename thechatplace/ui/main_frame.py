@@ -69,7 +69,7 @@ from ..sessions import (GROUP_VIEW_PREFIX, IDLE, NEEDS_YOU, SORT_ORDERS, SORT_SP
                         VIEW_ALL, VIEW_NEEDS_YOU, VIEWS, WORKING,
                         SessionInfo, group_view, in_view, view_spoken)
 from ..speech import ANNOUNCE_FULL, NOTIFY_ALL, NOTIFY_OFF, SpeechSettings, default_options, list_speech_options, speaker
-from ..transcript import (ASSISTANT, ERROR, PLAN, QUESTION, QUEUED, TOOL, ChatMessage,
+from ..transcript import (ASSISTANT, ERROR, PEER, PLAN, QUESTION, QUEUED, TOOL, ChatMessage,
                           TranscriptReader)
 from ..updater import AVAILABLE, FAILED, CheckResult, UpdateService
 from . import mac_a11y
@@ -1164,7 +1164,7 @@ class MainFrame(wx.Frame):
             try:
                 changed = reader.refresh()
                 transcript = reader.transcript
-                copies = [ChatMessage(m.kind, m.text, m.timestamp, m.key)
+                copies = [ChatMessage(m.kind, m.text, m.timestamp, m.key, m.sender)
                           for m in transcript.messages]
                 wx.CallAfter(self._apply_chat, generation, changed, copies,
                              transcript.unreadable_lines, None,
@@ -1243,6 +1243,14 @@ class MainFrame(wx.Frame):
                 self._feedback(f"Loaded {self._open.title}, {count} "
                                f"message{'s' if count != 1 else ''}.{note}")
             return
+        # A message from another session (#123) is news in any session, own
+        # or not, and even mid-turn: nothing else would announce it.
+        for message in messages:
+            if message.key not in before_keys and message.kind == PEER:
+                text = announce.peer_text(self._open.title, message.sender, message.text,
+                                          self.speech.announce)
+                if text:
+                    self._say(text)
         if self._open.is_own:
             return  # its turn announces the reply when it finishes
         if self._show_activity:
@@ -2525,7 +2533,7 @@ class MainFrame(wx.Frame):
                     exe, own.cli_session_id, own.permission_mode,
                     own_ids={s.cli_session_id for s in self.store.all()},
                     desktop_ids=self._snapshot.desktop_cli_ids, model=own.model,
-                    allowed_tools=own.allowed_tools)
+                    allowed_tools=own.allowed_tools, title=own.title)
             else:
                 # The first turn never got as far as creating the session:
                 # start it again rather than resume something that isn't there.

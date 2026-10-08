@@ -207,6 +207,16 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   desktop app session, File, Remote Control offers to open it in the desktop app, where its
   Remote Control is turned on, or to continue it here as a copy with Remote Control on from the
   first turn; The Chat Place never changes the desktop app's session itself.
+- **Messages from other sessions.** Claude can send a message to another Claude Code
+  session, including one on another of your computers if both are on Remote Control. Ask
+  in your own words, for example "send the session called Mac Hub a message asking for its
+  hostname". A message that comes back shows in the messages list as **From** and the
+  session's name ("From Mac Hub: ..."), not as something you typed, and it's announced in
+  any open session. Other sessions reach a Chat Place session by its title, which stays the
+  same every turn, so rename it to something they can find. A Chat Place session only acts on
+  a message during one of its turns, so a message that arrives between turns waits for the
+  next one. The other computer's own conversation can't be read from here; only what its
+  Claude sends back.
 - **Claude asks, you answer.** In The Chat Place's own sessions, when Claude needs permission
   for something the permission mode doesn't allow, asks you a question, or has a plan for you
   to approve, the turn waits for you. It's announced ("Build needs you. Claude wants to run
