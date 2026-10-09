@@ -408,10 +408,10 @@ leaves it out, it shows all sessions (or Archived or Hidden, where the session i
 A link in a message works too, from the message's formatted page. If a dialog is open, the link
 waits until you close it.
 
-A link only finds a session, as Enter on it does. It never sends a message, runs a turn or
-changes a conversation, so it's safe to follow one from anywhere. A link to a session that's gone says "No session with
-that link", and anything else that starts `thechatplace:` says "That link isn't one The Chat
-Place knows."
+A link only finds a session, as Enter on it does. It never sends a message, runs a turn or changes a
+conversation, so it's safe to follow one from anywhere. A link to a session that's gone says "No
+session with that link", and anything else that starts `thechatplace:` says "That link isn't one The
+Chat Place knows."
 
 **Where links work.** On Windows, the installed copy of The Chat Place sets up
 `thechatplace://` links for your Windows account when it's installed and each time it starts,

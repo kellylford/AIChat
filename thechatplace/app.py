@@ -222,7 +222,8 @@ def main(argv: Optional[list] = None) -> int:
         event, which wx turns into MacOpenURL. One can come before the window
         exists (the app was started by the link), so it waits for it."""
         # Class attributes, not set in OnInit: wxOSX can deliver the link
-        # that started the app before OnInit runs.
+        # that started the app before OnInit runs. There is only ever one
+        # app object, so the class-level list isn't shared with anything.
         frame = None
         waiting: list = []
 
