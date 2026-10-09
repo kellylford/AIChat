@@ -53,7 +53,7 @@ import wx
 from ..changes import by_file, summary_text
 from ..codeblocks import find_code_blocks
 from .. import (__version__, about_you, announce, attachments, bugreport, signin, export, hub, links,
-               platform_paths, remote, usage)
+               platform_paths, remote, usage, workplaces)
 from ..claude_cli import (MODELS, PERMISSION_MODES, PermissionRequest, ResumeRefused, TurnEvent,
                           TurnRunner, allow_response, answer_questions_response,
                           build_fork_command, build_new_command, build_resume_command,
@@ -2676,7 +2676,13 @@ class MainFrame(wx.Frame):
             wx.MessageBox(lookup.problem, APP_NAME, wx.OK | wx.ICON_ERROR, self)
             return
         exe = lookup.path
-        dialog = NewSessionDialog(self, str(platform_paths.default_projects_root()))
+        root = str(platform_paths.default_projects_root())
+        # The folders sessions have used (#154): the store's too, as the
+        # snapshot may not have the newest of them yet.
+        recent = workplaces.recent_folders(
+            list(self._snapshot.sessions) + [s.to_info() for s in self.store.all()])
+        dialog = NewSessionDialog(self, root, recent=recent, projects_root=root,
+                                  feedback=self._feedback)
         try:
             if dialog.ShowModal() != wx.ID_OK:
                 return

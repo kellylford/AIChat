@@ -176,8 +176,22 @@ Anthropic's servers rather than on your computer, so they aren't listed.
 
 Press **Ctrl+N** (File, New Session) and fill in:
 
-- **Folder:** the project folder Claude works in. It starts in your GitHub folder if you have one,
-  otherwise your home folder.
+- **Folder:** the project folder Claude works in. It starts at the folder you used most recently,
+  and Up and Down Arrow (or Alt+Down Arrow to open the list) move through the folders your
+  sessions have used, The Chat Place's and the desktop app's, newest first. You can also type a
+  folder, or choose one with **Browse** (Alt+B).
+- **From GitHub** (Alt+G) lists your GitHub repositories. Type to narrow the list, or type
+  owner/name (or a GitHub address) for anyone's repository, then press Enter. If the repository
+  is already in your GitHub folder, that folder is used; otherwise it's cloned there first, and
+  you hear "Cloning" and then "Cloned". Cancel stops a clone. This uses the GitHub CLI (gh),
+  signed in with gh auth login.
+- **Work in** (Alt+I): **The folder as it is** (it says which branch the folder is on), or
+  **A new worktree**, a separate copy of the repository on a branch of its own, so the
+  session's changes stay apart from the folder and from your other sessions. With a worktree,
+  choose an existing branch in **Branch** (Alt+R), or type a new name to make that branch from
+  the folder's current one. The worktree is made inside the repository's .claude folder when
+  you press Start, where Claude Code and the desktop app make theirs. It stays there when you're
+  done; remove it with git worktree remove.
 - **Title:** optional; without one, it's made from the first words of your message.
 - **Model:** Default (your Claude Code setting), Opus, Sonnet or Haiku, each the latest of its
   kind. File, Change Model changes it later, from the next turn. Fable isn't offered, because on

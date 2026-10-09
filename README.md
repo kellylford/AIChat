@@ -255,6 +255,22 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   anything is sent and says why. **File, Change Model** changes a session's model from its
   next turn. If that first message never reaches Claude (Claude Code not signed in, say), it goes
   back into the reply box and Send starts the session again.
+- **Where a new session works** (#154). The Folder box starts at the folder used most recently,
+  and its list (Up and Down Arrow, or Alt+Down Arrow) is every folder your sessions have used,
+  The Chat Place's and the desktop app's, newest first: a worktree counts as its repository,
+  Cowork sessions and folders that no longer exist are left out. Browse (Alt+B) still opens a
+  folder dialog. **From GitHub** (Alt+G) lists your repositories with `gh repo list` (the GitHub
+  CLI's own sign-in; The Chat Place keeps no token). Type to filter, or type owner/name or a
+  GitHub address for any repository; Enter uses it. A repository already cloned in your GitHub
+  folder (checked by its origin) is used as it is; otherwise it's cloned there with
+  `gh repo clone`, in the background, and Cancel stops the clone and removes what it had made. A
+  folder of that name that isn't the repository is never touched. **Work in** (Alt+I) is The
+  folder as it is (naming its branch) or A new worktree: choose a branch in **Branch** (Alt+R),
+  or type a new name to branch from the folder's current branch, and Start runs `git worktree
+  add` into `<repo>/.claude/worktrees/<branch>`, where Claude Code and the desktop app put
+  theirs, and starts the session there. The worktree is left in place afterwards. Continue Here
+  keeps its session's own folder, so it has none of these. git and gh are run with no shell and
+  never prompt; branch and repository names are checked before either sees them.
 - **Remote Control.** Settings can turn on Remote Control for The Chat Place's sessions, and
   **File, Remote Control** turns it on or off for one session (or back to the Settings
   default). A session on Remote Control can be reached from claude.ai and your other devices

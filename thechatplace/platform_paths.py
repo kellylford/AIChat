@@ -582,6 +582,25 @@ def claude_executable() -> Optional[str]:
     return find_claude().path
 
 
+def find_tool(name: str, which=None) -> Optional[str]:
+    """The ``git`` or ``gh`` program (#154), or None. Only a real program:
+    a ``.cmd`` or ``.bat`` would be run through cmd.exe, which re-reads its
+    arguments (a branch name, say) as a command line. As for ``claude``, an
+    app started from the Finder has no Homebrew folder on its PATH, so a Mac
+    looks there by name."""
+    import shutil
+
+    found = (which or shutil.which)(name)
+    if found and not found.lower().endswith(_SCRIPT_SUFFIXES):
+        return found
+    if sys.platform == "darwin":
+        for folder in ("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"):
+            candidate = Path(folder) / name
+            if candidate.is_file():
+                return str(candidate)
+    return None
+
+
 def run_in_terminal(argv: List[str], script_name: str = "", title: str = "",
                     env: Optional[dict] = None, clear: Iterable[str] = (),
                     clear_prefixes: Iterable[str] = ()):
