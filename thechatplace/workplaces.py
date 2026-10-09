@@ -98,8 +98,8 @@ def _tool_path(path: str) -> str:
     if _TOOL_FOLDERS is None:
         _TOOL_FOLDERS = list(dict.fromkeys(os.path.dirname(t) for t in (find_git(), find_gh())
                                            if t))
-    present = {os.path.normcase(p.rstrip("\/")) for p in path.split(os.pathsep) if p}
-    missing = [f for f in _TOOL_FOLDERS if os.path.normcase(f.rstrip("\/")) not in present]
+    present = {os.path.normcase(p.rstrip("\\/")) for p in path.split(os.pathsep) if p}
+    missing = [f for f in _TOOL_FOLDERS if os.path.normcase(f.rstrip("\\/")) not in present]
     return os.pathsep.join([*missing, path]) if missing else path
 
 

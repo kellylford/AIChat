@@ -6476,7 +6476,8 @@ def test_new_session_offers_recent_folders(frame, env, fake_runner, monkeypatch)
     assert seen["roots"] == (str(env["tmp"]), str(env["tmp"] / "GitHub"))
 
 
-def test_recent_folders_are_offered_unchecked_if_checking_is_slow(frame, env, monkeypatch):
+def test_recent_folders_are_offered_unchecked_if_checking_is_slow(frame, env, fake_runner,
+                                                                   monkeypatch):
     from thechatplace import workplaces
     from thechatplace.ui import main_frame
     real = workplaces.recent_folders
