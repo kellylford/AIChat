@@ -281,8 +281,19 @@ what order. Move Status to the top, for example, and each line starts with "need
 or "idle", so you can stop on the one you want before hearing its title.
 
 The parts are called columns: Title, Folder, Status, New reply, Last activity, Kind (Chat Place
-or Cowork session), Remote Control, Archived, Hidden and Groups. A column with nothing to say for
-a session, such as New reply when there isn't one, is simply left out of that line.
+or Cowork session), Remote Control, Archived, Hidden and Groups, all read at first, and Last
+message, which is read only once you add it. A column with nothing to say for a session, such as
+New reply when there isn't one, is simply left out of that line.
+
+**Last message** tells you where each conversation ended without loading it: "Claude:" or "You:"
+and the start of the last message either of you wrote, as plain text on one line, cut at about
+150 characters with "…". Tool calls and their results don't count. To read the whole message,
+press Enter to load the session, then Enter on the message. A session whose conversation is
+missing or can't be read says nothing in this column. While a session is working, the line you're
+on keeps its last message until the status changes, so you don't hear the line again each time
+Claude writes; the other lines change at once, and you hear the new message when you arrow back.
+With Last message first, lines start with "Claude" or "You", so typing a letter no longer jumps to
+a title; Ctrl+F still finds a session.
 
 The dialog has two lists. **Available columns** (Alt+V in the dialog) are the ones not read;
 **Shown columns** (Alt+S) are the ones read, in order. The buttons Add, Remove, Move Up, Move

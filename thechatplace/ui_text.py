@@ -143,6 +143,41 @@ def markdown_as_text(text: str) -> str:
     return _CODE.sub(r"\1", text)
 
 
+#: About how long the session list's Last message column is (#146): enough
+#: to hear where a conversation ended, short enough to arrow past.
+LAST_MESSAGE_LIMIT = 150
+_FENCE = re.compile(r"^\s*(```|~~~).*$", re.M)
+_LINE_MARK = re.compile(r"^\s*(?:[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+|>\s?)+", re.M)
+_SINGLE_EMPHASIS = re.compile(r"(?<![\w*_])([*_])(?=\S)([^*_\n]+?)(?<=\S)\1(?![\w*_])")
+_TABLE_RULE = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$", re.M)
+
+
+def one_line(text: str, limit: int = LAST_MESSAGE_LIMIT) -> str:
+    """Markdown as one plain line of about ``limit`` characters: no marks,
+    bullets, quote signs or code fences, all whitespace one space, and a
+    long one cut at a word with "…", so a screen reader reads words, not
+    stars and pipes."""
+    text = _FENCE.sub("", text)
+    text = _TABLE_RULE.sub("", text)
+    text = _LINE_MARK.sub("", markdown_as_text(text))
+    text = _SINGLE_EMPHASIS.sub(r"\2", text)
+    text = " ".join(text.replace("|", " ").split())
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    space = cut.rfind(" ")
+    if space > limit // 2:
+        cut = cut[:space]
+    return cut.rstrip(" ,.;:-") + "…"
+
+
+def last_message_line(label: str, text: str) -> str:
+    """The Last message column (#146): "Claude: …" or "You: …", or ""
+    when there's nothing to read."""
+    plain = one_line(text)
+    return f"{label}: {plain}" if plain else ""
+
+
 def shortcuts_html() -> str:
     """The same list as a page body: a heading and a table per group, with
     the keys as row headers, so a screen reader moves by heading (H) and

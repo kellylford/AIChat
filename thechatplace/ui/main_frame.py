@@ -38,6 +38,7 @@ Accessibility decisions, and why
 """
 from __future__ import annotations
 
+import dataclasses
 import os
 import re
 import shutil
@@ -45,7 +46,7 @@ import subprocess
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import wx
 
@@ -60,14 +61,16 @@ from ..claude_cli import (MODELS, PERMISSION_MODES, PermissionRequest, ResumeRef
                           deny_response, fetch_commands, usable_commands,
                           describe_elapsed, model_label, model_matches, model_spoken,
                           new_session_id)
-from ..hub import Snapshot, collect, finished_turns, last_reply_from_tail
+from ..hub import (LAST_MESSAGES, Snapshot, collect, fill_last_message, finished_turns,
+                   last_reply_from_tail)
 from ..own_store import OwnSession, OwnSessionStore
 from ..groups import GroupStore
 from ..prompts import (MAX_NAME as PROMPT_NAME_MAX, PromptStore, clean_text as clean_prompt_text,
                        suggested_name)
 from ..hidden import HiddenStore
 from ..titles import MAX_TITLE, TitleStore, clean_title
-from ..sessions import (GROUP_VIEW_PREFIX, IDLE, NEEDS_YOU, OWN, SORT_ORDERS,
+from ..sessions import (FIELD_ACTIVITY, FIELD_LAST_MESSAGE, GROUP_VIEW_PREFIX, IDLE,
+                        NEEDS_YOU, OWN, SORT_ORDERS,
                         SORT_SPOKEN, VIEW_ALL, VIEW_ARCHIVED, VIEW_HIDDEN, VIEW_NEEDS_YOU, VIEWS,
                         WORKING,
                         SessionInfo, field_short_name, group_view, in_view, view_spoken)
@@ -165,6 +168,10 @@ class MainFrame(wx.Frame):
         self._previous_states: Dict[str, str] = {}
         self._first_snapshot = True
         self._list_keys: List[str] = []
+        #: What each row was last written from, apart from its age and last
+        #: message, and that last message: so a refresh can tell when the
+        #: row under the reader changed only in those (#146).
+        self._row_basis: Dict[str, Tuple[str, str]] = {}
         self._runners: Dict[str, TurnRunner] = {}
         self._denials: Dict[str, List[str]] = {}
         self._pending_refresh: Optional[bool] = None
@@ -709,10 +716,13 @@ class MainFrame(wx.Frame):
         running = set(self._runners)
         waiting = self._waiting()
         order = self.speech.session_order
+        # Each transcript's end is read only while the column is shown (#146).
+        last_messages = FIELD_LAST_MESSAGE in self.speech.session_fields
 
         def work():
             try:
-                snap = collect(own, running, waiting=waiting, order=order)
+                snap = collect(own, running, waiting=waiting, order=order,
+                               last_messages=last_messages)
                 ended = finished_turns(self._previous_states, snap.sessions)
                 replies = {}
                 if not self._first_snapshot and self.speech.announce_all_sessions:
@@ -860,9 +870,36 @@ class MainFrame(wx.Frame):
         ``rewrite`` rewrites the selected row even when only its age differs:
         the columns changed (#134), so moving or removing Last activity isn't
         a clock tick.
+
+        The selected row isn't rewritten for a clock tick, nor for a new last
+        message (#146) while its session is working: rewriting it makes a
+        screen reader read it again, and Claude can write several messages a
+        turn. A change of status rewrites it, as before, bringing the last
+        message with it; so does a new last message in a session that isn't
+        working (its turn ended between two refreshes).
         """
         now = int(time.time() * 1000)
         by_key = {s.key: s for s in sessions}
+        fields = self.speech.session_fields
+        steady_fields = [f for f in fields if f not in (FIELD_ACTIVITY, FIELD_LAST_MESSAGE)]
+
+        def basis(info: SessionInfo) -> Tuple[str, str]:
+            message = info.last_message if FIELD_LAST_MESSAGE in fields else ""
+            return info.list_line(now, steady_fields), message
+
+        def quiet(key: str, old_line: str, line: str) -> bool:
+            """Leave the selected row as it is: only quiet parts changed."""
+            if rewrite or key != selected_key:
+                return False
+            before = self._row_basis.get(key)
+            if before is None:
+                return _same_but_age(old_line, line)
+            steady, message = basis(by_key[key])
+            return before[0] == steady and (before[1] == message
+                                            or by_key[key].state == WORKING)
+
+        def wrote(key: str):
+            self._row_basis[key] = basis(by_key[key])
         index = self.session_list.GetSelection()
         selected_key = (self._list_keys[index]
                         if index != wx.NOT_FOUND and index < len(self._list_keys) else None)
@@ -872,16 +909,18 @@ class MainFrame(wx.Frame):
             keys += [s.key for s in sessions if s.key not in set(self._list_keys)]
         else:
             keys = [s.key for s in sessions]
-        lines = [by_key[k].list_line(now, self.speech.session_fields) for k in keys]
+        lines = [by_key[k].list_line(now, fields) for k in keys]
+        self._row_basis = {k: v for k, v in self._row_basis.items() if k in by_key}
 
         if keys == self._list_keys:
             for i, line in enumerate(lines):
                 if self.session_list.GetString(i) == line:
+                    wrote(keys[i])
                     continue
-                if i == index and not rewrite and _same_but_age(
-                        self.session_list.GetString(i), line):
+                if quiet(keys[i], self.session_list.GetString(i), line):
                     continue  # don't make the reader re-read for a clock tick
                 self.session_list.SetString(i, line)
+                wrote(keys[i])
             return
 
         if keep_order:
@@ -891,13 +930,16 @@ class MainFrame(wx.Frame):
                     self.session_list.Delete(i)
             kept = [k for k in self._list_keys if k in by_key]
             for i, key in enumerate(kept):
-                line = by_key[key].list_line(now, self.speech.session_fields)
-                if self.session_list.GetString(i) != line and not (
-                        key == selected_key and not rewrite
-                        and _same_but_age(self.session_list.GetString(i), line)):
+                line = lines[i]
+                if self.session_list.GetString(i) == line:
+                    wrote(key)
+                elif not quiet(key, self.session_list.GetString(i), line):
                     self.session_list.SetString(i, line)
+                    wrote(key)
             if len(keys) > len(kept):
                 self.session_list.Append(lines[len(kept):])
+                for key in keys[len(kept):]:
+                    wrote(key)
             self._list_keys = keys
             if selected_key in keys:
                 if self.session_list.GetSelection() != keys.index(selected_key):
@@ -909,6 +951,8 @@ class MainFrame(wx.Frame):
 
         self.session_list.Set(lines)
         self._list_keys = keys
+        for key in keys:
+            wrote(key)
         if not lines:
             return
         if selected_key in keys:
@@ -3602,7 +3646,13 @@ class MainFrame(wx.Frame):
         """View, Session List Columns (#134): choose which parts each session
         row reads and in what order; OK saves the choice and rewrites the rows
         at once, on the same session."""
-        sample = self._selected_session() or _sample_session()
+        sample = self._selected_session()
+        if sample is None:
+            sample = _sample_session()
+        elif FIELD_LAST_MESSAGE not in self.speech.session_fields:
+            # Not read while the column is off, so the preview reads this
+            # one session's now: one file's end, as the list will say it.
+            sample = dataclasses.replace(sample, last_message=fill_last_message(sample))
         dialog = SessionColumnsDialog(self, self.speech.session_fields, sample, self._feedback)
         try:
             if dialog.ShowModal() != wx.ID_OK:
@@ -3613,8 +3663,16 @@ class MainFrame(wx.Frame):
         if fields == self.speech.session_fields:
             self._feedback("Session list columns unchanged.")
             return
+        added_message = (FIELD_LAST_MESSAGE in fields
+                         and FIELD_LAST_MESSAGE not in self.speech.session_fields)
         self.speech.session_fields = fields
         self._refresh_list_in_place(rewrite=True)
+        if added_message:
+            # The transcripts' ends aren't read while the column is off:
+            # read them now, so the rows say their last messages at once.
+            self.refresh_sessions()
+        elif FIELD_LAST_MESSAGE not in fields:
+            LAST_MESSAGES.keep_only([])  # nothing to keep them for
         names = ", ".join(field_short_name(f) for f in fields)
         try:
             self.speech.save()
@@ -4506,7 +4564,8 @@ def _sample_session() -> SessionInfo:
                        cwd="Projects/Example", cli_session_id="", state=NEEDS_YOU,
                        detail="Choose a version number", unread=True,
                        last_activity_ms=int(time.time() * 1000) - 120_000, remote=True,
-                       groups=("Work",))
+                       groups=("Work",),
+                       last_message="Claude: Which version number should this release be?")
 
 
 def _same_but_age(old: str, new: str) -> bool:
