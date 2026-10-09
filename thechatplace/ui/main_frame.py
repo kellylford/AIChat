@@ -148,6 +148,7 @@ class MainFrame(wx.Frame):
         # The newer version the last check found, "" if none (#141): Help's
         # update item says it.
         self._update_available = ""
+        self._menu_open = False  # a menu is open: no dialog over it (#141)
         self.speech = SpeechSettings.load()
         self._speech_options = None
         threading.Thread(target=self._probe_speech, daemon=True).start()
@@ -222,6 +223,8 @@ class MainFrame(wx.Frame):
         self.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
         self.Bind(wx.EVT_CLOSE, self._on_close)
         self.Bind(wx.EVT_ACTIVATE, self._on_activate)
+        self.Bind(wx.EVT_MENU_OPEN, lambda e: self._on_menu_open_close(e, True))
+        self.Bind(wx.EVT_MENU_CLOSE, lambda e: self._on_menu_open_close(e, False))
 
         self._list_timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, lambda e: self.refresh_sessions(), self._list_timer)
@@ -3545,6 +3548,10 @@ class MainFrame(wx.Frame):
 
         self._pool.submit(work)
 
+    def _on_menu_open_close(self, event, is_open: bool):
+        event.Skip()
+        self._menu_open = is_open
+
     def _set_update_available(self, version: str):
         """Help's update item names the version running, or the newer one
         a check found (#141). The label changes only while the menu is
@@ -3584,8 +3591,9 @@ class MainFrame(wx.Frame):
             return
         decision = installed_notice(self.speech.last_run_version, __version__, installed,
                                     self.speech.update_installed_notice)
-        if decision.record:
-            # Recorded before anything is shown, so it's shown once even if
+        if decision.record and not self.speech.unreadable:
+            # Never over a settings file that couldn't be read: that would
+            # replace every setting with the defaults. Recorded before anything is shown, so it's shown once even if
             # The Chat Place is closed before the dialog appears.
             self.speech.last_run_version = __version__
             try:
@@ -3595,16 +3603,23 @@ class MainFrame(wx.Frame):
         if decision.show:
             self._show_update_installed_when_free(__version__, UPDATE_NOTICE_TRIES)
 
-    def _show_update_installed_when_free(self, version: str, tries: int):
+    def _show_update_installed_when_free(self, version: str, tries: int,
+                                         free_before: bool = False):
         """Only over the main window, active, with nothing else in front of
         it: never stacked on a startup warning, a sign-in question or a
-        dialog you've opened, and never popping up while you're in another
-        app. If that moment doesn't come, the status bar says it instead."""
+        dialog you've opened, never over an open menu, and never popping up
+        while you're in another app. It must have been free at the last try
+        too, so it doesn't arrive the moment you switch back and start
+        typing. If that moment doesn't come, the status bar says it instead.
+
+        IsActive, not wx.GetActiveWindow: on a Mac the latter is always
+        None. A native message box (the startup warnings) makes the frame
+        inactive on Windows, and a wx dialog disables it."""
         if not self or self._closing:
             return
-        free = (self.IsShown() and not self.IsIconized() and not self._modal_open()
-                and wx.GetActiveWindow() is self)
-        if free:
+        free = (self.IsShown() and not self.IsIconized() and self.IsActive()
+                and self.IsEnabled() and not self._menu_open and not self._modal_open())
+        if free and free_before:
             self.show_update_installed(version)
             return
         if tries <= 1:
@@ -3612,7 +3627,7 @@ class MainFrame(wx.Frame):
             return
         self._update_notice_wait = wx.CallLater(UPDATE_NOTICE_RETRY_MS,
                                                 self._show_update_installed_when_free,
-                                                version, tries - 1)
+                                                version, tries - 1, free)
 
     def show_update_installed(self, version: str):
         def open_notes():

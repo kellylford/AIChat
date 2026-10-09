@@ -188,10 +188,12 @@ class SpeechSettings:
         path = path or DEFAULT_SETTINGS_PATH
         try:
             raw = json.loads(Path(path).read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return cls()
         except Exception:
-            return cls()
+            return cls._unreadable()
         if not isinstance(raw, dict):
-            return cls()
+            return cls._unreadable()
         settings = cls()
         level = str(raw.get("announce", ANNOUNCE_FULL))
         settings.announce = level if level in ANNOUNCE_LEVELS else ANNOUNCE_FULL
@@ -219,6 +221,17 @@ class SpeechSettings:
         settings.update_installed_notice = raw.get("update_installed_notice") is not False
         last = raw.get("last_run_version", "")
         settings.last_run_version = last.strip() if isinstance(last, str) else ""
+        return settings
+
+    #: True when settings.json was there but couldn't be read, so these are
+    #: defaults standing in for it. Not a field: never saved. Nothing saves
+    #: on its own over such a file (#141), only a choice you make.
+    unreadable = False
+
+    @classmethod
+    def _unreadable(cls) -> "SpeechSettings":
+        settings = cls()
+        settings.unreadable = True
         return settings
 
     def save(self, path: Optional[Path] = None) -> None:

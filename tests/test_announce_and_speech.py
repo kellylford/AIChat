@@ -253,21 +253,3 @@ def test_update_notice_settings_round_trip_and_default(tmp_path):
     odd = SpeechSettings.load(path)
     assert odd.update_installed_notice is True
     assert odd.last_run_version == ""
-
-
-def test_update_notice_settings_round_trip_and_default(tmp_path):
-    # #141: the notice is on unless turned off; the last version run is kept.
-    path = tmp_path / "speech.json"
-    settings = SpeechSettings.load(path)
-    assert settings.update_installed_notice is True
-    assert settings.last_run_version == ""
-    settings.update_installed_notice = False
-    settings.last_run_version = "0.1.4"
-    settings.save(path)
-    again = SpeechSettings.load(path)
-    assert again.update_installed_notice is False
-    assert again.last_run_version == "0.1.4"
-    path.write_text('{"update_installed_notice": "no", "last_run_version": 7}', encoding="utf-8")
-    odd = SpeechSettings.load(path)
-    assert odd.update_installed_notice is True
-    assert odd.last_run_version == ""

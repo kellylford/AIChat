@@ -392,8 +392,8 @@ VoiceOver Utility, General. Your sessions and settings are in
 ## Updates
 
 The installed app checks for a new version a few seconds after it starts, and whenever you choose
-Help, Check for Updates. At start it only speaks up when there is a new version, and then only
-says so: it never opens a dialog you didn't ask for. From Help it always says what it found ("up to
+Help, Check for Updates. At start the check only speaks up when there is a new version, and then
+only says so: it never asks you anything you didn't ask for. From Help it always says what it found ("up to
 date", "no release has been published yet", or an error), even with announcements set to silent.
 
 The Help menu's update item always says which version you're running, as QuickMail's does:

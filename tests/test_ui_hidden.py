@@ -5817,6 +5817,8 @@ def test_update_installed_notice_survives_a_failed_settings_save(frame, env, not
     frame.speech.last_run_version = "0.1.3"
     run_notice(frame, True)
     assert notice == ["0.1.4"]
+    # Kept in memory, so the next save (Settings, OK) records it.
+    assert frame.speech.last_run_version == "0.1.4"
 
 
 def test_update_installed_waits_for_a_free_main_window(frame, env, monkeypatch):
@@ -5829,23 +5831,88 @@ def test_update_installed_waits_for_a_free_main_window(frame, env, monkeypatch):
     # The hidden test window is never free: it tries again a second later...
     frame._show_update_installed_when_free("0.1.4", 3)
     assert later == [(main_frame.UPDATE_NOTICE_RETRY_MS, frame._show_update_installed_when_free,
-                      ("0.1.4", 2))]
+                      ("0.1.4", 2, False))]
     assert shown == []
     # ...and on its last try says so on the status bar instead.
     frame._show_update_installed_when_free("0.1.4", 1)
     assert frame.GetStatusBar().GetStatusText() == "The Chat Place was updated to 0.1.4."
     assert shown == [] and len(later) == 1
-    # Free: shown at once.
+    # Shown, in front, nothing over it: free, but only shown once it was
+    # free at the try before too (not the moment you switch back).
     monkeypatch.setattr(frame, "IsShown", lambda: True)
+    monkeypatch.setattr(frame, "IsActive", lambda: True)
     monkeypatch.setattr(frame, "_modal_open", lambda: False)
-    monkeypatch.setattr(main_frame.wx, "GetActiveWindow", lambda: frame)
+    later.clear()
     frame._show_update_installed_when_free("0.1.4", 3)
+    assert shown == [] and later[-1][2] == ("0.1.4", 2, True)
+    frame._show_update_installed_when_free("0.1.4", 2, True)
     assert shown == ["0.1.4"]
-    # A dialog in front (a startup warning, say): not stacked on it.
-    shown.clear()
-    monkeypatch.setattr(frame, "_modal_open", lambda: True)
-    frame._show_update_installed_when_free("0.1.4", 1)
+    # Not stacked on a dialog, over an open menu, or while you're in another app.
+    for name, value in (("_modal_open", lambda: True), ("IsActive", lambda: False),
+                        ("IsEnabled", lambda: False)):
+        shown.clear()
+        with monkeypatch.context() as m:
+            m.setattr(frame, name, value)
+            frame._show_update_installed_when_free("0.1.4", 3, True)
+        assert shown == [], name
+    frame._menu_open = True
+    frame._show_update_installed_when_free("0.1.4", 3, True)
     assert shown == []
+    frame._menu_open = False
+
+
+def test_update_installed_notice_is_never_written_over_unreadable_settings(frame, env, notice):
+    from thechatplace.speech import SpeechSettings
+    path = env["tmp"] / "speech.json"
+    path.write_text("{not json", encoding="utf-8")
+    frame.speech = SpeechSettings.load(path)
+    assert frame.speech.unreadable
+    run_notice(frame, True)
+    assert path.read_text(encoding="utf-8") == "{not json"
+    assert notice == []
+
+
+def test_update_installed_notice_when_installed_cannot_be_told(frame, env, notice):
+    class Broken:
+        @property
+        def can_update(self):
+            raise RuntimeError("no velopack")
+    frame.speech.last_run_version = "0.1.3"
+    frame.updates = Broken()
+    frame.check_update_installed()
+    frame._pool.submit(lambda: None).result()
+    pump(lambda: False, timeout=0.2)
+    assert notice == [] and frame.speech.last_run_version == "0.1.3"
+
+
+def test_update_installed_notice_does_nothing_once_closing(frame, env, notice):
+    frame.speech.last_run_version = "0.1.3"
+    frame._closing = True
+    try:
+        frame._on_update_installed_known(True)
+    finally:
+        frame._closing = False
+    assert notice == [] and frame.speech.last_run_version == "0.1.3"
+
+
+def test_startup_schedules_the_notice_and_close_stops_it(env, monkeypatch):
+    from thechatplace.ui import main_frame
+    store = OwnSessionStore(env["tmp"] / "own.json")
+    window = main_frame.MainFrame(store=store, check_updates_at_start=True)
+    try:
+        assert window._startup_update_notice.IsRunning()
+        window._update_notice_wait = wx.CallLater(60_000, lambda: None)
+        window._startup_update_check.Stop()
+        window.Close(force=True)
+        assert not window._startup_update_notice.IsRunning()
+        assert not window._update_notice_wait.IsRunning()
+    finally:
+        window._list_timer.Stop()
+        window._chat_timer.Stop()
+        window._pool.shutdown(wait=True)
+        if window:
+            window.Destroy()
+        wx.GetApp().ProcessPendingEvents()
 
 
 def test_update_installed_dialog(frame, env):
@@ -5857,10 +5924,10 @@ def test_update_installed_dialog(frame, env):
         assert dialog.message.GetLabel() == "The Chat Place was updated to 0.1.4."
         assert dialog.whats_new.GetLabel() == "See &what's new in 0.1.4"
         assert dialog.whats_new.GetName() == "See what's new in 0.1.4"
-        assert dialog.close.GetId() == wx.ID_CANCEL and dialog.GetEscapeId() == wx.ID_CANCEL
+        assert dialog.close_button.GetId() == wx.ID_CANCEL and dialog.GetEscapeId() == wx.ID_CANCEL
         # Tab order: See What's New first, then Close.
         buttons = [c for c in dialog.GetChildren() if isinstance(c, wx.Button)]
-        assert buttons == [dialog.whats_new, dialog.close]
+        assert buttons == [dialog.whats_new, dialog.close_button]
         dialog.see_whats_new()
         assert opened == [True]
     finally:
