@@ -161,10 +161,14 @@ def frame(env):
     assert pump(lambda: window.session_list.GetCount() == 3)
     yield window
     window._runners.clear()
-    window._list_timer.Stop()
-    window._chat_timer.Stop()
-    window._link_timer.Stop()
+    # All of them, as closing does: a delayed call left running (the
+    # sign-in check, 4 seconds in) would fire into this destroyed window
+    # during a later test, which crashes wx on a Mac.
+    window.stop_timers()
     window._pool.shutdown(wait=True)
+    # What the background work handed back runs now, while the window is
+    # whole, not after Destroy, when a Mac still has it half there.
+    wx.GetApp().ProcessPendingEvents()
     window.Destroy()
     wx.GetApp().ProcessPendingEvents()
 
@@ -2175,9 +2179,7 @@ def test_saved_sort_order_is_used_and_checked_at_start(env):
         assert [o for o, item in window.sort_items.items() if item.IsChecked()] == ["folder"]
         assert window.session_list.GetString(0).startswith("Other, Alpha")
     finally:
-        window._list_timer.Stop()
-        window._chat_timer.Stop()
-        window._link_timer.Stop()
+        window.stop_timers()
         window._pool.shutdown(wait=True)
         window.Destroy()
         wx.GetApp().ProcessPendingEvents()
@@ -4234,9 +4236,7 @@ def test_long_session_titles_leave_the_reply_box_its_width(env):
         assert window.reply_text.GetSize().width > 300
         assert window.session_list.GetSize().width < window.GetSize().width / 2
     finally:
-        window._list_timer.Stop()
-        window._chat_timer.Stop()
-        window._link_timer.Stop()
+        window.stop_timers()
         window._pool.shutdown(wait=True)
         window.Destroy()
 
@@ -5761,6 +5761,8 @@ def test_a_speech_problem_after_the_window_closed_is_ignored(env):
     from thechatplace.ui.main_frame import MainFrame
     closed = MainFrame()
     report = closed._on_speech_problem
+    closed.stop_timers()  # its delayed calls must not reach it once it's gone
+    closed._pool.shutdown(wait=True)
     closed.Destroy()
     wx.Yield()
     report("not spoken: NVDA is running but didn't answer (error 1722)")  # no error
@@ -5981,9 +5983,7 @@ def test_startup_schedules_the_notice_and_close_stops_it(env, monkeypatch):
         assert not window._startup_update_notice.IsRunning()
         assert not window._update_notice_wait.IsRunning()
     finally:
-        window._list_timer.Stop()
-        window._chat_timer.Stop()
-        window._link_timer.Stop()
+        window.stop_timers()
         window._pool.shutdown(wait=True)
         if window:
             window.Destroy()
