@@ -5785,3 +5785,12 @@ def test_settings_says_why_the_last_announcement_was_not_spoken(frame, monkeypat
         assert dialog.speech_problem is None
     finally:
         dialog.Destroy()
+
+
+def test_a_speech_problem_goes_beside_what_the_status_bar_says_now(frame, env):
+    """Not beside an older announcement: a confirmation can be what failed."""
+    frame._say("Hub probe replied.")
+    frame._feedback("Sent. Hub probe is working.")
+    frame._on_speech_problem("not spoken: JAWS is running but refused the text")
+    assert frame._status_latest == ("Sent. Hub probe is working. (Speech: Not spoken: JAWS is "
+                                    "running but refused the text.)")

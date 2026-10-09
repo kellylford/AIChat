@@ -614,8 +614,10 @@ class MainFrame(wx.Frame):
         if not self:
             return  # the window closed before this ran
         message = f"Speech: {reason[0].upper()}{reason[1:]}."
-        last = self._last_announcement
-        self._status(f"{last} ({message})" if last else message)
+        # Beside whatever the status bar says now, which is what was just
+        # spoken (an announcement or a confirmation), not an older one.
+        current = self._status_latest
+        self._status(f"{current} ({message})" if current else message)
         if self.speech.notifications != NOTIFY_OFF:
             self._notifier.show("Announcements aren't being spoken",
                                 f"{reason[0].upper()}{reason[1:]}.", None)

@@ -59,7 +59,9 @@ def error_code(exc: BaseException) -> str:
     for attribute in ("hresult", "winerror"):
         code = getattr(exc, attribute, None)
         if isinstance(code, int):
-            return f"error 0x{code & 0xFFFFFFFF:08X}" if code < 0 or code > 0xFFFF                 else f"error {code}"
+            if code < 0 or code > 0xFFFF:  # an HRESULT
+                return f"error 0x{code & 0xFFFFFFFF:08X}"
+            return f"error {code}"
     return type(exc).__name__
 
 

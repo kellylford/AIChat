@@ -354,6 +354,7 @@ def test_a_hung_screen_reader_does_not_stop_speech(tmp_path, monkeypatch):
     still out, later announcements aren't sent (no pile of hung threads) and
     no Windows voice talks over the screen reader."""
     monkeypatch.setattr(speech, "SCREEN_READER_TIMEOUT", 0.2)
+    monkeypatch.setattr(speech, "SCREEN_READER_FIRST_TIMEOUT", 0.2)
     release = threading.Event()
 
     class Hanging(FakeReaders):
@@ -368,14 +369,36 @@ def test_a_hung_screen_reader_does_not_stop_speech(tmp_path, monkeypatch):
     s.on_problem = problems.append
     s.speak("one", SpeechSettings())
     assert wait_until(lambda: problems)
-    assert problems == ["not spoken: the screen reader didn't answer within 0.2 seconds"]
+    assert problems == [speech.NOT_ANSWERING]
     assert wait_until(lambda: not s.busy())
     s.speak("two", SpeechSettings())
-    assert wait_until(lambda: s.last_route ==
-                      "not spoken: the screen reader is still not answering")
+    assert wait_until(lambda: len(log_lines(tmp_path, routes=True)) == 2)
+    assert s.last_route == speech.NOT_ANSWERING
+    assert problems == [speech.NOT_ANSWERING]  # one hang, one report
     assert readers.calls == ["one"] and FakeEngine.started == []
     release.set()
     assert wait_until(lambda: not s._reader_call.is_alive())
     s.speak("three", SpeechSettings())
     assert wait_until(lambda: s.last_route == "spoke through NVDA")
     assert readers.calls == ["one", "three"]
+
+
+@windows_screen_readers
+def test_the_first_call_gets_longer_for_its_one_time_setup(tmp_path, monkeypatch):
+    """Importing comtypes and loading NVDA's client can be slow on a busy
+    machine at start-up; that mustn't be reported as a hung screen reader."""
+    monkeypatch.setattr(speech, "SCREEN_READER_TIMEOUT", 0.05)
+
+    class SlowFirst(FakeReaders):
+        def speak(self, text, engine, interrupt):
+            self.calls.append(text)
+            if len(self.calls) == 1:
+                time.sleep(0.3)
+            return Outcome(spoke="nvda", running=["nvda"])
+
+    s = make(tmp_path, monkeypatch, SlowFirst())
+    problems = []
+    s.on_problem = problems.append
+    s.speak("first", SpeechSettings())
+    assert wait_until(lambda: s.last_route == "spoke through NVDA")
+    assert problems == []

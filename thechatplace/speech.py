@@ -118,6 +118,12 @@ _SCREEN_READER_ENGINES = {"auto", "jaws", "nvda", "voiceover"}
 #: Seconds a JAWS or NVDA call may take before the screen reader is treated
 #: as not answering. Both take the text in well under a tenth of a second.
 SCREEN_READER_TIMEOUT = 3.0
+#: The first call also imports comtypes, loads NVDA's client and scans the
+#: processes, which a busy machine at start-up can make slow.
+SCREEN_READER_FIRST_TIMEOUT = 15.0
+#: What a hung JAWS or NVDA call is reported as, the same each time, so one
+#: hang is one notification.
+NOT_ANSWERING = "not spoken: the screen reader isn't answering"
 #: The engine settings that speak through JAWS or NVDA from this process (#98).
 _WINDOWS_SCREEN_READER_ENGINES = {"auto", "jaws", "nvda"}
 
@@ -444,6 +450,7 @@ class Speaker:
         #: "" once one is spoken again (Settings shows it).
         self.last_problem = ""
         self._reader_call: Optional[threading.Thread] = None
+        self._readers_warm = False
 
     def _readers(self):
         if self._screen_readers is None:
@@ -617,7 +624,7 @@ class Speaker:
         """
         with self._lock:
             if self._reader_call is not None and self._reader_call.is_alive():
-                return None, "not spoken: the screen reader is still not answering"
+                return None, NOT_ANSWERING
         result = {}
 
         def call():
@@ -647,10 +654,10 @@ class Speaker:
         with self._lock:
             self._reader_call = thread
         thread.start()
-        thread.join(SCREEN_READER_TIMEOUT)
+        thread.join(SCREEN_READER_TIMEOUT if self._readers_warm else SCREEN_READER_FIRST_TIMEOUT)
         if thread.is_alive():
-            return None, (f"not spoken: the screen reader didn't answer within "
-                          f"{SCREEN_READER_TIMEOUT:g} seconds")
+            return None, NOT_ANSWERING
+        self._readers_warm = True
         return result.get("outcome"), ""
 
     def _settle(self, route: str, problem: str = "") -> None:
