@@ -18,8 +18,19 @@ You need:
 
 - Windows 10 or 11, or a Mac with Apple silicon.
 - Claude Code, installed with its native installer and signed in to your Claude subscription.
-  This is the `claude` command, using the same sign-in as the Claude desktop app. The npm version
-  of Claude Code isn't used.
+  This is the `claude` command, using the same sign-in as the Claude desktop app. The desktop
+  app's own copy of Claude Code isn't meant for other programs, so the command is needed even if
+  you use the desktop app. An old npm install of Claude Code isn't used.
+
+To install Claude Code, run its installer in a terminal, then run `claude` once to sign in:
+
+- Mac (Terminal): `curl -fsSL https://claude.ai/install.sh | bash`
+- Windows (PowerShell): `irm https://claude.ai/install.ps1 | iex`
+- Windows (Command Prompt):
+  `curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd && del install.cmd`
+
+Or let The Chat Place do it: Help, Claude Code Sign-in offers to install Claude Code when it
+can't find it, and to sign you in when it isn't signed in.
 
 The Chat Place never uses an API key. Reading sessions costs nothing, because everything it reads
 is on your own computer. Messages you send in its own sessions are Claude Code turns, which count
@@ -40,6 +51,9 @@ VoiceOver Utility, General.
 
 If Claude Code isn't signed in, your sessions are still listed; only sending a message needs a
 sign-in. Help, Claude Code Sign-in says whether it is signed in, and offers to sign you in if not.
+The sign-in opens in its own window (Terminal, on a Mac), and The Chat Place checks again when
+you've finished. If it can't tell, it says why, for example that Claude Code is too old to ask:
+running `claude update` in a terminal fixes that.
 
 ## The window
 

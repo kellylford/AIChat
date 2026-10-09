@@ -1418,7 +1418,8 @@ def test_queued_message_refused_at_send_time_is_spoken_and_goes_to_its_draft(
     assert len(fake_runner.instances) == 1
     assert env["boxes"] == []  # no dialog he didn't ask for
     assert env["feedback"][-1] == ("Your queued message for Hub probe wasn't sent: Claude "
-                                   "Code isn't installed. It's back in the message box.")
+                                   "Code isn't installed. To install it, choose Claude Code "
+                                   "Sign-in on the Help menu. It's back in the message box.")
     assert frame._drafts["own-1"] == "later\n\ntyped elsewhere"
     assert frame._last_announcement == env["feedback"][-1]  # Ctrl+Shift+R repeats it
 
@@ -3548,8 +3549,8 @@ def test_sign_in_is_checked_and_offered(frame, env, monkeypatch):
     class Process:
         def wait(self):
             return 0
-    monkeypatch.setattr(main_frame.subprocess, "Popen",
-                        lambda command, **k: started.append((command, k)) or Process())
+    monkeypatch.setattr(main_frame.platform_paths, "run_in_terminal",
+                        lambda command, *a, **k: started.append((command, k)) or Process())
     frame._on_sign_in_result(signin.SignIn(True, signed_in=False), manual=True)
     assert shown[-1][0].startswith("Claude Code isn't signed in.")
     assert started[0][0] == ["claude", "auth", "login"]
@@ -3558,7 +3559,7 @@ def test_sign_in_is_checked_and_offered(frame, env, monkeypatch):
     frame._sign_in_asked = False
     count = len(env["feedback"])
     frame._on_sign_in_result(signin.SignIn(True, True, "claude.ai", plan="max"), manual=False)
-    frame._on_sign_in_result(signin.SignIn(False, problem="no claude"), manual=False)
+    frame._on_sign_in_result(signin.SignIn(False, problem="no answer"), manual=False)
     assert len(env["feedback"]) == count
     frame._on_sign_in_result(signin.SignIn(True, signed_in=False), manual=False)
     assert env["feedback"][-1].endswith(
@@ -3572,6 +3573,45 @@ def test_sign_in_is_checked_and_offered(frame, env, monkeypatch):
     monkeypatch.setattr(signin, "login_command", lambda: None)
     frame._on_sign_in_result(signin.SignIn(True, signed_in=False), manual=True)
     assert shown[-1][0].startswith("Couldn't start the sign-in")
+
+
+def test_install_is_offered_when_claude_is_missing(frame, env, monkeypatch):
+    """No claude The Chat Place can use: said at start-up, and Claude Code
+    Sign-in offers to run its installer, then checks again."""
+    from thechatplace import signin
+    from thechatplace.ui import main_frame
+    missing = signin.SignIn(False, missing=True,
+                            problem="Claude Code isn't installed. The desktop app's isn't for "
+                                    "other programs.",
+                            install_help="To install it, run its native installer. In …")
+    frame._sign_in_asked = False
+    frame._on_sign_in_result(missing, manual=False)
+    # Spoken short: the first sentence, without the commands.
+    assert env["feedback"][-1] == ("Claude Code isn't installed. To install it, choose Claude "
+                                   "Code Sign-in on the Help menu.")
+    shown, answers = [], [wx.NO, wx.YES]
+    monkeypatch.setattr(wx, "MessageBox", lambda text, title, style, parent=None: (
+        shown.append(text), answers.pop(0))[1])
+    installs, checks = [], []
+
+    class Process:
+        def wait(self):
+            return 0
+    monkeypatch.setattr(main_frame.platform_paths, "start_claude_install",
+                        lambda env: installs.append(env) or Process())
+    monkeypatch.setattr(main_frame.wx, "CallAfter", lambda fn, *a, **k: checks.append(k))
+    frame._on_sign_in_result(missing, manual=True)  # No: nothing runs
+    assert shown[-1].startswith("Claude Code isn't installed.")
+    assert "To install it, run its native installer." in shown[-1]
+    assert "Install Claude Code now?" in shown[-1] and installs == []
+    frame._on_sign_in_result(missing, manual=True)  # Yes
+    assert len(installs) == 1 and "ANTHROPIC_API_KEY" not in installs[0]
+    assert env["feedback"][-1].startswith("Installing Claude Code, in a new window.")
+    for _ in range(100):
+        if checks:
+            break
+        time.sleep(0.02)
+    assert checks == [{"manual": True}]  # checked again once the window closed
 
 
 def test_change_model_for_the_next_turns(frame, env, monkeypatch):

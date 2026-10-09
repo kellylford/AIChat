@@ -56,7 +56,7 @@ from .. import (__version__, about_you, announce, attachments, bugreport, signin
 from ..claude_cli import (MODELS, PERMISSION_MODES, PermissionRequest, ResumeRefused, TurnEvent,
                           TurnRunner, allow_response, answer_questions_response,
                           build_fork_command, build_new_command, build_resume_command,
-                          child_environment,
+                          SESSION_INJECTED_PREFIXES, STRIPPED_VARS, child_environment,
                           deny_response, fetch_commands, usable_commands,
                           describe_elapsed, model_label, model_matches, model_spoken,
                           new_session_id)
@@ -3650,11 +3650,18 @@ class MainFrame(wx.Frame):
             # At start-up, only a problem is news, and not over the list.
             if getattr(self, "_sign_in_asked", False):
                 return
-            if status.known and not (status.signed_in and status.subscription):
+            if status.missing:
+                first = re.split(r"(?<=\.) ", status.problem, maxsplit=1)[0]
+                self._feedback(f"{first} To install it, choose Claude Code Sign-in on the "
+                               "Help menu.")
+            elif status.known and not (status.signed_in and status.subscription):
                 self._feedback(f"{text} To sign in, choose Claude Code Sign-in on the "
                                "Help menu.")
             return
         self._sign_in_asked = False
+        if status.missing:
+            self._offer_install(text)
+            return
         if not status.known:
             wx.MessageBox(text, "Claude Code Sign-in", wx.OK | wx.ICON_WARNING, self)
             return
@@ -3663,7 +3670,7 @@ class MainFrame(wx.Frame):
             return
         answer = wx.MessageBox(
             f"{text}\n\nSign in now? A window opens, and your browser shows Claude's sign-in "
-            "page. When you've finished, choose Help, Claude Code Sign-in again to check.",
+            "page. When you've finished, The Chat Place checks again and says so.",
             "Claude Code Sign-in", wx.YES_NO | wx.YES_DEFAULT | wx.ICON_QUESTION, self)
         if answer != wx.YES:
             return
@@ -3671,21 +3678,66 @@ class MainFrame(wx.Frame):
         try:
             if command is None:
                 raise OSError("Claude Code wasn't found")
-            process = subprocess.Popen(command, env=child_environment(),
-                                       creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
+            process = platform_paths.run_in_terminal(
+                command, "sign-in-claude-code.command", "Signing in to Claude Code.",
+                env=child_environment(), clear=STRIPPED_VARS,
+                clear_prefixes=SESSION_INJECTED_PREFIXES)
         except OSError as exc:
             wx.MessageBox(f"Couldn't start the sign-in: {exc}", APP_NAME,
                           wx.OK | wx.ICON_ERROR, self)
             return
-        self._feedback("Signing in, in a new window. The Chat Place checks again when it closes.")
+        self._feedback("Signing in, in a new window. The Chat Place checks again when you've "
+                       "finished.")
+
+        def signed_in():
+            status = signin.check()
+            return status.signed_in and status.subscription
+        self._check_sign_in_after(process, signed_in)
+
+    def _offer_install(self, text: str):
+        """Claude Code isn't there, or isn't one The Chat Place can use:
+        offer to run its native installer in a window of its own."""
+        answer = wx.MessageBox(
+            f"{text}\n\nInstall Claude Code now? A window opens and runs its native installer "
+            "from claude.ai. When it's finished, The Chat Place checks the sign-in again.",
+            "Claude Code Sign-in", wx.YES_NO | wx.YES_DEFAULT | wx.ICON_QUESTION, self)
+        if answer != wx.YES:
+            return
+        try:
+            process = platform_paths.start_claude_install(env=child_environment())
+        except OSError as exc:
+            wx.MessageBox(f"Couldn't start the installer: {exc}", APP_NAME,
+                          wx.OK | wx.ICON_ERROR, self)
+            return
+        self._feedback("Installing Claude Code, in a new window. The Chat Place checks again "
+                       "when it's finished.")
+        self._check_sign_in_after(process, lambda: bool(platform_paths.find_claude().path))
+
+    def _check_sign_in_after(self, process, done):
+        """Check the sign-in again, and say the result, once a window The
+        Chat Place opened is finished: when its process ends on Windows, or
+        on a Mac (where Terminal runs it, out of reach) once ``done()`` says
+        so, for up to ten minutes. Its own thread, not the pool's: a wait
+        this long would hold up the list's refreshes."""
+        def closing():
+            try:
+                return not self or self._closing
+            except RuntimeError:
+                return True  # the window is already gone
 
         def wait():
-            process.wait()
-            wx.CallAfter(self._check_sign_in, manual=True)  # the result, said
-        try:
-            self._pool.submit(wait)
-        except RuntimeError:
-            pass
+            if process is not None:
+                process.wait()
+            else:
+                deadline = time.monotonic() + 600
+                while not closing() and time.monotonic() < deadline:
+                    time.sleep(5)
+                    if not closing() and done():
+                        break
+            # Said even when it never finished, so the promise to check is kept.
+            if not closing():
+                wx.CallAfter(self._check_sign_in, manual=True)  # the result, said
+        threading.Thread(target=wait, name="sign-in-wait", daemon=True).start()
 
     def on_about(self, _event=None):
         wx.MessageBox(

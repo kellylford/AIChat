@@ -108,6 +108,8 @@ BILLING_VARS = frozenset({
 })
 
 _STRIP = SESSION_INJECTED_VARS | BILLING_VARS
+#: For a Terminal window on a Mac, which can't be given child_environment().
+STRIPPED_VARS = _STRIP
 
 #: Whole families a host session sets, including names newer Claude Code
 #: versions add. User settings (CLAUDE_CODE_GIT_BASH_PATH and the like) don't

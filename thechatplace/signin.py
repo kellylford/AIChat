@@ -30,6 +30,8 @@ class SignIn:
     plan: str = ""
     email: str = ""
     problem: str = ""
+    missing: bool = False  # no claude it can use at all: offer to install one
+    install_help: str = ""  # with ``missing``, the install commands
 
     @property
     def subscription(self) -> bool:
@@ -39,9 +41,12 @@ class SignIn:
 
 
 def check(executable: Optional[str] = None, run=subprocess.run) -> SignIn:
-    executable = executable or platform_paths.claude_executable()
     if not executable:
-        return SignIn(False, problem="Claude Code isn't installed, or The Chat Place can't find it")
+        lookup = platform_paths.find_claude()
+        if not lookup.path:
+            return SignIn(False, missing=True, problem=lookup.reason,
+                          install_help=lookup.install_help)
+        executable = lookup.path
     try:
         # The environment turns get: an API key or cloud provider set for
         # other tools is removed there, so it mustn't count here either.
@@ -49,9 +54,14 @@ def check(executable: Optional[str] = None, run=subprocess.run) -> SignIn:
                   encoding="utf-8", errors="replace", timeout=20,
                   env=child_environment(),
                   creationflags=platform_paths.hidden_window_flags())
+    except subprocess.TimeoutExpired:
+        return SignIn(False, problem=f"Claude Code ({executable}) didn't answer in 20 seconds")
+    except (OSError, subprocess.SubprocessError) as exc:
+        return SignIn(False, problem=f"Claude Code ({executable}) couldn't be started: {exc}")
+    try:
         data = json.loads(out.stdout or "")
-    except (OSError, subprocess.SubprocessError, ValueError):
-        return SignIn(False, problem="Claude Code didn't answer")
+    except ValueError:
+        return SignIn(False, problem=_no_answer(executable, out))
     if not isinstance(data, dict):
         return SignIn(False, problem="Claude Code's answer wasn't understood")
     return SignIn(True, signed_in=bool(data.get("loggedIn")),
@@ -61,7 +71,22 @@ def check(executable: Optional[str] = None, run=subprocess.run) -> SignIn:
                   email=str(data.get("email") or ""))
 
 
+def _no_answer(executable: str, out) -> str:
+    """Why ``claude auth status`` gave no JSON, from what it printed.
+    A version from before ``auth status`` existed says "unknown command"."""
+    said = next((line.strip() for line in (out.stderr or out.stdout or "").splitlines()
+                 if line.strip()), "")
+    if "unknown" in said.lower() and ("command" in said.lower() or "option" in said.lower()):
+        return (f"Claude Code ({executable}) is too old to say. Update it by running "
+                "claude update in a terminal, then try again")
+    if said:
+        return f"Claude Code ({executable}) said \"{said[:200]}\""
+    return f"Claude Code ({executable}) gave no answer (exit code {out.returncode})"
+
+
 def describe(status: SignIn) -> str:
+    if status.missing:
+        return "\n\n".join(part for part in (status.problem, status.install_help) if part)
     if not status.known:
         return f"Couldn't tell whether Claude Code is signed in: {status.problem}."
     if not status.signed_in:

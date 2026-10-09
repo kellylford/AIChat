@@ -27,9 +27,19 @@ desktop app, but it isn't made, sponsored or endorsed by Anthropic, and isn't af
 <ul>
 <li>Windows 10 or 11, or a Mac with Apple silicon.</li>
 <li>Claude Code, installed with its native installer and signed in to your Claude subscription.
-  This is the <code>claude</code> command, using the same sign-in as the Claude desktop app. The npm version
-  of Claude Code isn't used.</li>
+  This is the <code>claude</code> command, using the same sign-in as the Claude desktop app. The desktop
+  app's own copy of Claude Code isn't meant for other programs, so the command is needed even if
+  you use the desktop app. An old npm install of Claude Code isn't used.</li>
 </ul>
+<p>To install Claude Code, run its installer in a terminal, then run <code>claude</code> once to sign in:</p>
+<ul>
+<li>Mac (Terminal): <code>curl -fsSL https://claude.ai/install.sh | bash</code></li>
+<li>Windows (PowerShell): <code>irm https://claude.ai/install.ps1 | iex</code></li>
+<li>Windows (Command Prompt):
+  <code>curl -fsSL https://claude.ai/install.cmd -o install.cmd &amp;&amp; install.cmd &amp;&amp; del install.cmd</code></li>
+</ul>
+<p>Or let The Chat Place do it: Help, Claude Code Sign-in offers to install Claude Code when it
+can't find it, and to sign you in when it isn't signed in.</p>
 <p>The Chat Place never uses an API key. Reading sessions costs nothing, because everything it reads
 is on your own computer. Messages you send in its own sessions are Claude Code turns, which count
 against your plan's monthly Agent SDK credit; past that credit, turns stop unless you've turned on
@@ -44,7 +54,10 @@ Applications. The first time it speaks through VoiceOver, macOS asks whether The
 control VoiceOver: allow it, and turn on "Allow VoiceOver to be controlled with AppleScript" in
 VoiceOver Utility, General.</p>
 <p>If Claude Code isn't signed in, your sessions are still listed; only sending a message needs a
-sign-in. Help, Claude Code Sign-in says whether it is signed in, and offers to sign you in if not.</p>
+sign-in. Help, Claude Code Sign-in says whether it is signed in, and offers to sign you in if not.
+The sign-in opens in its own window (Terminal, on a Mac), and The Chat Place checks again when
+you've finished. If it can't tell, it says why, for example that Claude Code is too old to ask:
+running <code>claude update</code> in a terminal fixes that.</p>
 <h2 id="the-window">The window</h2>
 <p>The window has three parts, in Tab order:</p>
 <ol>

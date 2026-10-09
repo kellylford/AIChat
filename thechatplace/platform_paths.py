@@ -21,7 +21,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import Iterable, List, Optional
 
 APP_DIR_NAME = "TheChatPlace"
 
@@ -292,50 +292,190 @@ def show_in_folder(path: Path) -> None:
 
 
 class ClaudeLookup:
-    """Where ``claude`` is, or why it can't be used."""
+    """Where ``claude`` is, or why it can't be used: ``reason`` in a sentence
+    or two, short enough to be spoken, and ``install_help`` with the
+    commands, for Claude Code Sign-in's dialog."""
 
-    def __init__(self, path: Optional[str] = None, problem: str = "") -> None:
+    def __init__(self, path: Optional[str] = None, reason: str = "",
+                 install_help: str = "") -> None:
         self.path = path
-        self.problem = problem
+        self.reason = reason
+        self.install_help = install_help
+
+    @property
+    def problem(self) -> str:
+        """The reason and where to go about it, for New Session, Send and
+        the rest, which can't install Claude Code themselves."""
+        if not self.reason:
+            return ""
+        return f"{self.reason} To install it, choose Claude Code Sign-in on the Help menu."
 
 
 _SCRIPT_SUFFIXES = (".cmd", ".bat", ".ps1")
+
+#: Claude Code's own install commands (https://code.claude.com/docs/en/setup),
+#: shown when it can't be found and run by Claude Code Sign-in.
+INSTALL_SH = "curl -fsSL https://claude.ai/install.sh | bash"
+INSTALL_PS1 = "irm https://claude.ai/install.ps1 | iex"
+INSTALL_CMD = ("curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd "
+               "&& del install.cmd")
+
+
+def claude_install_help() -> str:
+    """How to install the native Claude Code, for a message box."""
+    if sys.platform == "win32":
+        commands = (f"In PowerShell:\n    {INSTALL_PS1}\n"
+                    f"Or in Command Prompt:\n    {INSTALL_CMD}")
+    else:
+        commands = f"In Terminal:\n    {INSTALL_SH}"
+    return (f"To install it, run its native installer. {commands}\n"
+            "Then run claude once to sign in, or use Claude Code Sign-in here again.")
+
+
+def _native_candidates() -> List[Path]:
+    """Where the native ``claude`` is when it isn't on the PATH. An app
+    started from the Finder gets only /usr/bin:/bin:/usr/sbin:/sbin, so
+    on a Mac the Homebrew and npm folders are looked in by name; on Windows
+    a PATH change made by an installer reaches the app only after signing
+    out and in again."""
+    home = Path.home()
+    if sys.platform == "win32":
+        local = os.environ.get("LOCALAPPDATA") or str(home / "AppData" / "Local")
+        return [home / ".local" / "bin" / "claude.exe",
+                Path(local) / "Microsoft" / "WinGet" / "Links" / "claude.exe"]
+    return [home / ".local" / "bin" / "claude",
+            Path("/opt/homebrew/bin/claude"), Path("/usr/local/bin/claude"),
+            home / ".npm-global" / "bin" / "claude"]
+
+
+#: What an npm shim runs: ``"%dp0%\node_modules\...\claude.exe"   %*``. Only a
+#: claude.exe: an old shim also names the node.exe that runs cli.js.
+_SHIM_TARGET = re.compile(r'"%~?dp0%?\\((?:[^"%]*?\\)?claude\.exe)"', re.IGNORECASE)
+
+
+def _native_behind_shim(script: str) -> Optional[str]:
+    """The native ``claude.exe`` an npm ``claude.cmd`` starts. Newer npm
+    installs of Claude Code put the same native program in node_modules, and
+    started directly it takes its arguments as they are, so it is as safe as
+    the native installer's."""
+    try:
+        text = Path(script).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    match = _SHIM_TARGET.search(text)
+    if not match:
+        return None
+    exe = Path(script).parent / match.group(1).replace("\\", "/")
+    return str(exe) if exe.is_file() else None
+
+
+def _is_node_script(path: str) -> bool:
+    """An old npm install's ``claude``: a JavaScript file run by Node, which
+    an app started from the Finder can't find."""
+    try:
+        with open(path, "rb") as f:
+            first = f.read(128)
+    except OSError:
+        return False
+    return first.startswith(b"#!") and b"node" in first.split(b"\n", 1)[0]
 
 
 def find_claude(which=None, native_candidates=None) -> ClaudeLookup:
     """Find the native ``claude`` executable.
 
-    A ``claude.cmd`` / ``.bat`` (the npm install) is refused on purpose: Windows
-    runs those through cmd.exe, which re-parses the command line, so a session
+    A ``claude.cmd`` / ``.bat`` (the npm install) is never run: Windows runs
+    those through cmd.exe, which re-parses the command line, so a session
     title containing ``&`` or ``"`` could run a second command. The native
-    installer's ``claude.exe`` takes its arguments as they are.
+    installer's ``claude.exe`` takes its arguments as they are, and so does the
+    native program a newer npm install's shim starts, which is used instead.
     """
     import shutil
 
     which = which or shutil.which
     if native_candidates is None:
-        name = "claude.exe" if sys.platform == "win32" else "claude"
-        native_candidates = [Path.home() / ".local" / "bin" / name]
+        native_candidates = _native_candidates()
     found = which("claude")
-    if found and not found.lower().endswith(_SCRIPT_SUFFIXES):
+    if found and not found.lower().endswith(_SCRIPT_SUFFIXES) and not _is_node_script(found):
         return ClaudeLookup(found)
+    if found and found.lower().endswith(_SCRIPT_SUFFIXES):
+        native = _native_behind_shim(found)
+        if native:
+            return ClaudeLookup(native)
     for candidate in native_candidates:
-        if Path(candidate).is_file():
+        if Path(candidate).is_file() and not _is_node_script(str(candidate)):
             return ClaudeLookup(str(candidate))
     if found:
         return ClaudeLookup(None, (
-            f"The claude command on this PC is a script ({found}), from the npm install. "
-            "The Chat Place needs the native claude.exe, because a script would let a session "
-            "title be read as a command. Install Claude Code with the native installer "
-            "(https://code.claude.com/docs/en/setup), sign in once in a terminal, and try again."))
+            "The claude command on this computer is an older npm install of Claude Code, "
+            "which runs as a script. The Chat Place needs the native claude program, "
+            f"because a script would let a session title be read as a command. ({found})"),
+            claude_install_help())
     return ClaudeLookup(None, (
-        "The claude command wasn't found. Install Claude Code with the native installer, "
-        "sign in once in a terminal, then try again."))
+        "Claude Code isn't installed, or The Chat Place can't find it. The Claude desktop "
+        "app's own copy isn't on the PATH and isn't meant for other programs."),
+        claude_install_help())
 
 
 def claude_executable() -> Optional[str]:
     """Path to the native ``claude`` command, or None (see ``find_claude``)."""
     return find_claude().path
+
+
+def run_in_terminal(argv: List[str], script_name: str = "", title: str = "",
+                    env: Optional[dict] = None, clear: Iterable[str] = (),
+                    clear_prefixes: Iterable[str] = ()):
+    """Run a command where the user can see and answer it: a new console
+    window on Windows, a Terminal window on a Mac (from a ``.command`` file
+    in the app's own folder, so no permission to control Terminal is
+    needed; started from the app it would have no window at all). Returns
+    the Popen on Windows, to wait for; None on a Mac, where the window
+    outlives ``open``. ``env`` is the Windows window's environment; Terminal
+    starts the user's own shell, whose profile may set the variables
+    ``env`` leaves out, so the script unsets ``clear`` and ``clear_prefixes``."""
+    import shlex
+    import subprocess
+
+    if sys.platform == "win32":
+        return subprocess.Popen(argv, env=env, creationflags=subprocess.CREATE_NEW_CONSOLE)
+    folder = app_data_dir()
+    folder.mkdir(parents=True, exist_ok=True)
+    script = folder / script_name
+    lines = ["#!/bin/bash"]
+    names = sorted(n for n in clear if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", n))
+    if names:
+        lines.append("unset " + " ".join(names))
+    patterns = "|".join(f"{p}*" for p in clear_prefixes
+                        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", p))
+    if patterns:
+        lines.append(f'for v in $(compgen -e); do case "$v" in {patterns}) unset "$v";; '
+                     'esac; done')
+    lines += [f"echo {shlex.quote(title)}", shlex.join(argv), "status=$?", "echo",
+              'if [ "$status" -eq 0 ]; then',
+              "  echo 'Finished. You can close this window and go back to The Chat Place.'",
+              "else",
+              '  echo "It didn\'t finish (exit code $status). You can close this window."',
+              "fi"]
+    script.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    script.chmod(0o700)
+    subprocess.Popen(["open", "-a", "Terminal", str(script)])
+    return None
+
+
+def start_claude_install(env: Optional[dict] = None):
+    """Run Claude Code's native installer in its own window (see
+    ``run_in_terminal`` for what's returned)."""
+    if sys.platform == "win32":
+        powershell = _windows_program("System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+        # In a scriptblock and a try, so an exit or error in the installer
+        # leaves the window open to be read.
+        return run_in_terminal(
+            [powershell, "-NoProfile", "-Command",
+             "try { & ([scriptblock]::Create((irm https://claude.ai/install.ps1))) } "
+             "catch { Write-Host $_ -ForegroundColor Red } "
+             "finally { Read-Host 'Finished. Press Enter to close this window' }"],
+            env=env)
+    return run_in_terminal(["/bin/bash", "-c", INSTALL_SH], "install-claude-code.command",
+                           "Installing Claude Code with its native installer.")
 
 
 CREATE_SUSPENDED = 0x00000004

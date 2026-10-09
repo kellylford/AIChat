@@ -301,10 +301,15 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   `docs/`.
 - **Claude Code Sign-in** (Help menu) says whether Claude Code is signed in, to which plan and
   as whom ("Claude Code is signed in to your Claude Max plan as …"). If it isn't, it offers to
-  sign in: `claude auth login` opens in its own window and your browser shows Claude's sign-in
-  page. The Chat Place also checks at start-up and says so only if there's a problem. Your
-  sessions are listed whether or not Claude Code is signed in (they're read from disk); only
-  sending a message needs a sign-in.
+  sign in: `claude auth login` opens in its own window (a Terminal window on a Mac) and your
+  browser shows Claude's sign-in page; when you've finished, The Chat Place checks again and
+  says the result. If Claude Code isn't installed, or only an old npm install is, it says so,
+  gives the install command, and offers to run Claude Code's native installer in its own
+  window, then checks again once it's done. If Claude Code is there but can't be asked, it says
+  why: no answer in 20 seconds, couldn't be started, too old (`claude update` fixes that), or
+  what it printed. The Chat Place also checks at start-up and says so only if there's a problem.
+  Your sessions are listed whether or not Claude Code is signed in (they're read from disk);
+  only sending a message needs a sign-in.
 - **Report a Bug** (Help menu) asks for a summary, what happened, what you expected and the
   steps, and shows exactly what else the report includes before it goes anywhere: versions
   (The Chat Place, Windows, Python, wxPython, Claude Code), the announcement level and speech
@@ -317,7 +322,17 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
 
 You need Windows 10 or 11, or a Mac with Apple silicon, and **Claude Code installed with its
 native installer and signed in** to a Claude subscription (the `claude` command, the same login
-the desktop app uses).
+the desktop app uses). The Claude desktop app's own copy of Claude Code isn't on the PATH and
+isn't meant for other programs, so install the command as well, from a terminal:
+
+- Mac: `curl -fsSL https://claude.ai/install.sh | bash`
+- Windows PowerShell: `irm https://claude.ai/install.ps1 | iex`
+- Windows Command Prompt:
+  `curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd && del install.cmd`
+
+Then run `claude` once to sign in. Help, Claude Code Sign-in can run the installer and the
+sign-in for you. Homebrew (`brew install --cask claude-code`) and WinGet
+(`winget install Anthropic.ClaudeCode`) installs work too.
 
 **Windows.** Download `TheChatPlace-windows-Setup.exe` from the newest release on
 [the releases page](https://github.com/kellylford/AIChat/releases) and run it.
@@ -532,8 +547,14 @@ turn's result arrives. That runs under the same login as the desktop app, never 
 uses the plan's Agent SDK credit, as any `claude -p` does.
 
 - It never uses `--bare`, which needs an API key.
-- It needs the native `claude.exe`. The npm install's `claude.cmd` is refused, because Windows runs
-  a `.cmd` through `cmd.exe`, which would let characters in a session title run a command.
+- It needs the native `claude.exe`. The npm install's `claude.cmd` is never run, because Windows
+  runs a `.cmd` through `cmd.exe`, which would let characters in a session title run a command.
+  A newer npm install's `claude.cmd` only starts the same native `claude.exe` from
+  `node_modules`, so that program is run directly instead; an old one that runs `cli.js` through
+  Node is refused. Off the PATH, it looks in `~/.local/bin` (the native installer) and WinGet's
+  `Links` folder on Windows, and in `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin` and
+  `~/.npm-global/bin` on a Mac, where an app started from the Finder doesn't get your shell's
+  PATH.
 - Before starting `claude` it removes two named sets of environment variables, and keeps the rest
   (your `CLAUDE_CODE_GIT_BASH_PATH`, `CLAUDE_CONFIG_DIR`, proxy and timeout settings). The first set
   is what a Claude session puts in the environment of anything started inside it: started from
