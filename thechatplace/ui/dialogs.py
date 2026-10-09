@@ -180,7 +180,7 @@ class SettingsDialog(wx.Dialog):
     """Announcements and speech (the Speech tab of IDT's settings, adapted)."""
 
     def __init__(self, parent, speech: SpeechSettings, options):
-        super().__init__(parent, title="Settings", size=(680, 580))
+        super().__init__(parent, title="Settings", size=(680, 620))
         self._options = list(options)
         # Settings kept elsewhere (the session list's sort order) pass through.
         self._original = speech
@@ -257,6 +257,12 @@ class SettingsDialog(wx.Dialog):
         self.remote_control.SetValue(speech.remote_control)
         outer.Add(self.remote_control, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 
+        # #141: the dialog at the first start after an update.
+        self.update_notice = wx.CheckBox(
+            self, label="&Tell me when an update has been installed, with a link to what's new")
+        self.update_notice.SetValue(speech.update_installed_notice)
+        outer.Add(self.update_notice, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+
         buttons = wx.StdDialogButtonSizer()
         ok = wx.Button(self, wx.ID_OK)
         ok.SetDefault()
@@ -313,7 +319,8 @@ class SettingsDialog(wx.Dialog):
                                    full_messages_in_list=self.whole_in_list.GetValue(),
                                    notifications=NOTIFY_LEVELS[max(
                                        self.notify_choice.GetSelection(), 0)],
-                                   remote_control=self.remote_control.GetValue())
+                                   remote_control=self.remote_control.GetValue(),
+                                   update_installed_notice=self.update_notice.GetValue())
 
 
 class MessageDialog(wx.Dialog):
@@ -343,6 +350,60 @@ class MessageDialog(wx.Dialog):
         self.SetEscapeId(wx.ID_CANCEL)
         self.text.SetInsertionPoint(0)
         wx.CallAfter(self.text.SetFocus)
+
+
+class UpdateInstalledDialog(wx.Dialog):
+    """The first start after an update (#141), as QuickMail's: says which
+    version is now running, offers its release notes, and closes.
+
+    The message is the dialog's text, which JAWS and NVDA read when it
+    opens. Focus starts on See What's New, whose label names the version
+    too, so VoiceOver (which reads the window title and the focused
+    control, not the text beside it) hears the whole of it. See What's New
+    opens the notes in the browser and closes the dialog; Close or Escape
+    just closes it."""
+
+    TITLE = "The Chat Place Update Installed"
+
+    def __init__(self, parent, version: str, open_notes):
+        super().__init__(parent, title=self.TITLE)
+        self._open_notes = open_notes
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        self.message = wx.StaticText(self, label=f"The Chat Place was updated to {version}.")
+        sizer.Add(self.message, 0, wx.ALL, 16)
+        row = wx.BoxSizer(wx.HORIZONTAL)
+        self.whats_new = wx.Button(self, label=f"See &what's new in {version}")
+        set_accessible_name(self.whats_new, f"See what's new in {version}")
+        row.Add(self.whats_new, 0, wx.RIGHT, 8)
+        self.close = wx.Button(self, wx.ID_CANCEL, "&Close")
+        set_accessible_name(self.close, "Close")
+        row.Add(self.close, 0)
+        sizer.Add(row, 0, wx.ALIGN_RIGHT | wx.LEFT | wx.RIGHT | wx.BOTTOM, 16)
+        self.SetSizerAndFit(sizer)
+        self.SetEscapeId(wx.ID_CANCEL)
+        self.whats_new.Bind(wx.EVT_BUTTON, lambda e: self.see_whats_new())
+        self.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
+        self.CentreOnParent()
+        self.whats_new.SetFocus()
+        wx.CallAfter(self._focus_first)
+
+    def _focus_first(self):
+        if self:
+            self.whats_new.SetFocus()
+
+    def _on_char_hook(self, event):
+        if press_focused_button_on_a_mac(event):
+            return
+        event.Skip()
+
+    def see_whats_new(self):
+        # The caller's open_notes reports its own failures, so this always
+        # gets back to the app.
+        self._open_notes()
+        if self.IsModal():
+            self.EndModal(wx.ID_OK)
+        else:
+            self.Hide()
 
 
 # -- a message as a formatted page (#190) -----------------------------------------------

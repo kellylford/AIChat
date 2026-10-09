@@ -350,7 +350,8 @@ and put on the status bar. **Ctrl+Shift+R** repeats the last announcement.
 - **Silent** puts it on the status bar only.
 
 Settings also chooses whether every listed session is announced or just the open one, which
-speech engine and rate to use, and whether your own messages are read back when they're sent.
+speech engine and rate to use, whether your own messages are read back when they're sent, and
+whether The Chat Place tells you when an update has been installed.
 
 When you're in another window, The Chat Place can show a notification: when one of its sessions
 finishes a turn, fails or needs you, when the session you have loaded finishes, or when a desktop
@@ -464,6 +465,16 @@ The installed app checks for a new version shortly after it starts, and says so 
 one. **Help, Check for Updates** asks right away and offers to install it (No is the default). It
 won't install while Claude is working in one of its sessions, and it warns you about a reply you
 haven't sent. Updating never touches your sessions or settings.
+
+The Help menu's update item always says which version you're running, such as
+**Check for Updates (running 0.1.4)**. When a newer version has been found, it says so instead,
+such as **Update to 0.1.5 Available**, and choosing it offers the update. Alt+H, U reaches it
+either way.
+
+The first time The Chat Place starts after an update, **The Chat Place Update Installed** says
+which version you now have. **See what's new** (Alt+W) opens that version's release notes in your
+browser; **Close** or Escape goes back to the app. To stop it appearing, clear "Tell me when an
+update has been installed, with a link to what's new" in Settings (Ctrl+Comma).
 
 ## When something isn't right
 

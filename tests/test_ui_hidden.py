@@ -1172,7 +1172,7 @@ def test_startup_check_announces_an_update_but_never_opens_a_dialog(frame, env):
     frame.updates = FakeUpdates(CheckResult(AVAILABLE, "0.1.0", "0.2.0"))
     run_check(frame, manual=False)
     assert env["spoken"][-1] == ("The Chat Place 0.2.0 is available. You have 0.1.0. "
-                                 "Help, Check for Updates installs it, or the Update button "
+                                 "Help, Update to 0.2.0 Available installs it, or the Update button "
                                  "on the status bar.")
     assert env["boxes"] == []
     button = frame.status_parts.get("update")
@@ -5724,3 +5724,181 @@ def test_prompts_are_on_the_file_menu(frame):
     assert "Prompts...\tCtrl+Shift+P" in labels
     keys = "Cmd+Shift+Return" if wx.Platform == "__WXMAC__" else "Ctrl+Shift+Enter"
     assert f"Send and Save as Prompt... ({keys})" in labels
+
+
+# -- Help's update item and "Update Installed" (#141) ----------------------------------------
+
+
+def help_update_label(frame):
+    return frame.update_item.GetItemLabel()
+
+
+def test_help_update_item_names_the_running_version_then_the_update(frame, env, monkeypatch):
+    from thechatplace import __version__
+    from thechatplace.updater import (AVAILABLE, CURRENT, FAILED, NO_RELEASES, NOT_INSTALLED,
+                                      CheckResult)
+    running = f"Check for &Updates (running {__version__})..."
+    assert help_update_label(frame) == running
+    frame.updates = FakeUpdates(CheckResult(AVAILABLE, __version__, "9.0.0"))
+    run_check(frame, manual=False)
+    assert help_update_label(frame) == "&Update to 9.0.0 Available..."
+    assert env["spoken"][-1].endswith("Help, Update to 9.0.0 Available installs it, or the "
+                                      "Update button on the status bar.")
+    # A failed check doesn't make the update vanish.
+    frame.updates = FakeUpdates(CheckResult(FAILED, __version__, detail="offline"))
+    run_check(frame, manual=False)
+    assert help_update_label(frame) == "&Update to 9.0.0 Available..."
+    # Choosing it offers the update; No leaves it on the menu.
+    asked = []
+    monkeypatch.setattr(wx, "MessageBox", lambda text, *a, **k: asked.append(text) or wx.NO)
+    frame.updates = FakeUpdates(CheckResult(AVAILABLE, __version__, "9.0.0"))
+    run_check(frame)
+    assert asked and "Install it now?" in asked[-1]
+    assert env["feedback"][-1] == "Not now. Help, Update to 9.0.0 Available installs it later."
+    assert help_update_label(frame) == "&Update to 9.0.0 Available..."
+    # Nothing newer after all: back to the running version.
+    for status in (CURRENT, NO_RELEASES, NOT_INSTALLED):
+        frame.updates = FakeUpdates(CheckResult(AVAILABLE, __version__, "9.0.0"))
+        run_check(frame, manual=False)
+        frame.updates = FakeUpdates(CheckResult(status, __version__, __version__))
+        run_check(frame, manual=False)
+        assert help_update_label(frame) == running
+
+
+class NoticeUpdates:
+    def __init__(self, installed):
+        self.can_update = installed
+
+
+def run_notice(frame, installed=True):
+    frame.updates = NoticeUpdates(installed)
+    frame.check_update_installed()
+    frame._pool.submit(lambda: None).result()
+    pump(lambda: False, timeout=0.2)
+
+
+@pytest.fixture
+def notice(frame, monkeypatch):
+    """The frame running 0.1.4, with the dialog recorded instead of shown."""
+    from thechatplace.ui import main_frame
+    monkeypatch.setattr(main_frame, "__version__", "0.1.4")
+    shown = []
+    monkeypatch.setattr(frame, "_show_update_installed_when_free",
+                        lambda version, tries: shown.append(version))
+    return shown
+
+
+@pytest.mark.parametrize("previous,installed,enabled,shown,recorded", [
+    ("0.1.3", True, True, ["0.1.4"], "0.1.4"),     # updated
+    ("", True, True, [], "0.1.4"),                 # first run
+    ("0.1.4", True, True, [], "0.1.4"),            # same version
+    ("0.1.5", True, True, [], "0.1.4"),            # downgrade
+    ("junk", True, True, [], "0.1.4"),             # unreadable record
+    ("0.1.3", False, True, [], "0.1.3"),           # portable copy or source run
+    ("0.1.3", True, False, [], "0.1.4"),           # turned off in Settings
+])
+def test_update_installed_notice_decision(frame, env, notice, previous, installed, enabled,
+                                          shown, recorded):
+    from thechatplace.speech import SpeechSettings
+    frame.speech.last_run_version = previous
+    frame.speech.update_installed_notice = enabled
+    run_notice(frame, installed)
+    assert notice == shown
+    assert frame.speech.last_run_version == recorded
+    if recorded != previous:
+        assert SpeechSettings.load(env["tmp"] / "speech.json").last_run_version == recorded
+
+
+def test_update_installed_notice_survives_a_failed_settings_save(frame, env, notice,
+                                                                 monkeypatch):
+    def refuse(*a, **k):
+        raise OSError("disk full")
+    monkeypatch.setattr(frame.speech, "save", refuse)
+    frame.speech.last_run_version = "0.1.3"
+    run_notice(frame, True)
+    assert notice == ["0.1.4"]
+
+
+def test_update_installed_waits_for_a_free_main_window(frame, env, monkeypatch):
+    from thechatplace.ui import main_frame
+    shown = []
+    monkeypatch.setattr(frame, "show_update_installed", lambda version: shown.append(version))
+    later = []
+    monkeypatch.setattr(main_frame.wx, "CallLater", lambda ms, fn, *args: later.append(
+        (ms, fn, args)))
+    # The hidden test window is never free: it tries again a second later...
+    frame._show_update_installed_when_free("0.1.4", 3)
+    assert later == [(main_frame.UPDATE_NOTICE_RETRY_MS, frame._show_update_installed_when_free,
+                      ("0.1.4", 2))]
+    assert shown == []
+    # ...and on its last try says so on the status bar instead.
+    frame._show_update_installed_when_free("0.1.4", 1)
+    assert frame.GetStatusBar().GetStatusText() == "The Chat Place was updated to 0.1.4."
+    assert shown == [] and len(later) == 1
+    # Free: shown at once.
+    monkeypatch.setattr(frame, "IsShown", lambda: True)
+    monkeypatch.setattr(frame, "_modal_open", lambda: False)
+    monkeypatch.setattr(main_frame.wx, "GetActiveWindow", lambda: frame)
+    frame._show_update_installed_when_free("0.1.4", 3)
+    assert shown == ["0.1.4"]
+    # A dialog in front (a startup warning, say): not stacked on it.
+    shown.clear()
+    monkeypatch.setattr(frame, "_modal_open", lambda: True)
+    frame._show_update_installed_when_free("0.1.4", 1)
+    assert shown == []
+
+
+def test_update_installed_dialog(frame, env):
+    from thechatplace.ui.dialogs import UpdateInstalledDialog
+    opened = []
+    dialog = UpdateInstalledDialog(frame, "0.1.4", lambda: opened.append(True))
+    try:
+        assert dialog.GetTitle() == "The Chat Place Update Installed"
+        assert dialog.message.GetLabel() == "The Chat Place was updated to 0.1.4."
+        assert dialog.whats_new.GetLabel() == "See &what's new in 0.1.4"
+        assert dialog.whats_new.GetName() == "See what's new in 0.1.4"
+        assert dialog.close.GetId() == wx.ID_CANCEL and dialog.GetEscapeId() == wx.ID_CANCEL
+        # Tab order: See What's New first, then Close.
+        buttons = [c for c in dialog.GetChildren() if isinstance(c, wx.Button)]
+        assert buttons == [dialog.whats_new, dialog.close]
+        dialog.see_whats_new()
+        assert opened == [True]
+    finally:
+        dialog.Destroy()
+
+
+def test_update_installed_dialog_opens_the_release_notes(frame, env, monkeypatch):
+    seen = []
+
+    def fake_modal(dialog):
+        seen.append(dialog.GetTitle())
+        dialog.see_whats_new()
+        dialog.Destroy()
+    monkeypatch.setattr(frame, "_modal", fake_modal)
+    frame.show_update_installed("0.1.4")
+    assert seen == ["The Chat Place Update Installed"]
+    assert env["opened"] == ["https://github.com/kellylford/AIChat/releases/tag/v0.1.4"]
+    assert env["feedback"][-1] == "Opening what's new in The Chat Place 0.1.4."
+
+    def broken(url):
+        raise OSError("no browser")
+    monkeypatch.setattr(platform_paths, "open_url", broken)
+    frame.show_update_installed("0.1.4")
+    assert env["boxes"][-1].startswith("Couldn't open the release notes: no browser")
+    assert "releases/tag/v0.1.4" in env["boxes"][-1]
+
+
+def test_settings_has_the_update_installed_choice(frame, env):
+    from thechatplace.ui.dialogs import SettingsDialog
+    frame.speech.last_run_version = "0.1.3"
+    dialog = SettingsDialog(frame, frame.speech, speech.default_options())
+    try:
+        assert dialog.update_notice.GetValue() is True
+        assert dialog.update_notice.GetLabel().startswith(
+            "&Tell me when an update has been installed")
+        dialog.update_notice.SetValue(False)
+        got = dialog.get_settings()
+        assert got.update_installed_notice is False
+        assert got.last_run_version == "0.1.3"   # passes through untouched
+    finally:
+        dialog.Destroy()

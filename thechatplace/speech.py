@@ -168,6 +168,12 @@ class SpeechSettings:
     #: The session list's columns, in the order each row reads them (View,
     #: Session List Columns, #134): ids from ``sessions.FIELD_IDS``.
     session_fields: List[str] = field(default_factory=_default_fields)
+    #: "The Chat Place Update Installed" after an update (#141); Settings
+    #: turns it off.
+    update_installed_notice: bool = True
+    #: The version that last started, recorded by installed copies only, so
+    #: the first start after an update can say so (#141).
+    last_run_version: str = ""
 
     @property
     def enabled(self) -> bool:
@@ -210,6 +216,9 @@ class SpeechSettings:
         settings.remote_control = raw.get("remote_control") is True
         from .sessions import clean_fields
         settings.session_fields = clean_fields(raw.get("session_fields"))
+        settings.update_installed_notice = raw.get("update_installed_notice") is not False
+        last = raw.get("last_run_version", "")
+        settings.last_run_version = last.strip() if isinstance(last, str) else ""
         return settings
 
     def save(self, path: Optional[Path] = None) -> None:

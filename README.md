@@ -396,6 +396,24 @@ Help, Check for Updates. At start it only speaks up when there is a new version,
 says so: it never opens a dialog you didn't ask for. From Help it always says what it found ("up to
 date", "no release has been published yet", or an error), even with announcements set to silent.
 
+The Help menu's update item always says which version you're running, as QuickMail's does:
+**Check for Updates (running 0.1.4)...** (Alt+H, U). Once a check, at start or from Help, finds a
+newer version, the item becomes **Update to 0.1.5 Available...** (still Alt+H, U), and choosing it
+offers the update. If a later check finds nothing newer, it goes back to the running version; a
+check that fails leaves it as it was.
+
+**After an update.** The first time the updated app starts, a small dialog, **The Chat Place
+Update Installed**, says "The Chat Place was updated to 0.1.5." Focus starts on **See what's new
+in 0.1.5** (Alt+W), which opens that version's release notes on GitHub
+(`https://github.com/kellylford/AIChat/releases/tag/v0.1.5`) and closes the dialog; **Close**
+(Alt+C) or Escape just closes it. It waits until the main window is in front with no other dialog
+open (a warning about a damaged file, say), so it never lands on top of another one; if that
+doesn't happen within half an hour, the status bar says it instead. It's shown only by an
+installed copy, only when the version is newer than the one that last started (recorded as
+`last_run_version` in `speech.json` in the data folder), and never on a first run, after a
+downgrade, from the portable zip or from source. Turn it off in Settings with "Tell me when an
+update has been installed, with a link to what's new" (Alt+T).
+
 From Help, a new version is offered in a Yes/No dialog where No is the default. If you choose Yes,
 it downloads the update, closes, and starts the new version. It won't install while Claude is
 working in one of its sessions, and it warns you if a reply box holds text you haven't sent. If a
