@@ -832,7 +832,8 @@ class TurnRunner:
                  env: Optional[Dict[str, str]] = None,
                  clock: Callable[[], float] = time.monotonic,
                  images: Optional[List[dict]] = None,
-                 remote_control: Optional[Dict[str, str]] = None) -> None:
+                 remote_control: Optional[Dict[str, str]] = None,
+                 timer: Callable[..., threading.Timer] = threading.Timer) -> None:
         self.command = command
         self.cwd = cwd
         self.prompt = prompt
@@ -841,6 +842,9 @@ class TurnRunner:
         self.remote_control = remote_control
         self.on_event = on_event
         self._popen = popen
+        #: Makes the turn's timers (the idle ceiling, the initialize wait), so
+        #: a test can fire them when it likes instead of waiting minutes.
+        self._timer = timer
         self._env = dict(env if env is not None else child_environment())
         # Ask for session_state_changed, so the turn ends when Claude Code says
         # it's idle, not at the first result (#76).
@@ -850,9 +854,18 @@ class TurnRunner:
         self._lock = threading.Lock()
         self._cancelled = False
         self._stopped_for_key = False
-        #: A message sent with Send Now and not answered yet. The result of
-        #: the work it interrupted (error_during_execution) isn't a failure.
-        self._message_outstanding = False
+        #: Messages written to Claude Code (the turn's own, then each Send
+        #: Now) whose result hasn't come yet. Each message gets one result,
+        #: and they come in order, so while this is above zero a result
+        #: belongs to work a later message replaced (#83): its
+        #: error_during_execution is the interrupt, not a failure, and the
+        #: turn isn't over. A count, not a flag, so that work finishing on its
+        #: own just as Send Now goes can't pass for the new message's answer.
+        self._unanswered = 0
+        #: True once the turn's own message is written. Send Now before then
+        #: waits in ``_send_now_waiting`` so it can't overtake it (#83).
+        self._prompt_sent = False
+        self._send_now_waiting: List[str] = []
         #: Stopped by The Chat Place before Claude answered (an API key or an
         #: unchosen Fable): the message goes back to the reply box.
         self.stopped_before_answer = False
@@ -878,15 +891,59 @@ class TurnRunner:
         with self._lock:
             if not self._stdin_open or self._cancelled or self.stopped_before_answer:
                 return False  # over, or being stopped: it would go nowhere
-            ok = self._write_line({"type": "control_request",
-                                   "request_id": f"thechatplace-interrupt-{uuid.uuid4().hex[:8]}",
-                                   "request": {"subtype": "interrupt"}})
-            ok = ok and self._write_raw(message_line(prompt))
+            if not self._prompt_sent:
+                # Still waiting for initialize's answer: the turn's own
+                # message goes first, then this one (``_send_prompt``).
+                self._send_now_waiting.append(prompt)
+                ok = True
+            else:
+                ok = self._write_send_now(prompt)
             if ok:
-                # Until it's answered, the turn isn't over, idle or not.
-                self._message_outstanding = True
                 self.last_activity = "starting on your new message"
             return ok
+
+    def _write_send_now(self, prompt: str) -> bool:
+        """Interrupt, then the message. Call with ``_lock`` held."""
+        ok = self._write_line({"type": "control_request",
+                               "request_id": f"thechatplace-interrupt-{uuid.uuid4().hex[:8]}",
+                               "request": {"subtype": "interrupt"}})
+        ok = ok and self._write_raw(message_line(prompt))
+        if ok:
+            # Until it's answered, the turn isn't over, idle or not.
+            self._unanswered += 1
+        return ok
+
+    def _send_prompt(self) -> None:
+        """Write the turn's own message, then any Send Now that came while it
+        waited. Called once."""
+        with self._lock:
+            self._prompt_sent = True
+            if self._write_raw(message_line(self.prompt, self.images)):
+                self._unanswered += 1
+            waiting, self._send_now_waiting = self._send_now_waiting, []
+            for prompt in waiting:
+                self._write_send_now(prompt)
+
+    def _result_came(self) -> bool:
+        """Count a result against the oldest unanswered message. True if a
+        later message is still to be answered, so this result was for work
+        Send Now replaced."""
+        with self._lock:
+            # A result with nothing unanswered (a background agent's
+            # notification, say) answers nothing.
+            self._unanswered = max(0, self._unanswered - 1)
+            return self._unanswered > 0
+
+    def _close_stdin_if_answered(self) -> bool:
+        """End the turn (close stdin, so the CLI exits) unless a Send Now
+        message is still to be answered. The check and the close are one step
+        under ``_lock``, so a Send Now can't slip in between. True if closed
+        (or already closed)."""
+        with self._lock:
+            if self._unanswered:
+                return False
+            self._close_stdin_locked()
+            return True
 
     def respond(self, request_id: str, response: dict) -> bool:
         """Answer a permission request (from the UI thread). False if the turn
@@ -929,13 +986,16 @@ class TurnRunner:
 
     def _close_stdin(self) -> None:
         with self._lock:
-            if not self._stdin_open or self._process is None:
-                return
-            self._stdin_open = False
-            try:
-                self._process.stdin.close()
-            except (OSError, ValueError):
-                pass
+            self._close_stdin_locked()
+
+    def _close_stdin_locked(self) -> None:
+        if not self._stdin_open or self._process is None:
+            return
+        self._stdin_open = False
+        try:
+            self._process.stdin.close()
+        except (OSError, ValueError):
+            pass
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, name="claude-turn", daemon=True)
@@ -1029,12 +1089,18 @@ class TurnRunner:
             last_state = ""
             # After a result, idle should follow; if it never does (a stuck
             # hook, say), end the turn anyway after a while, as Claude Code's
-            # own SDK does. Paused while Claude waits for an answer.
+            # own SDK does. Paused while Claude waits for an answer, and while
+            # it works on a Send Now message, however long that takes (#83).
             ceiling: List[threading.Timer] = []
 
-            def arm_ceiling() -> None:
+            def arm_ceiling(unanswered_too: bool = False) -> None:
+                """``unanswered_too``: Claude Code says it's idle with a Send
+                Now message seemingly unanswered; end the turn even so, after
+                the same while, rather than leave it open for ever."""
                 disarm_ceiling()
-                timer = threading.Timer(IDLE_AFTER_RESULT_WAIT, self._close_stdin)
+                timer = self._timer(IDLE_AFTER_RESULT_WAIT,
+                                    self._close_stdin if unanswered_too
+                                    else self._close_stdin_if_answered)
                 timer.daemon = True
                 ceiling.append(timer)
                 timer.start()
@@ -1051,13 +1117,12 @@ class TurnRunner:
                     if message_sent:
                         return False
                     message_sent = True
-                with self._lock:
-                    self._write_raw(message_line(self.prompt, self.images))
+                self._send_prompt()
                 return True
 
             # A Claude Code that never answers initialize still gets the
             # message (the system/init check still stands behind it).
-            unanswered = threading.Timer(INIT_ANSWER_WAIT, send_message)
+            unanswered = self._timer(INIT_ANSWER_WAIT, send_message)
             unanswered.daemon = True
             unanswered.start()
 
@@ -1115,15 +1180,24 @@ class TurnRunner:
                     if event.kind == "state":
                         states_seen = True
                         last_state = event.text
-                        if event.text == "idle" and final is not None \
-                                and not self._message_outstanding:
-                            # Really over: closing stdin lets the CLI exit.
-                            disarm_ceiling()
-                            self._close_stdin()
+                        if event.text == "idle" and final is not None:
+                            if self._close_stdin_if_answered():
+                                # Really over: closing stdin lets the CLI exit.
+                                disarm_ceiling()
+                            else:
+                                # Idle between the stopped work and the new
+                                # message; "running" should follow.
+                                arm_ceiling(unanswered_too=True)
                         elif event.text == "requires_action":
                             disarm_ceiling()  # waiting for you, however long
                         elif event.text == "running" and final is not None:
-                            arm_ceiling()
+                            # Read without the lock on purpose: a Send Now
+                            # landing just after only meets the ceiling that
+                            # checks again before closing.
+                            if self._unanswered:
+                                disarm_ceiling()  # on the Send Now message
+                            else:
+                                arm_ceiling()
                         continue
                     if event.kind == "finished":
                         # The latest result is the turn's, carrying every
@@ -1131,23 +1205,31 @@ class TurnRunner:
                         # more can follow (a background agent's notification
                         # runs as its own result), so the turn waits for idle;
                         # an older Claude Code without them ends here.
-                        if self._message_outstanding:
-                            if event.raw_type == "error_during_execution":
-                                # The work Send Now stopped: not the turn
-                                # failing, and the message is still to come.
-                                event.is_error = False
-                            else:
-                                self._message_outstanding = False
+                        replaced = self._result_came()
+                        if replaced and event.raw_type == "error_during_execution":
+                            # The work Send Now stopped: not the turn
+                            # failing, and the message is still to come. The
+                            # new message's own error, once nothing later is
+                            # waiting, is a real one and stands.
+                            event.is_error = False
                         if final is not None:
                             event.denials = list(final.denials) + [
                                 d for d in event.denials if d not in final.denials]
                             event.is_error = event.is_error or final.is_error
                         final = event
-                        if not self._message_outstanding and (
-                                not states_seen or last_state == "idle"):
-                            self._close_stdin()
-                        else:
-                            arm_ceiling()
+                        idle = states_seen and last_state == "idle"
+                        if not replaced and states_seen and not idle:
+                            arm_ceiling()  # idle should follow
+                        elif replaced or not self._close_stdin_if_answered():
+                            # A Send Now message is still to be answered
+                            # (one may have gone just now). Claude moves on to
+                            # it; if it has already said idle, "running"
+                            # should follow, and the ceiling stands behind it.
+                            if idle:
+                                arm_ceiling(unanswered_too=True)
+                            else:
+                                disarm_ceiling()
+                        # else: answered, and idle (or no state events): closed
                     else:
                         self._emit(event)
                 self._refuse_unsupported()
