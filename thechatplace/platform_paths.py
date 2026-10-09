@@ -23,6 +23,8 @@ from __future__ import annotations
 import ntpath
 import os
 import re
+import secrets
+import stat
 import sys
 from pathlib import Path
 from typing import Iterable, List, Optional
@@ -880,3 +882,159 @@ def hidden_window_flags() -> int:
 
         return subprocess.CREATE_NO_WINDOW
     return 0
+
+
+# -- thechatplace:// links (#144) --------------------------------------------------------
+#
+# A second copy of The Chat Place started with a link hands it to the copy
+# that's running and exits. It writes the link as a small file in the app's
+# own data folder (``links``), which only this user can write to (%APPDATA% on
+# Windows; on a Mac the folder is made private, and a file someone else owns
+# is ignored). The running copy looks there every second, takes each file,
+# deletes it, and treats its text as a link it was given: parsed strictly,
+# and only ever able to select a session (links.py). No socket is opened, so
+# nothing on the network, or another user on the same PC, can send one.
+
+LINK_INBOX_NAME = "links"
+#: A link file is one short line; anything bigger isn't one of ours.
+LINK_FILE_MAX_BYTES = 1024
+#: A link nobody took within this long is old news (the running copy closed
+#: before it looked, say): it's deleted unopened. One left by a copy that
+#: closed just then can still open in a copy started within this time.
+LINK_FILE_STALE_SECONDS = 60
+
+
+def link_inbox_dir() -> Path:
+    return app_data_dir() / LINK_INBOX_NAME
+
+
+def drop_link(text: str, folder: Optional[Path] = None) -> Path:
+    """Leave ``text`` (a link) for the running copy. Written under a temporary
+    name and renamed, so the running copy never reads half a file. Raises
+    OSError if it can't be written."""
+
+    folder = Path(folder or link_inbox_dir())
+    folder.mkdir(parents=True, exist_ok=True)
+    if sys.platform != "win32":
+        os.chmod(folder, 0o700)
+    data = text.encode("utf-8")[:LINK_FILE_MAX_BYTES]
+    name = secrets.token_hex(8)
+    temporary = folder / f"{name}.tmp"
+    final = folder / f"{name}.link"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+    handle = os.open(temporary, flags, 0o600)
+    try:
+        os.write(handle, data)
+    finally:
+        os.close(handle)
+    os.replace(temporary, final)
+    return final
+
+
+def take_dropped_links(folder: Optional[Path] = None, now: Optional[float] = None) -> List[str]:
+    """The links other copies left (oldest first), each deleted as it's read.
+    Stale, oversized, unreadable files, files that aren't plain files, and on
+    a Mac files another user owns, are deleted (if possible) and ignored.
+    Never raises."""
+    import time
+
+    folder = Path(folder or link_inbox_dir())
+    now = time.time() if now is None else now
+    try:
+        entries = list(os.scandir(folder))
+    except OSError:
+        return []
+    found = []
+    for entry in entries:
+        try:
+            info = entry.stat(follow_symlinks=False)
+        except OSError:
+            continue
+        if entry.name.endswith((".tmp", ".taken")):
+            # Being written or read now, or left by a copy that died doing so.
+            if now - info.st_mtime > LINK_FILE_STALE_SECONDS:
+                _remove_quietly(entry.path)
+            continue
+        if not entry.name.endswith(".link"):
+            continue
+        if not stat.S_ISREG(info.st_mode):
+            continue  # a folder or a link to elsewhere: not ours, left alone
+        usable = (info.st_size <= LINK_FILE_MAX_BYTES
+                  and now - info.st_mtime <= LINK_FILE_STALE_SECONDS
+                  and (sys.platform == "win32" or info.st_uid == os.getuid()))
+        # Claimed by renaming it first, so a file that can't be deleted (a
+        # virus scanner holding it, say) is never read a second time.
+        claimed = os.path.join(folder, f"{secrets.token_hex(8)}.taken")
+        try:
+            os.replace(entry.path, claimed)
+        except OSError:
+            continue
+        text = None
+        if usable:
+            try:
+                with open(claimed, "rb") as handle:
+                    text = handle.read(LINK_FILE_MAX_BYTES + 1).decode("utf-8")
+            except (OSError, UnicodeDecodeError):
+                text = None
+        _remove_quietly(claimed)
+        if text is not None and len(text.encode("utf-8")) <= LINK_FILE_MAX_BYTES:
+            found.append((info.st_mtime, entry.name, text.strip()))
+    return [text for _when, _name, text in sorted(found)]
+
+
+def _remove_quietly(path) -> None:
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+#: Windows: the per-user registration of thechatplace:// (HKCU, never the
+#: whole machine), made only by an installed copy (links.py decides).
+URL_SCHEME_KEY = r"Software\Classes\thechatplace"
+
+
+def url_scheme_command() -> Optional[str]:
+    """The command Windows runs for a thechatplace:// link, or None if the
+    scheme isn't registered for this user (or this isn't Windows)."""
+    if sys.platform != "win32":
+        return None
+    import winreg
+
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                            URL_SCHEME_KEY + r"\shell\open\command") as key:
+            value, _kind = winreg.QueryValueEx(key, "")
+            return str(value)
+    except OSError:
+        return None
+
+
+def register_url_scheme(command: str, icon: str) -> None:
+    """Register thechatplace:// for this user: Windows runs ``command`` with
+    the link. Raises OSError if the registry refuses."""
+    if sys.platform != "win32":
+        return
+    import winreg
+
+    root = winreg.HKEY_CURRENT_USER
+    with winreg.CreateKey(root, URL_SCHEME_KEY) as key:
+        winreg.SetValueEx(key, "", 0, winreg.REG_SZ, "URL:The Chat Place link")
+        winreg.SetValueEx(key, "URL Protocol", 0, winreg.REG_SZ, "")
+    with winreg.CreateKey(root, URL_SCHEME_KEY + r"\DefaultIcon") as key:
+        winreg.SetValueEx(key, "", 0, winreg.REG_SZ, icon)
+    with winreg.CreateKey(root, URL_SCHEME_KEY + r"\shell\open\command") as key:
+        winreg.SetValueEx(key, "", 0, winreg.REG_SZ, command)
+
+
+def unregister_url_scheme() -> None:
+    """Remove this user's thechatplace:// registration, if any. Never raises."""
+    if sys.platform != "win32":
+        return
+    import winreg
+
+    for sub in (r"\shell\open\command", r"\shell\open", r"\shell", r"\DefaultIcon", ""):
+        try:
+            winreg.DeleteKey(winreg.HKEY_CURRENT_USER, URL_SCHEME_KEY + sub)
+        except OSError:
+            pass

@@ -172,6 +172,19 @@ plist_set CFBundleName "The Chat Place"
 plist_set NSHumanReadableCopyright "Copyright Kelly Ford. MIT License."
 plist_set NSAppleEventsUsageDescription \
     "The Chat Place asks VoiceOver to speak announcements, such as when Claude replies."
+# thechatplace:// links to sessions (#144): macOS sends them to the app, which
+# opens them in MacOpenURL. Rewritten whole, so a rebuild never doubles it.
+/usr/libexec/PlistBuddy -c "Delete :CFBundleURLTypes" "$PLIST" >/dev/null 2>&1 || true
+/usr/libexec/PlistBuddy \
+    -c "Add :CFBundleURLTypes array" \
+    -c "Add :CFBundleURLTypes:0 dict" \
+    -c "Add :CFBundleURLTypes:0:CFBundleURLName string $BUNDLE_ID.session-link" \
+    -c "Add :CFBundleURLTypes:0:CFBundleTypeRole string Viewer" \
+    -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" \
+    -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string thechatplace" \
+    "$PLIST" || fail "adding the thechatplace:// link type to Info.plist"
+[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' "$PLIST")" \
+    = "thechatplace" ] || fail "Info.plist has no thechatplace:// link type"
 # Editing Info.plist breaks PyInstaller's ad-hoc signature; make a new one.
 codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || fail "ad-hoc signing"
 
@@ -224,6 +237,10 @@ PACKED_APP=$(find "$PACKED" -maxdepth 1 -name "*.app" | head -1)
 [ -f "$PACKED_APP/Contents/MacOS/UpdateMac" ] \
     || fail "the packed app has no Contents/MacOS/UpdateMac, so it could never update."
 smoke_test "$PACKED_APP" packed
+# vpk rewrites parts of Info.plist; the link type (#144) must survive it.
+[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' \
+    "$PACKED_APP/Contents/Info.plist" 2>/dev/null)" = "thechatplace" ] \
+    || fail "the packed app's Info.plist lost the thechatplace:// link type"
 # And Velopack, inside the packed app, finds its updater and knows its version.
 grep -q "\"updater\": \"$VERSION\"" smoke-local.json \
     || { cat smoke-local.json; fail "Velopack doesn't see the packed app as updatable."; }

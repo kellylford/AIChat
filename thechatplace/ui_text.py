@@ -31,6 +31,9 @@ SHORTCUTS = [
     ("Session list", [
         ("Enter", "Load that session and move to its messages"),
         ("Ctrl+O", "Open the selected session in the Claude desktop app"),
+        ("Ctrl+Shift+L", "Copy Session Link: Enter copies a Markdown link that opens the "
+                         "session in The Chat Place; the list also has the bare link, and "
+                         "where they apply its Open in Claude link and claude.ai address"),
         ("Ctrl+N", "New Chat Place session"),
         ("Ctrl+Shift+N", "Continue the selected desktop app session here, as a copy you can "
                          "reply to (the desktop app session isn't changed)"),
@@ -48,8 +51,9 @@ SHORTCUTS = [
                    "plain text"),
         ("F2", "Rename the selected session (a desktop app session's new name shows only "
                "in The Chat Place)"),
-        ("Applications key / Shift+F10", "The session's menu: load, open in Claude, rename, "
-                                         "Remote Control, groups, export, hide or delete"),
+        ("Applications key / Shift+F10", "The session's menu: load, open in Claude, copy "
+                                         "its link, rename, Remote Control, groups, export, "
+                                         "hide or delete"),
         ("Alt+F, O", "Remote Control: reach the selected session from claude.ai and your "
                      "phone (a desktop app session can be continued here with it on)"),
         ("Ctrl+G", "Add the selected session to a group (or a new one); File, Remove "
