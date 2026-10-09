@@ -134,3 +134,6 @@ WebView2 formatted view), `usage.py`, `changes.py`, `codeblocks.py`, `attachment
   Commit messages are one plain-English sentence about the user-visible change, ending in issue/PR
   refs, e.g. `Code blocks: list, read and copy each one (#17) (#43)`.
 - Never write to the desktop app's files or to any transcript.
+- Research and design notes written while working on an issue go in `dev-notes/` (listed in its
+  README), not in `docs/`: GitHub Pages publishes everything in `docs/`. Hand-testing guides go in
+  `testing/`.
