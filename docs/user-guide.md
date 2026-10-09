@@ -219,6 +219,22 @@ These are for The Chat Place's own sessions:
   listed under the reply box, and Delete there removes one. Claude sees pictures as pictures, and
   reads other files from where they are.
 
+### Saved prompts
+
+Keep messages you send often as prompts, each with a name, and put one in the reply box when you
+need it:
+
+- **Ctrl+Shift+P** (File, Prompts) lists your prompts by name, with the selected one's text below
+  it (Alt+X to read it). **Enter**, or Use, puts the prompt in the reply box of the loaded Chat
+  Place session, at the cursor, ready to change and send.
+- In the same dialog, **New** and **Edit** ask for a name and the text (Enter starts a new line in
+  the text, and Ctrl+Enter saves). **Delete** asks first. **Move Up** and **Move Down** change the
+  order. Each change is saved straight away, and you hear what happened, such as "Prompt saved:
+  Review". Escape closes.
+- **Ctrl+Shift+Enter** in the reply box saves what you've typed as a prompt and sends it. It asks
+  for the prompt's name first, starting with the message's first few words. Press Escape there
+  and nothing is saved or sent: your message stays in the reply box.
+
 ## When Claude needs you
 
 In one of The Chat Place's own sessions, when Claude needs a permission, asks you a question, or
