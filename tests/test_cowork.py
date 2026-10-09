@@ -57,6 +57,8 @@ def test_cowork_sessions_are_read_only_desktop_sessions(tmp_path):
     assert info.list_line(NOW).endswith("Cowork session")
     # The --resume guard knows its id, as it knows every desktop app id.
     assert result.desktop_cli_ids == {"cli-cw1"}
+    # And knows it's a Cowork one, which can't even be copied here.
+    assert result.cowork_cli_ids == {"cli-cw1"}
 
 
 def test_transcript_is_found_in_the_sessions_own_home(tmp_path):
@@ -65,6 +67,20 @@ def test_transcript_is_found_in_the_sessions_own_home(tmp_path):
     [info] = load(tmp_path).sessions
     assert info.claude_home == platform_paths.long_path(home)
     assert info.transcript_path() == transcript
+
+
+def test_transcript_past_windows_path_limit_is_read(tmp_path):
+    """Real Cowork transcripts sit at around 480 characters; Windows opens
+    them only in the long form, so make one that long and read it back."""
+    from thechatplace.transcript import read_transcript
+    _path, home, _cwd = write_cowork(tmp_path / "cowork")
+    # Encoded, the cwd is one folder name, which can't pass 255 characters.
+    cwd = "C:\\" + "\\".join(["a-rather-long-folder-name-for-a-cowork-task"] * 5)
+    transcript = write_transcript(home, cwd, "cli-cw1", user_text("Total these"))
+    assert len(str(transcript)) > 300
+    [info] = load(tmp_path).sessions
+    assert len(read_transcript(info.transcript_path()).messages) == 1
+
 
 def test_transcript_found_when_cwd_does_not_match_its_folder(tmp_path):
     # The Store app's cwd says %APPDATA%, but the files are in its package
@@ -157,8 +173,10 @@ def test_cowork_folders_both_installs(monkeypatch, tmp_path):
 def test_folder_is_the_one_cowork_was_given_not_outputs(tmp_path):
     path, _home, _cwd = write_cowork(tmp_path / "cowork")
     [info] = load(tmp_path).sessions
-    assert info.repo == "Cowork"
-    assert info.list_line(NOW).startswith("Sort the receipts, Cowork, idle")
+    # With no folder it says so: the row ends "Cowork session" already.
+    assert info.repo == "no folder"
+    assert info.list_line(NOW).startswith("Sort the receipts, no folder, idle")
+    assert info.list_line(NOW).count("Cowork") == 1
     data = json.loads(path.read_text(encoding="utf-8"))
     data["userSelectedFolders"] = ["C:\\Users\\k\\OneDrive\\Finance\\"]
     path.write_text(json.dumps(data), encoding="utf-8")
@@ -166,7 +184,7 @@ def test_folder_is_the_one_cowork_was_given_not_outputs(tmp_path):
     assert info.repo == "Finance"
     data["userSelectedFolders"] = [5, "C:\\x"]  # not what's expected: ignored
     path.write_text(json.dumps(data), encoding="utf-8")
-    assert load(tmp_path).sessions[0].repo == "Cowork"
+    assert load(tmp_path).sessions[0].repo == "no folder"
 
 
 def test_archived_cowork_live_state_is_not_read(tmp_path):
@@ -194,5 +212,10 @@ def test_long_path_form_on_windows_only(monkeypatch):
     assert str(long(P(r"\\srv\share\x"))) == r"\\?\UNC\srv\share\x"
     assert long(P(r"\\?\C:\A")) == P(r"\\?\C:\A")
     assert long(P("relative")) == P("relative")
+    # A device path stays one, and ".." is resolved (the long form takes it literally).
+    assert long(P(r"\\.\pipe\x")) == P(r"\\.\pipe\x")
+    monkeypatch.setattr(platform_paths.os.path, "abspath",
+                        lambda text: text.replace("\\a\\..", ""))
+    assert str(long(P(r"C:\a\..\b"))) == r"\\?\C:\b"
     monkeypatch.setattr(platform_paths.sys, "platform", "darwin")
     assert long(P(r"C:\A")) == P(r"C:\A")

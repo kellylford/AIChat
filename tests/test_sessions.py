@@ -289,12 +289,22 @@ def test_a_reused_pid_is_not_the_session(tmp_path):
     assert set(load_live_status(tmp_path, alive=lambda pid: True,
                                 started=starts.get)) == {"cli-1", "cli-3"}
     # A procStart on another clock (.NET ticks, from Cowork's Claude Code,
-    # #91) can't be compared, so the pid is all there is.
+    # #91): startedAt is compared instead, and with neither the pid is all there is.
+    started_ms = started // 10_000 - 11_644_473_600_000
     (tmp_path / "400.json").write_text(json.dumps(
-        {"pid": 400, "sessionId": "cli-4", "status": "busy", "procStart": "639192376598308390"}))
-    starts[400] = started
-    assert "cli-4" in load_live_status(tmp_path, alive=lambda pid: True, started=starts.get)
-    (tmp_path / "400.json").unlink()
+        {"pid": 400, "sessionId": "cli-4", "status": "busy", "procStart": "639192376598308390",
+         "startedAt": started_ms + 900}))
+    (tmp_path / "500.json").write_text(json.dumps(
+        {"pid": 500, "sessionId": "cli-5", "status": "busy", "procStart": "639192376598308390",
+         "startedAt": started_ms - 3_600_000}))
+    (tmp_path / "600.json").write_text(json.dumps(
+        {"pid": 600, "sessionId": "cli-6", "status": "busy", "procStart": "639192376598308390"}))
+    starts.update({400: started, 500: started, 600: started})
+    live = load_live_status(tmp_path, alive=lambda pid: True, started=starts.get)
+    # 500's pid now belongs to a process that started an hour after it.
+    assert {"cli-4", "cli-6"} <= set(live) and "cli-5" not in live
+    for name in ("400.json", "500.json", "600.json"):
+        (tmp_path / name).unlink()
     # Not knowing when the process started: the pid is all there is.
     assert set(load_live_status(tmp_path, alive=lambda pid: True,
                                 started=lambda pid: None)) == {"cli-1", "cli-2", "cli-3"}

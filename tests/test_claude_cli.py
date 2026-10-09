@@ -831,6 +831,13 @@ def test_fork_command_refuses_bad_ids(source, new):
         cli.build_fork_command(EXE, source, new, "t", "auto", taken_ids=OWN)
 
 
+def test_fork_command_refuses_a_cowork_session():
+    # Its history is in the desktop app's own files (#91): not even a copy.
+    with pytest.raises(cli.ResumeRefused):
+        cli.build_fork_command(EXE, "cccc-4444", "nnnn-3333", "t", "auto",
+                               taken_ids=OWN, cowork_ids={"cccc-4444"})
+
+
 def test_tool_events_say_what_the_tool_acts_on():
     parser = StreamParser()
     events = parser.feed(ev(type="assistant", message={"content": [

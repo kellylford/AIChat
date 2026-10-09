@@ -1071,6 +1071,7 @@ class MainFrame(wx.Frame):
         if not info.is_own:
             self.desktop_note.SetValue(_COWORK_NOTE if info.cowork else _DESKTOP_NOTE)
             self.continue_btn.Show(not info.cowork)
+            self.desktop_reply.Layout()
         self.session_view.Layout()
         self._update_heading()
         self._update_send_state()
@@ -1658,7 +1659,8 @@ class MainFrame(wx.Frame):
         add("&Load Session\tEnter", self.on_open_session)
         add("Open in &Claude\tCtrl+O", self.on_open_in_claude, info.can_open_in_claude)
         if not info.is_own:
-            add("Con&tinue Here...\tCtrl+Shift+N", self.on_continue_here)
+            # Heard as unavailable for a Cowork session (#91), whose button is hidden.
+            add("Con&tinue Here...\tCtrl+Shift+N", self.on_continue_here, not info.cowork)
         add("Re&name Session...\tF2", self.on_rename)
         add("&Remote Control...", self.on_remote_control)
         menu.AppendSeparator()
@@ -2171,7 +2173,8 @@ class MainFrame(wx.Frame):
                            "turned on and off" if info.remote else
                            "Open it in the Claude desktop app, to turn on Remote Control there")
             actions.append(self.on_open_in_claude)
-        if info.cli_session_id and platform_paths.transcript_path(info.cwd, info.cli_session_id):
+        # A Cowork session (#91) can't be continued here, so only the desktop app is offered.
+        if not info.cowork and info.cli_session_id and info.transcript_path():
             choices.append("Continue it here as a copy, with Remote Control on")
             actions.append(lambda: self.on_continue_here(remote_control="on"))
         if not choices:
@@ -2578,7 +2581,8 @@ class MainFrame(wx.Frame):
             command = build_fork_command(
                 lookup.path, info.cli_session_id, new_id, title, mode, model,
                 taken_ids={s.cli_session_id for s in self.store.all()}
-                | set(self._snapshot.desktop_cli_ids))
+                | set(self._snapshot.desktop_cli_ids),
+                cowork_ids=self._snapshot.cowork_cli_ids)
         except (ResumeRefused, ValueError) as exc:
             wx.MessageBox(str(exc), APP_NAME, wx.OK | wx.ICON_WARNING, self)
             return
@@ -2678,7 +2682,8 @@ class MainFrame(wx.Frame):
                     # going: copy it again.
                     command = build_fork_command(exe, own.fork_source, own.cli_session_id,
                                                  own.title, own.permission_mode, own.model,
-                                                 taken_ids=self._snapshot.desktop_cli_ids)
+                                                 taken_ids=self._snapshot.desktop_cli_ids,
+                                                 cowork_ids=self._snapshot.cowork_cli_ids)
                 else:
                     command = build_new_command(exe, own.cli_session_id, own.title,
                                                 own.permission_mode, own.model,
@@ -3090,8 +3095,15 @@ class MainFrame(wx.Frame):
         words = self._session_filter.casefold().split()
         if words:
             shown = [s for s in shown
-                     if all(w in f"{s.title} {s.repo} {s.detail}".casefold() for w in words)]
+                     if all(w in self._filter_text(s) for w in words)]
         return shown
+
+    @staticmethod
+    def _filter_text(info: SessionInfo) -> str:
+        """What Ctrl+F in the list searches: the words its row says, with
+        "Cowork" for a Cowork session whose folder has another name (#91)."""
+        kind = " Cowork" if info.cowork else ""
+        return f"{info.title} {info.repo} {info.detail}{kind}".casefold()
 
     def _update_list_label(self, shown: int):
         """The list's label, and so its name, says what it's showing."""

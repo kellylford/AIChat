@@ -78,7 +78,8 @@ class SessionInfo:
     def repo(self) -> str:
         if self.cowork:
             name = self.cowork_folder.rstrip("\\/").replace("\\", "/").split("/")[-1]
-            return name or "Cowork"
+            # "Cowork session" ends the row already, so not "Cowork" twice.
+            return name or "no folder"
         cwd = (self.cwd or "").rstrip("\\/")
         if not cwd:
             return "unknown folder"
@@ -315,7 +316,7 @@ def load_live_status(directory: Optional[Path] = None,
                 continue
         if not alive(pid):
             continue
-        if not _same_process(data.get("procStart"), started(pid)):
+        if not _same_process(data.get("procStart"), started(pid), data.get("startedAt")):
             continue
         status = LiveStatus(status=str(data.get("status") or ""), pid=pid,
                             updated_ms=_int(data.get("statusUpdatedAt") or data.get("updatedAt")))
@@ -329,27 +330,41 @@ def load_live_status(directory: Optional[Path] = None,
 #: A ``procStart`` that is a Windows FILETIME falls between these: 2000 and 2200.
 _FILETIME_FROM = 125_911_584_000_000_000
 _FILETIME_TO = 189_025_920_000_000_000
+#: Milliseconds from 1601 (FILETIME's start) to 1970 (``startedAt``'s).
+_FILETIME_EPOCH_MS = 11_644_473_600_000
+#: How long after its process starts Claude Code may write ``startedAt``.
+#: Seen under a second; a pid Windows hands on is reused much later.
+_STARTED_AT_SLACK_MS = 30_000
 
 
-def _same_process(recorded, actual: Optional[int]) -> bool:
+def _same_process(recorded, actual: Optional[int], started_at=None) -> bool:
     """Whether the pid file's ``procStart`` is the running process's start.
     True when either isn't known: then the pid is all there is to go on. A
     process that isn't yours can't be the Claude Code that wrote the file."""
-    try:
-        recorded = int(float(str(recorded)))
-    except (TypeError, ValueError, OverflowError):
-        return True
-    if actual is None:
+    recorded, started_ms = _number(recorded), _number(started_at)
+    if (recorded is None and started_ms is None) or actual is None:
         return True
     if actual == platform_paths.NOT_YOURS:
         return False
-    if not _FILETIME_FROM <= recorded <= _FILETIME_TO:
-        # Another clock: Cowork's Claude Code 2.1.205 wrote .NET ticks since
-        # the year 1 (#91). It can't be compared, so it isn't held against it.
+    if recorded is not None and _FILETIME_FROM <= recorded <= _FILETIME_TO:
+        # The same clock read twice can differ in the last digits: a second
+        # apart is still the same process; a reused pid started long after.
+        return abs(recorded - actual) < 10_000_000
+    # Another clock: Cowork's Claude Code 2.1.205 wrote .NET ticks in local
+    # time (#91). Its ``startedAt`` (epoch ms, written just after the process
+    # starts) is compared instead; without one the pid is all there is.
+    if started_ms is None:
         return True
-    # The same clock read twice can differ in the last digits: a second apart
-    # is still the same process; a reused pid started long after.
-    return abs(recorded - actual) < 10_000_000
+    actual_ms = actual // 10_000 - _FILETIME_EPOCH_MS
+    return -_STARTED_AT_SLACK_MS < started_ms - actual_ms < _STARTED_AT_SLACK_MS
+
+
+def _number(value) -> Optional[int]:
+    """A pid file's number, written as a number or a string; None if it isn't one."""
+    try:
+        return int(float(str(value)))
+    except (TypeError, ValueError, OverflowError):
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -364,6 +379,9 @@ class DesktopLoadResult:
     #: Every cli session id the desktop app owns, archived ones included.
     #: Used by the --resume guard.
     desktop_cli_ids: Set[str] = field(default_factory=set)
+    #: The cli ids of its Cowork sessions (#91), archived ones included: these
+    #: can't even be copied here (``build_fork_command``).
+    cowork_cli_ids: Set[str] = field(default_factory=set)
 
 
 def load_desktop_sessions(directory: Optional[Path] = None,
@@ -434,6 +452,8 @@ def _add_desktop_session(result: DesktopLoadResult, path: Path,
     cli_id = data.get("cliSessionId")
     if isinstance(cli_id, str) and cli_id:
         result.desktop_cli_ids.add(cli_id)
+        if claude_home is not None:
+            result.cowork_cli_ids.add(cli_id)
     if data.get("isArchived") and not include_archived:
         return
     info = desktop_session_from_metadata(data, {} if data.get("isArchived") else live())

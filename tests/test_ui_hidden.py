@@ -1920,6 +1920,28 @@ def test_cowork_view_shows_only_cowork_sessions(frame, env):
             for i in range(frame.session_list.GetCount())] == ["Sort the receipts"]
 
 
+def test_cowork_session_menu_remote_control_and_filter(frame, env, monkeypatch):
+    add_cowork(env, "local_cw", "cli-cw", "Sort the receipts", user_text("Hi"))
+    frame.refresh_sessions(force=True, resort=True)
+    settle(frame)
+    assert frame._snapshot.cowork_cli_ids == {"cli-cw"}
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    select(frame, "Sort the receipts")
+    menu, _actions = frame._session_menu()
+    # Listed, but heard as unavailable, as its button is hidden.
+    assert "Con&tinue Here..." in _labels(menu) and not _enabled(menu, "Con&tinue Here")
+    menu.Destroy()
+    offered = []
+    monkeypatch.setattr(frame, "_choose",
+                        lambda title, prompt, choices: offered.extend(choices) or None)
+    frame.on_remote_control()
+    assert offered and not any("Continue it here" in choice for choice in offered)
+    # Ctrl+F finds it by "Cowork", though its folder has another name.
+    frame._set_session_filter("cowork receipts")
+    assert [frame.session_list.GetString(i).split(",")[0]
+            for i in range(frame.session_list.GetCount())] == ["Sort the receipts"]
+
+
 # -- full messages as a formatted page (#190) ----------------------------------------------
 
 

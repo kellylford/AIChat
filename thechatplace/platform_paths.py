@@ -117,8 +117,11 @@ def long_path(path: Path) -> Path:
     if sys.platform != "win32":
         return path
     text = str(path)
-    if text.startswith("\\\\?\\") or not path.is_absolute():
+    # Already long, a device (``\\.\pipe\...``), or relative: left as it is.
+    if text.startswith(("\\\\?\\", "\\\\.\\")) or not path.is_absolute():
         return path
+    # The long form takes ``..`` literally, so it's resolved first.
+    text = os.path.abspath(text)
     if text.startswith("\\\\"):
         return Path("\\\\?\\UNC\\" + text[2:])
     return Path("\\\\?\\" + text)
