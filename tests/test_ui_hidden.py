@@ -3118,13 +3118,14 @@ def test_usage_and_context_command(frame, env, monkeypatch):
     assert sum("Context 86% full" in s for s in env["spoken"]) == 1
 
 
-def _key(dialog, target, code, ctrl=False):
-    event = wx.KeyEvent(wx.wxEVT_KEY_DOWN)
+def _hook(dialog, code, ctrl=False, shift=False):
+    """A key as the dialog's char hook sees it (Escape, Ctrl+C)."""
+    event = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
     event.SetKeyCode(code)
     event.SetControlDown(ctrl)
-    event.SetEventObject(target)
-    event.SetId(target.GetId())
-    return target.GetEventHandler().ProcessEvent(event)
+    event.SetShiftDown(shift)
+    event.SetEventObject(dialog.list)
+    dialog.GetEventHandler().ProcessEvent(event)
 
 
 def test_usage_dialog_with_no_session_copies_and_closes_on_escape(frame, env, monkeypatch):
@@ -3133,22 +3134,29 @@ def test_usage_dialog_with_no_session_copies_and_closes_on_escape(frame, env, mo
 
     def act(dialog):
         dialog.Bind(wx.EVT_BUTTON, lambda e: closed.append(e.GetId()), id=wx.ID_CANCEL)
-        _key(dialog, dialog.list, ord("C"), ctrl=True)  # Ctrl+C: the selected line
-        dialog.list.SetSelection(wx.NOT_FOUND)
-        dialog.copy_selected()  # Copy with nothing selected: every line
-        hook = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
-        hook.SetKeyCode(wx.WXK_ESCAPE)
-        hook.SetEventObject(dialog.list)
-        dialog.GetEventHandler().ProcessEvent(hook)
+        monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: dialog.list))
+        dialog.list.SetSelection(1)
+        _hook(dialog, ord("C"), ctrl=True)  # Ctrl+C in the list: the selected line
+        copies = len(env["copied"])
+        _hook(dialog, ord("C"), ctrl=True, shift=True)  # not Ctrl+Shift+C
+        assert len(env["copied"]) == copies
+        dialog.copy_all()  # Copy All: every line
+        _hook(dialog, wx.WXK_ESCAPE)
     seen = _usage_dialog(frame, monkeypatch, act)
     assert seen["rows"][0] == ("Context: no session is loaded. Load one to see how full its "
                                "context is.")
     assert [r.split(" used")[0] for r in seen["rows"][1:]] == ["5-hour limit 10%",
                                                                "Weekly limit 50%"]
-    assert env["copied"][-2] == seen["rows"][0]
+    assert env["copied"][-2] == seen["rows"][1]
     assert env["copied"][-1] == "\n".join(seen["rows"])
-    assert env["feedback"][-1] == "Copied usage and context."
+    assert env["feedback"][-2:] == ["Copied the line.", "Copied usage and context."]
     assert closed == [wx.ID_CANCEL]  # Escape presses Close
+
+
+def test_usage_dialog_says_when_the_clipboard_fails(frame, env, monkeypatch):
+    monkeypatch.setattr(type(frame), "_copy_text", lambda self, text: False)
+    _usage_dialog(frame, monkeypatch, lambda dialog: dialog.copy_selected())
+    assert env["feedback"][-1] == "Couldn't open the clipboard."
 
 
 def test_usage_dialog_is_named_for_screen_readers(frame):
@@ -3158,8 +3166,10 @@ def test_usage_dialog_is_named_for_screen_readers(frame):
         assert dialog.GetTitle() == "Usage and Context"
         assert dialog.list.GetName() == "Usage and context"
         close = dialog.FindWindow(wx.ID_CANCEL)
-        assert close is not None and close.GetLabel() == "&Close"
+        assert close is not None and close.GetLabel() == "C&lose"
         assert dialog.GetDefaultItem() is close
+        labels = [c.GetLabel() for c in dialog.GetChildren() if isinstance(c, wx.Button)]
+        assert labels == ["&Copy", "Copy &All", "C&lose"]
     finally:
         dialog.Destroy()
 

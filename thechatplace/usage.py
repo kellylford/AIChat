@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import re
 import time
-from typing import Optional
+from typing import List, Optional, Tuple
 
 STANDARD_WINDOW = 200_000
 LARGE_WINDOW = 1_000_000
@@ -92,7 +92,7 @@ def _windows(info: dict):
     return found
 
 
-def limit_lines(info: Optional[dict], now: Optional[float] = None) -> list:
+def limit_lines(info: Optional[dict], now: Optional[float] = None) -> List[str]:
     """Each usage limit as its own line (#130): "5-hour limit 8% used,
     resets at 7:00 AM.", "Weekly limit 34% used, resets on Friday at 3:00
     PM.", and a limit reached or extra usage as lines of their own. Never
@@ -120,15 +120,17 @@ def limits_text(info: Optional[dict], now: Optional[float] = None) -> str:
     return " ".join(limit_lines(info, now))
 
 
-def usage_lines(title: Optional[str], tokens: int, window: int, info: Optional[dict],
-                now: Optional[float] = None) -> list:
+def usage_lines(context: Optional[Tuple[str, int, int]], info: Optional[dict],
+                now: Optional[float] = None) -> List[str]:
     """What View, Usage and Context (Ctrl+Shift+U) lists, one line each
-    (#130): the loaded session's context, then each usage limit. ``title``
-    is None when no session is loaded. Shown rather than spoken, so a person
+    (#130): the loaded session's context, then each usage limit. ``context``
+    is the loaded session's (title, tokens, window), or None when no session
+    is loaded. Shown rather than spoken, so a person
     who can't follow the system voice can read it by arrowing."""
-    if title is None:
+    if context is None:
         first = "Context: no session is loaded. Load one to see how full its context is."
     else:
+        title, tokens, window = context
         first = f"{title}: {context_text(tokens, window)}"
     return [first] + limit_lines(info, now)
 

@@ -1146,8 +1146,8 @@ class ChangesDialog(wx.Dialog):
 class UsageDialog(wx.Dialog):
     """View, Usage and Context (Ctrl+Shift+U, #130): the loaded session's
     context and each usage limit as a line of a list, to read by arrowing
-    rather than only hear in the system voice. Copy (or Ctrl+C) copies the
-    selected line, or every line when none is selected."""
+    rather than only hear in the system voice. Copy (or Ctrl+C in the list)
+    copies the selected line; Copy All copies every line."""
 
     def __init__(self, parent, lines, copy):
         super().__init__(parent, title="Usage and Context", size=(640, 360),
@@ -1160,23 +1160,30 @@ class UsageDialog(wx.Dialog):
         set_accessible_name(self.list, "Usage and context")
         sizer.Add(self.list, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
         row = wx.BoxSizer(wx.HORIZONTAL)
-        copy_btn = wx.Button(self, label="Co&py")
+        # The same keys as Code Blocks: Alt+C copies, Alt+L closes.
+        copy_btn = wx.Button(self, label="&Copy")
         row.Add(copy_btn, 0, wx.RIGHT, 6)
-        close = wx.Button(self, wx.ID_CANCEL, "&Close")
+        copy_all = wx.Button(self, label="Copy &All")
+        row.Add(copy_all, 0, wx.RIGHT, 6)
+        close = wx.Button(self, wx.ID_CANCEL, "C&lose")
         close.SetDefault()
         row.Add(close, 0)
         sizer.Add(row, 0, wx.ALIGN_RIGHT | wx.ALL, 8)
         self.SetSizer(sizer)
         self.SetEscapeId(wx.ID_CANCEL)
-        self.list.Bind(wx.EVT_KEY_DOWN, self._on_list_key)
+        # A char hook, as the main window's Ctrl+C on the messages list:
+        # it's the path Cmd+C takes on macOS too.
+        self.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
         copy_btn.Bind(wx.EVT_BUTTON, lambda e: self.copy_selected())
+        copy_all.Bind(wx.EVT_BUTTON, lambda e: self.copy_all())
         if self._lines:
             self.list.SetSelection(0)
         wx.CallAfter(self.list.SetFocus)
 
-    def _on_list_key(self, event):
+    def _on_char_hook(self, event):
         if event.GetKeyCode() in (ord("C"), ord("c")) and event.ControlDown() \
-                and not event.AltDown() and not event.ShiftDown():
+                and not event.AltDown() and not event.ShiftDown() \
+                and wx.Window.FindFocus() is self.list:
             self.copy_selected()
             return
         event.Skip()
@@ -1185,8 +1192,9 @@ class UsageDialog(wx.Dialog):
         index = self.list.GetSelection()
         if 0 <= index < len(self._lines):
             self._copy(self._lines[index], True)
-        else:
-            self._copy("\n".join(self._lines), False)
+
+    def copy_all(self):
+        self._copy("\n".join(self._lines), False)
 
 
 class AboutYouDialog(wx.Dialog):

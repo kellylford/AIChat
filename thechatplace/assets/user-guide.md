@@ -319,8 +319,9 @@ notification is shown.
   line by line. It works for desktop app sessions too.
 - **Usage and Context** (Ctrl+Shift+U) opens a list to read with the arrow keys: how full the
   session's context is ("Context 62% full: 124,000 of 200,000 tokens"), then each of your plan's
-  usage limits on its own line. Ctrl+C copies the selected line, and Escape closes the list. It's also said once,
-  unasked, when the context passes 80%, or a limit passes 90%.
+  usage limits on its own line. Ctrl+C copies the selected line, Copy All (Alt+A) copies every
+  line, and Escape closes the list. It's also said once, unasked, when the context passes 80%, or
+  a limit passes 90%.
 - **Export** (Ctrl+E) saves a session's conversation as Markdown, a web page or plain text.
 - **What Claude Knows About You** (Ctrl+Shift+K) lists what Claude Code keeps about you: your
   instructions (CLAUDE.md files), the memories it saved, your skills, subagents, commands and

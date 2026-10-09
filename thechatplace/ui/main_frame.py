@@ -1877,11 +1877,10 @@ class MainFrame(wx.Frame):
         left someone who can't follow the system voice (#98) nothing to
         read. The dialog's title and the focused line are what a screen
         reader says, so nothing is spoken on top."""
+        context = None
         if self._open is not None:
-            tokens, window = self._context(self._open)
-            lines = usage.usage_lines(self._open.title, tokens, window, self._limits)
-        else:
-            lines = usage.usage_lines(None, 0, 0, self._limits)
+            context = (self._open.title, *self._context(self._open))
+        lines = usage.usage_lines(context, self._limits)
         self._modal(UsageDialog(self, lines, self._copy_usage))
 
     def _copy_usage(self, text: str, one_line: bool):

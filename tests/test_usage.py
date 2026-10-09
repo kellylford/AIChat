@@ -62,13 +62,13 @@ def test_usage_limit_errors_in_plain_words():
 
 def test_usage_lines_one_per_limit():
     """What Ctrl+Shift+U lists (#130): the context, then each limit alone."""
-    lines = usage.usage_lines("Quiet one", 124_000, 200_000, _info(), NOW)
+    lines = usage.usage_lines(("Quiet one", 124_000, 200_000), _info(), NOW)
     assert lines == ["Quiet one: Context 62% full: 124,000 of 200,000 tokens.",
                      "5-hour limit 8% used, resets at 10:00 AM.",
                      "Weekly limit 34% used, resets on Friday at 9:00 AM."]
     info = _info(five=1.0, status="rejected", isUsingOverage=True)
     info["unifiedWindows"]["seven_day_opus"] = {"utilization": 0.5}
-    lines = usage.usage_lines("Quiet one", 0, 0, info, NOW)
+    lines = usage.usage_lines(("Quiet one", 0, 0), info, NOW)
     assert lines[0] == "Quiet one: Context: not known until Claude's next reply."
     assert lines[1] == "You've reached a usage limit; it resets at 10:00 AM."
     assert "Weekly Opus limit 50% used." in lines
@@ -79,10 +79,10 @@ def test_usage_lines_one_per_limit():
 
 
 def test_usage_lines_when_nothing_is_known():
-    lines = usage.usage_lines(None, 0, 0, None, NOW)
+    lines = usage.usage_lines(None, None, NOW)
     assert lines == ["Context: no session is loaded. Load one to see how full its context is.",
                      "Usage limits: not known until a Chat Place session runs a turn."]
-    assert usage.usage_lines("Hub probe", 5, 0, {"status": "allowed"}, NOW)[1] == (
+    assert usage.usage_lines(("Hub probe", 5, 0), {"status": "allowed"}, NOW)[1] == (
         "Usage limits: Claude Code didn't say.")
     assert usage.limit_lines({}, NOW) == [
         "Usage limits: not known until a Chat Place session runs a turn."]

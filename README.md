@@ -295,8 +295,8 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
 - **Usage and Context** (Ctrl+Shift+U, View menu) opens a list to read with the arrow keys: first
   how full the loaded session's context is ("Quiet one: Context 62% full: 124,000 of 200,000
   tokens"), then each of your plan's usage limits on a line of its own. When something isn't known
-  yet, the line says so. Copy (Alt+P), or Ctrl+C in the list, copies the selected line; Escape or
-  Close closes it. The context comes from the token counts of Claude's latest
+  yet, the line says so. Copy (Alt+C), or Ctrl+C in the list, copies the selected line, and Copy
+  All (Alt+A) copies every line; Escape or Close (Alt+L) closes it. The context comes from the token counts of Claude's latest
   reply (the percentage only once the window's size is known: Claude Code reports it for a model
   when one of The Chat Place's sessions runs a turn on it, and a session past 200,000 tokens has the
   1,000,000 window), and the limits are as the latest turn reported them ("5-hour limit 8% used,
