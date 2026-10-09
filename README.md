@@ -63,7 +63,16 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   **View, Session List Columns** (Alt+V, E) chooses what each line says and in what order, so
   it can start with the status rather than the title. The columns are Title, Folder,
   Status, New reply, Last activity, Kind (Chat Place or Cowork), Remote Control, Archived,
-  Hidden and Groups; a column with nothing to say for a session is left out of its line. The
+  Hidden and Groups, all shown at first, and **Last message**, which isn't shown until you add
+  it; a column with nothing to say for a session is left out of its line. Last message says
+  where each conversation ended without loading it: "Claude:" or "You:" and the start of the
+  last message either of you wrote, as plain text on one line (about 150 characters, cut at a
+  word with "…"; a link reads as its words, a bare web address as its site). Tool calls and their results don't count. Press Enter to load the session and
+  read the whole message. A session whose conversation is missing or can't be read says nothing
+  there. Only the end of each conversation file is read, in the background, and again only when
+  the file has changed; nothing is read while the column isn't shown. While a session is working,
+  the line you're on keeps its last message until the status changes, so a screen reader doesn't
+  read it again each time Claude writes; other lines change at once. The
   dialog has Available columns and Shown columns (in the order they're read), with Add, Remove,
   Move Up, Move Down, Move to Top, Move to Bottom and Reset to Default, and a preview of the
   selected session's line. Enter in Available adds a column, Delete in Shown removes one (on a
@@ -71,7 +80,8 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   Alt+Up, Alt+Down, Alt+Home and Alt+End in Shown move it (Option on a Mac); each is said
   ("Status moved to top, 1 of 10") and you stay on the column you moved. OK saves the choice
   in The Chat Place's settings and rewrites the list at once; Escape cancels. With Status first,
-  typing a letter no longer jumps to a title; Ctrl+F still finds a session by title or folder.
+  typing a letter no longer jumps to a title (nor with Last message first, where lines start
+  with "Claude" or "You"); Ctrl+F still finds a session by title or folder.
   Arrowing doesn't load anything; **Enter loads that session** into the messages list, moves you
   there, and says "Loaded Quiet one, 12 messages."
 - **Hide or delete a session.** **Delete** (File, Hide Session) takes the selected session out of

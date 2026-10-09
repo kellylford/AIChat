@@ -6,16 +6,38 @@ the UI applies on the main thread.
 from __future__ import annotations
 
 import os
+import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Set
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from . import platform_paths
 from .desktop_groups import DesktopGroups, load_desktop_groups
 from .own_store import OwnSession
 from .sessions import (NEEDS_YOU, SORT_STATUS, WORKING, DesktopLoadResult, LiveStatus, SessionInfo,
                        load_desktop_sessions, load_live_status, sort_sessions)
-from .transcript import TranscriptParser, split_jsonl
+from .transcript import LastMessages, TranscriptParser, split_jsonl
+# The row's words for it: plain text, no wx, so this stays plain data.
+from .ui_text import last_message_line
+
+#: Each session's last message (#146), remembered between snapshots by file
+#: size and modification time, so only a transcript that changed is read.
+LAST_MESSAGES = LastMessages()
+#: Sessions whose transcript wasn't found, by key: (their last activity, when
+#: looked). Finding none means searching every project folder, so it isn't
+#: done again every refresh: only when the session has been active since, or
+#: after ``NO_TRANSCRIPT_RETRY`` seconds.
+_NO_TRANSCRIPT: Dict[str, Tuple[int, float]] = {}
+_NO_TRANSCRIPT_LOCK = threading.Lock()
+NO_TRANSCRIPT_RETRY = 60.0
+
+
+def forget_last_messages() -> None:
+    """The Last message column was taken off: nothing to keep for it."""
+    LAST_MESSAGES.keep_only([])
+    with _NO_TRANSCRIPT_LOCK:
+        _NO_TRANSCRIPT.clear()
 
 
 @dataclass
@@ -35,10 +57,13 @@ def collect(own: Iterable[OwnSession], running_own_ids: Set[str],
             alive=platform_paths.pid_alive,
             waiting: Optional[Dict[str, str]] = None,
             started=platform_paths.process_start,
-            order: str = SORT_STATUS) -> Snapshot:
+            order: str = SORT_STATUS,
+            last_messages: bool = False) -> Snapshot:
     """``waiting`` maps a running own session to what Claude is waiting for
     (a permission request, question or plan): it needs you, not working.
-    ``order`` is how the list is sorted (see ``sessions.SORT_ORDERS``)."""
+    ``order`` is how the list is sorted (see ``sessions.SORT_ORDERS``).
+    ``last_messages`` fills in each session's Last message column (#146):
+    only while that column is shown, since it reads every transcript."""
     live = load_live_status(live_dir, alive=alive, started=started)
     # Archived ones too, flagged: the list shows them only in its Archived view
     # (#32) or a group they're in.
@@ -58,6 +83,8 @@ def collect(own: Iterable[OwnSession], running_own_ids: Set[str],
             # Someone resumed it elsewhere (a terminal); it is busy there.
             info.state, info.detail = WORKING, "running outside The Chat Place"
         sessions.append(info)
+    if last_messages:
+        fill_last_messages(sessions)
     folders = [desktop_dir] if desktop_dir is not None else platform_paths.desktop_sessions_dirs()
     return Snapshot(sessions=sort_sessions(sessions, order),
                     desktop_cli_ids=desktop.desktop_cli_ids,
@@ -65,6 +92,44 @@ def collect(own: Iterable[OwnSession], running_own_ids: Set[str],
                     live=live,
                     unreadable_files=desktop.unreadable_files,
                     desktop_groups=load_desktop_groups(folders))
+
+
+def fill_last_messages(sessions: Iterable[SessionInfo],
+                       cache: Optional[LastMessages] = None) -> None:
+    """Each session's ``last_message``: the end of its transcript, read
+    through ``cache`` (only files that changed since the last pass). One with
+    no transcript, or none that can be read, says nothing."""
+    cache = cache if cache is not None else LAST_MESSAGES
+    seen = []
+    now = time.monotonic()
+    for info in sessions:
+        with _NO_TRANSCRIPT_LOCK:
+            missing = _NO_TRANSCRIPT.get(info.key)
+        if (missing is not None and missing[0] == info.last_activity_ms
+                and now - missing[1] < NO_TRANSCRIPT_RETRY):
+            info.last_message = ""
+            continue
+        path = info.transcript_path()
+        with _NO_TRANSCRIPT_LOCK:
+            if path is None:
+                _NO_TRANSCRIPT[info.key] = (info.last_activity_ms, now)
+            else:
+                _NO_TRANSCRIPT.pop(info.key, None)
+        if path is None:
+            info.last_message = ""
+            continue
+        seen.append(path)
+        info.last_message = fill_last_message(info, path, cache)
+    cache.keep_only(seen)
+
+
+def fill_last_message(info: SessionInfo, path: Optional[Path] = None,
+                      cache: Optional[LastMessages] = None) -> str:
+    """One session's Last message column text ("" when there's none)."""
+    cache = cache if cache is not None else LAST_MESSAGES
+    path = path if path is not None else info.transcript_path()
+    message = cache.get(path) if path is not None else None
+    return last_message_line(message.label, message.text) if message else ""
 
 
 def finished_turns(previous: Dict[str, str], current: Iterable[SessionInfo]) -> List[SessionInfo]:

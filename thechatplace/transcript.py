@@ -37,7 +37,9 @@ from __future__ import annotations
 
 import html
 import json
+import os
 import re
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -610,3 +612,117 @@ def parse_lines(lines: Iterable[str]) -> Transcript:
     parser = TranscriptParser()
     parser.feed(lines)
     return parser.transcript
+
+
+# ---------------------------------------------------------------------------
+# The last message, from the end of a file (#146)
+# ---------------------------------------------------------------------------
+
+#: How much of a transcript's end is read to find its last message, tried in
+#: turn: almost always the first is enough. A tail made only of tool output
+#: (a long run of commands) needs more; past the last, the column says
+#: nothing rather than read tens of megabytes on every refresh.
+TAIL_STEPS = (64 * 1024, 256 * 1024, 1024 * 1024, 4 * 1024 * 1024)
+#: What counts as the last message: your text and Claude's, as the messages
+#: list shows them. Tool calls and results, thinking, context and harness
+#: events, question cards, errors and other sessions' messages don't.
+LAST_MESSAGE_KINDS = (USER, ASSISTANT)
+
+
+def last_message_from_tail(path: Path, steps: Tuple[int, ...] = TAIL_STEPS
+                           ) -> Optional[ChatMessage]:
+    """The last message of yours or Claude's in a transcript, reading only
+    its end, or None (missing, unreadable, or no message in the end read).
+
+    Each step reads the file's last ``steps[i]`` bytes and drops the first,
+    cut-off line. A reply written in several records can begin before the
+    part read, so one that is the first message found is only taken once
+    the start of the file, or the last step, has been reached.
+    """
+    try:
+        with open(path, "rb") as handle:
+            return _last_message(handle, os.fstat(handle.fileno()).st_size, steps)
+    except OSError:
+        return None
+
+
+def _last_message(handle, size: int, steps: Tuple[int, ...]) -> Optional[ChatMessage]:
+    for number, limit in enumerate(steps):
+        last_step = number == len(steps) - 1
+        start = max(0, size - limit)
+        if start > 0:
+            # One byte more, to tell a whole first line (the byte before it
+            # is a newline) from one cut in the middle, which is dropped.
+            handle.seek(start - 1)
+            data = handle.read(size - start + 1)
+            cut = data.find(b"\n")
+            if cut < 0 or cut == len(data) - 1:
+                continue  # one line longer than this step: read more
+            data = data[cut + 1:]
+        else:
+            handle.seek(0)
+            data = handle.read(size)
+        # A last line without its newline is parsed too: if it is still
+        # being written it won't parse, and is counted, not raised.
+        parser = TranscriptParser()
+        parser.feed(split_jsonl(data))
+        messages = parser.transcript.messages
+        for index in range(len(messages) - 1, -1, -1):
+            message = messages[index]
+            if message.kind not in LAST_MESSAGE_KINDS or not message.text.strip():
+                continue
+            if index == 0 and start > 0 and message.kind == ASSISTANT and not last_step:
+                break  # may have begun before this step: read more
+            return message
+        if start == 0:
+            return None
+    return None
+
+
+class LastMessages:
+    """``last_message_from_tail`` remembered by file size and modification
+    time, so a refresh reads only transcripts that changed. Safe to use from
+    the background thread that gathers the session list."""
+
+    def __init__(self, steps: Tuple[int, ...] = TAIL_STEPS) -> None:
+        self._steps = steps
+        self._lock = threading.Lock()
+        self._entries: Dict[str, Tuple[Tuple[int, int], Optional[ChatMessage]]] = {}
+        #: How many files were read (not answered from memory); for tests.
+        self.reads = 0
+
+    def get(self, path: Optional[Path]) -> Optional[ChatMessage]:
+        if path is None:
+            return None
+        name = str(path)
+        with self._lock:
+            entry = self._entries.get(name)
+        try:
+            # A stat, not an open, when nothing changed: most refreshes.
+            info = os.stat(path)
+            if entry is not None and entry[0] == (info.st_size, info.st_mtime_ns):
+                return entry[1]
+            with open(path, "rb") as handle:
+                # The stamp of what is read, from the handle it's read from.
+                info = os.fstat(handle.fileno())
+                stamp = (info.st_size, info.st_mtime_ns)
+                message = _last_message(handle, info.st_size, self._steps)
+        except FileNotFoundError:
+            with self._lock:
+                self._entries.pop(name, None)
+            return None
+        except OSError:
+            # Busy for a moment (being replaced, scanned): keep what it said,
+            # so the row doesn't lose its message and get it back again.
+            return entry[1] if entry is not None else None
+        with self._lock:
+            self._entries[name] = (stamp, message)
+            self.reads += 1
+        return message
+
+    def keep_only(self, paths: Iterable[Path]) -> None:
+        """Forget files not in ``paths``: sessions gone from the list."""
+        keep = {str(p) for p in paths}
+        with self._lock:
+            for name in [n for n in self._entries if n not in keep]:
+                del self._entries[name]

@@ -69,6 +69,9 @@ class SessionInfo:
     #: The folder a Cowork session was given to work on ("" if none): its
     #: cwd is always its own "outputs" folder, which says nothing.
     cowork_folder: str = ""
+    #: The Last message column (#146), "Claude: ..." or "You: ...", filled
+    #: in by the snapshot only while that column is shown ("" otherwise).
+    last_message: str = ""
 
     @property
     def is_own(self) -> bool:
@@ -141,6 +144,7 @@ class SessionInfo:
             FIELD_ARCHIVED: "archived" if self.archived else "",
             FIELD_HIDDEN: "hidden" if self.hidden else "",
             FIELD_GROUPS: groups,
+            FIELD_LAST_MESSAGE: self.last_message,
         }
 
 
@@ -158,6 +162,7 @@ FIELD_REMOTE = "remote"
 FIELD_ARCHIVED = "archived"
 FIELD_HIDDEN = "hidden"
 FIELD_GROUPS = "groups"
+FIELD_LAST_MESSAGE = "last_message"
 FIELDS = [
     (FIELD_TITLE, "Title"),
     (FIELD_FOLDER, "Folder"),
@@ -169,11 +174,17 @@ FIELDS = [
     (FIELD_ARCHIVED, "Archived"),
     (FIELD_HIDDEN, "Hidden"),
     (FIELD_GROUPS, "Groups"),
+    (FIELD_LAST_MESSAGE, "Last message"),
 ]
 FIELD_IDS = [field_id for field_id, _name in FIELDS]
 FIELD_NAMES = dict(FIELDS)
-#: Every column, in the order rows have always been read.
-DEFAULT_FIELDS = list(FIELD_IDS)
+#: Columns there are but rows don't read until you add them: Last message
+#: (#146) reads each session's transcript, and makes every row long.
+OPTIONAL_FIELDS = (FIELD_LAST_MESSAGE,)
+#: The columns rows read unless you choose otherwise, in the order they
+#: have always been read. A saved order lists its columns, so one saved
+#: before a column was added doesn't gain it.
+DEFAULT_FIELDS = [f for f in FIELD_IDS if f not in OPTIONAL_FIELDS]
 
 
 def field_short_name(field_id: str) -> str:

@@ -53,7 +53,9 @@ def test_cowork_and_chat_place_kind_is_one_column():
 
 
 def test_every_column_has_a_name_and_a_short_name():
-    assert FIELD_IDS == DEFAULT_FIELDS and len(set(FIELD_IDS)) == len(FIELDS)
+    # Every column is shown by default but Last message (#146), added last.
+    assert FIELD_IDS == DEFAULT_FIELDS + ["last_message"] and len(set(FIELD_IDS)) == len(FIELDS)
+    assert field_short_name("last_message") == "Last message"
     assert field_short_name("status") == "Status"
     assert field_short_name("kind") == "Kind"
     assert field_short_name("new_reply") == "New reply"

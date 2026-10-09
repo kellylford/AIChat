@@ -5257,7 +5257,8 @@ def test_columns_dialog_moves_says_where_and_stays_on_the_column(frame, monkeypa
     dialog, said, focused = _columns_dialog(frame)
     try:
         assert dialog.shown.GetString(0) == "Title"
-        assert list(dialog.available.GetStrings()) == ["Every column is shown."]
+        # Last message (#146) is the one column not shown by default.
+        assert list(dialog.available.GetStrings()) == ["Last message"]
         assert dialog.preview.GetValue().startswith("Blocked one, Repo, needs you")
         dialog.shown.SetSelection(2)  # Status
         dialog.move_to_end(top=True)
@@ -5309,16 +5310,18 @@ def test_columns_dialog_add_remove_and_reset(frame, monkeypatch):
         assert dialog.shown.GetSelection() == 1  # on what it added
         assert dialog.available.GetString(0) == "Folder"
         dialog.reset()
-        assert said[-1] == "Columns reset to the default: all 10 shown, title first."
+        assert said[-1] == "Columns reset to the default: 10 shown, title first."
         assert dialog.fields()[0] == "title" and len(dialog.fields()) == 10
-        dialog.add()
-        assert said[-1] == "Every column is shown already."
+        assert list(dialog.available.GetStrings()) == ["Last message"]
         # Adding the last one left moves you to Shown, on it.
-        dialog.shown.SetSelection(9)
-        dialog.remove()
+        dialog.available.SetSelection(0)
         focused.clear()
         dialog.add()
-        assert focused[-1] == "shown" and dialog.shown.GetSelection() == 9
+        assert said[-1] == "Last message added, 11 of 11."
+        assert focused[-1] == "shown" and dialog.shown.GetSelection() == 10
+        assert list(dialog.available.GetStrings()) == ["Every column is shown."]
+        dialog.add()
+        assert said[-1] == "Every column is shown already."
     finally:
         dialog.Destroy()
 
@@ -6264,3 +6267,163 @@ def test_a_session_link_in_the_formatted_view_opens_here(frame, env, monkeypatch
     dialogs.FormattedMessageDialog._follow(page, "https://example.com")
     dialogs.FormattedMessageDialog._follow(page, "file:///C:/x")
     assert env["opened"] == ["https://example.com"]
+
+
+# -- the Last message column (#146) ---------------------------------------------------
+
+
+def _last_message_transcripts(env):
+    from records import assistant_block, text_block, user_text
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [user_text("Is it fixed?"),
+                                                 assistant_block(text_block("**Yes**, it's fixed."),
+                                                                 "m1")])
+    add_transcript(env, "C:\\G\\Scratch", "own-1", [user_text("Try the probe again")])
+
+
+def test_last_message_column_is_off_and_nothing_is_read(frame, env, monkeypatch):
+    from thechatplace import hub
+    from thechatplace.transcript import LastMessages
+    cache = LastMessages()
+    monkeypatch.setattr(hub, "LAST_MESSAGES", cache)
+    _last_message_transcripts(env)
+    frame.refresh_sessions(force=True, resort=True)
+    settle(frame)
+    assert "last_message" not in frame.speech.session_fields
+    assert not any("Claude:" in row or "You:" in row for row in frame.session_list.GetStrings())
+    assert cache.reads == 0  # no transcript is opened while the column is off
+
+
+def test_adding_last_message_fills_the_rows(frame, env, monkeypatch):
+    from thechatplace import hub
+    from thechatplace.transcript import LastMessages
+    from thechatplace.ui import main_frame
+    monkeypatch.setattr(hub, "LAST_MESSAGES", LastMessages())
+    _last_message_transcripts(env)
+    select(frame, "Quiet one")
+    seen = {}
+
+    class Chooses:
+        def __init__(self, parent, fields, sample, say):
+            seen["sample"] = sample
+
+        def ShowModal(self):
+            return wx.ID_OK
+
+        def fields(self):
+            return ["title", "last_message", "status"]
+
+        def Destroy(self):
+            pass
+    monkeypatch.setattr(main_frame, "SessionColumnsDialog", Chooses)
+    frame.on_session_columns()
+    # The preview has the selected session's last message although the
+    # column was off; the session in the list isn't changed by it.
+    assert seen["sample"].last_message == "Claude: Yes, it's fixed."
+    assert seen["sample"] is not _session(frame, "Quiet one")
+    settle(frame)
+    rows = sorted(frame.session_list.GetStrings())
+    assert rows == ["Blocked one, needs you: Pick a name",
+                    "Hub probe, You: Try the probe again, idle",
+                    "Quiet one, Claude: Yes, it's fixed., idle"]
+    assert frame.session_list.GetStringSelection().startswith("Quiet one, Claude:")
+    assert env["feedback"][-1] == ("Session list columns saved. Each session reads: "
+                                   "Title, Last message, Status.")
+    assert speech.SpeechSettings.load().session_fields == ["title", "last_message", "status"]
+
+
+def test_a_new_last_message_on_your_row_waits_while_it_works(frame, env, monkeypatch):
+    """The row under the reader is rewritten (and so read again) when its
+    status changes, as before, but not for each message Claude writes while
+    working; other rows change at once."""
+    from thechatplace.sessions import IDLE, WORKING
+    frame.speech.session_fields = ["title", "status", "last_message", "activity"]
+    quiet, blocked = _session(frame, "Quiet one"), _session(frame, "Blocked one")
+    quiet.last_message, blocked.last_message = "Claude: one", "You: a"
+    select(frame, "Quiet one")
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    frame._refresh_list_in_place(rewrite=True)
+    assert frame.session_list.GetStringSelection().startswith("Quiet one, idle, Claude: one,")
+    # No patching of the list itself: an attribute put on a wx control can
+    # outlive the window, and the row's text shows whether it was rewritten
+    # (each change below also changes its age, so a rewrite would show).
+
+    def row():
+        return frame.session_list.GetStringSelection()
+    quiet.state = WORKING
+    frame._refresh_list_in_place()
+    assert row().startswith("Quiet one, working, Claude: one,")  # a status change
+    before = row()
+    quiet.last_message = "Claude: two"
+    blocked.last_message = "You: b"
+    quiet.last_activity_ms -= 3 * 60_000
+    frame._refresh_list_in_place()
+    assert row() == before  # left alone, age and all
+    assert any(r.startswith("Blocked one") and "You: b" in r
+               for r in frame.session_list.GetStrings())  # another row: at once
+    quiet.state = IDLE
+    frame._refresh_list_in_place()
+    assert row().startswith("Quiet one, idle, Claude: two,")
+    # Idle, a new message (a turn that ended between refreshes): rewritten.
+    quiet.last_message = "You: three"
+    frame._refresh_list_in_place()
+    assert row().startswith("Quiet one, idle, You: three,")
+    before = row()
+    quiet.last_activity_ms -= 3 * 60_000  # a clock tick alone: left alone
+    frame._refresh_list_in_place()
+    assert row() == before
+
+
+def test_adding_last_message_on_a_working_session_fills_your_row_at_once(frame, env,
+                                                                        monkeypatch):
+    """The row you're on gets its message with the columns, in the one
+    rewrite OK makes, even while its session works (when later messages
+    wait for the status to change)."""
+    from thechatplace.sessions import WORKING
+    _last_message_transcripts(env)
+    select(frame, "Quiet one")
+    _session(frame, "Quiet one").state = WORKING
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    _choose_columns(monkeypatch, ["title", "status", "last_message"])
+    frame.on_session_columns()
+    assert frame.session_list.GetStringSelection() == \
+        "Quiet one, working, Claude: Yes, it's fixed."
+    settle(frame)
+    assert "Claude: Yes, it's fixed." in frame.session_list.GetStringSelection()
+
+
+def test_removing_last_message_forgets_what_was_read(frame, env, monkeypatch):
+    from thechatplace import hub
+    _last_message_transcripts(env)
+    _choose_columns(monkeypatch, ["title", "last_message"])
+    frame.on_session_columns()
+    settle(frame)
+    assert hub.LAST_MESSAGES.reads >= 1
+    hub._NO_TRANSCRIPT["own:somewhere"] = (1, 0.0)
+    _choose_columns(monkeypatch, ["title", "status"])
+    frame.on_session_columns()
+    assert hub.LAST_MESSAGES._entries == {} and hub._NO_TRANSCRIPT == {}
+    assert not any("Claude:" in r for r in frame.session_list.GetStrings())
+
+
+def test_your_working_row_waits_in_a_kept_order_and_changes_for_a_rename(frame, env,
+                                                                          monkeypatch):
+    """The same rule when a row leaves the list in the same refresh (rows
+    kept in place), and a change other than the message, such as a new
+    name, rewrites the row with the newest message."""
+    from thechatplace.sessions import WORKING
+    frame.speech.session_fields = ["title", "status", "last_message"]
+    quiet = _session(frame, "Quiet one")
+    quiet.state, quiet.last_message = WORKING, "Claude: one"
+    select(frame, "Quiet one")
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    frame._refresh_list_in_place(rewrite=True)
+    assert frame.session_list.GetStringSelection() == "Quiet one, working, Claude: one"
+    quiet.last_message = "Claude: two"
+    blocked = _session(frame, "Blocked one")
+    frame._snapshot.sessions.remove(blocked)  # gone in the same refresh
+    frame._refresh_list_in_place()
+    assert frame.session_list.GetCount() == 2
+    assert frame.session_list.GetStringSelection() == "Quiet one, working, Claude: one"
+    quiet.title = "Quieter one"
+    frame._refresh_list_in_place()
+    assert frame.session_list.GetStringSelection() == "Quieter one, working, Claude: two"

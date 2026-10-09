@@ -1635,7 +1635,7 @@ class SessionColumnsDialog(wx.Dialog):
         self._shown = list(DEFAULT_FIELDS)
         self._fill(shown_index=0, available_index=0)
         self.shown.SetFocus()
-        self._say(f"Columns reset to the default: all {len(self._shown)} shown, title first.")
+        self._say(f"Columns reset to the default: {len(self._shown)} shown, title first.")
 
     def _on_char_hook(self, event):
         key = event.GetKeyCode()
