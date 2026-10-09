@@ -331,3 +331,73 @@ def test_smoke_test_reports_whether_velopack_finds_the_updater(tmp_path, monkeyp
     monkeypatch.setattr(updater, "_velopack_manager", missing)
     app.smoke_test(str(out))
     assert json.loads(out.read_text())["updater"].startswith("unavailable: UpdateMac")
+
+
+# -- "The Chat Place Update Installed" (#141) --------------------------------------------
+
+
+from thechatplace.updater import InstalledNotice, installed_notice, parse_version  # noqa: E402
+
+
+def test_notice_is_shown_on_the_first_start_after_an_update():
+    assert installed_notice("0.1.3", "0.1.4", installed=True) == InstalledNotice(True, True)
+    assert installed_notice("0.1.9", "0.2.0", installed=True).show
+    assert installed_notice("0.9.9", "1.0.0", installed=True).show
+    # Compared as numbers, not text.
+    assert installed_notice("0.1.9", "0.1.10", installed=True).show
+
+
+def test_notice_is_not_shown_on_a_first_run_but_the_version_is_recorded():
+    assert installed_notice("", "0.1.4", installed=True) == InstalledNotice(True, False)
+
+
+def test_notice_is_not_shown_or_recorded_on_the_same_version():
+    assert installed_notice("0.1.4", "0.1.4", installed=True) == InstalledNotice(False, False)
+
+
+def test_notice_is_not_shown_after_a_downgrade():
+    assert installed_notice("0.1.5", "0.1.4", installed=True) == InstalledNotice(True, False)
+
+
+@pytest.mark.parametrize("previous", ["garbage", "0.1.x", "0.1.3-beta", "1..2", " ", "0.1.3.4.5"])
+def test_notice_fails_closed_on_a_version_it_cannot_read(previous):
+    decision = installed_notice(previous, "0.1.4", installed=True)
+    assert decision.show is False
+    assert decision.record is True   # the running version replaces it
+    assert installed_notice("0.1.3", previous, installed=True).show is False
+
+
+def test_notice_is_never_shown_or_recorded_for_a_copy_that_is_not_installed():
+    # A source run or the portable zip: swapping copies isn't an update.
+    for previous in ("", "0.1.3", "0.1.5"):
+        assert installed_notice(previous, "0.1.4", installed=False) == InstalledNotice(False, False)
+
+
+def test_notice_turned_off_still_records_the_version():
+    assert installed_notice("0.1.3", "0.1.4", installed=True, enabled=False) == \
+        InstalledNotice(True, False)
+
+
+def test_parse_version():
+    assert parse_version("0.1.4") == (0, 1, 4, 0)
+    assert parse_version("v0.1.4") == (0, 1, 4, 0)
+    assert parse_version("1") == (1, 0, 0, 0)
+    assert parse_version("0.1.4") == parse_version("0.1.4.0")
+    for bad in ("", None, "abc", "0.1.4-rc1", "0.1.", "-1.0"):
+        assert parse_version(bad) is None
+
+
+def test_release_notes_url_is_the_release_tag_page():
+    assert updater.release_notes_url("0.1.4") == \
+        "https://github.com/kellylford/AIChat/releases/tag/v0.1.4"
+
+
+def test_help_update_item_label_says_the_running_version_or_the_update():
+    from thechatplace.ui_text import update_item_label, update_item_spoken
+    assert update_item_label("0.1.4") == "Check for &Updates (running 0.1.4)..."
+    assert update_item_label("0.1.4", "0.1.5") == "&Update to 0.1.5 Available..."
+    # Alt+H, U works either way.
+    for label in (update_item_label("0.1.4"), update_item_label("0.1.4", "0.1.5")):
+        assert label.count("&") == 1 and label[label.index("&") + 1] == "U"
+    assert update_item_spoken("0.1.4") == "Check for Updates"
+    assert update_item_spoken("0.1.4", "0.1.5") == "Update to 0.1.5 Available"
