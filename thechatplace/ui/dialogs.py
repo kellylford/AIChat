@@ -238,6 +238,19 @@ class SettingsDialog(wx.Dialog):
         self.rate_note = wx.StaticText(self, label="")
         outer.Add(self.rate_note, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 
+        # Why the last announcement wasn't spoken, while that's still so
+        # (#98): a read-only box, so Tab reaches it and a screen reader reads
+        # it, as static text under a disabled choice never is.
+        from .. import speech as speech_module
+        problem = speech_module.speaker.last_problem
+        self.speech_problem = None
+        if problem:
+            self.speech_problem = wx.TextCtrl(
+                self, value=f"Last announcement {problem}.",
+                style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL, size=(-1, 44))
+            set_accessible_name(self.speech_problem, "Speech problem")
+            outer.Add(self.speech_problem, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+
         notify_row = wx.BoxSizer(wx.HORIZONTAL)
         notify_row.Add(wx.StaticText(self, label=NOTIFY_SETTING_LABEL), 0,
                        wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)

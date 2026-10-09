@@ -73,6 +73,10 @@ def env(tmp_path, monkeypatch, app):
     def speak(text, settings, interrupt=True):
         (spoken if interrupt else feedback).append(text)
     monkeypatch.setattr(speech.speaker, "speak", speak)
+    # The frame points the shared speaker at itself (#98); put it back after,
+    # so no later test reaches a destroyed frame through it.
+    monkeypatch.setattr(speech.speaker, "on_problem", None)
+    monkeypatch.setattr(speech.speaker, "last_problem", "")
     monkeypatch.setattr(main_frame, "list_speech_options", lambda: speech.default_options())
     # No real web page: it would open modal and wait. Tests that want the
     # formatted view put a fake in.
@@ -5724,6 +5728,73 @@ def test_prompts_are_on_the_file_menu(frame):
     assert "Prompts...\tCtrl+Shift+P" in labels
     keys = "Cmd+Shift+Return" if wx.Platform == "__WXMAC__" else "Ctrl+Shift+Enter"
     assert f"Send and Save as Prompt... ({keys})" in labels
+
+
+# -- screen reader can't be reached (issue #98) -------------------------------------------
+
+
+def test_an_unreachable_screen_reader_is_reported_beside_the_announcement(frame, env):
+    frame._say("Hub probe replied.")
+    reason = "not spoken: NVDA is running but didn't answer (error 1722)"
+    speech.speaker.on_problem(reason)
+    wx.Yield()
+    assert frame._status_latest == ("Hub probe replied. (Speech: Not spoken: NVDA is running "
+                                    "but didn't answer (error 1722).)")
+    assert env["notified"][-1] == ("Announcements aren't being spoken",
+                                   "Not spoken: NVDA is running but didn't answer (error 1722).",
+                                   None)
+
+
+def test_no_notification_about_speech_when_notifications_are_off(frame, env):
+    frame.speech.notifications = speech.NOTIFY_OFF
+    before = len(env["notified"])
+    frame._on_speech_problem("not spoken: JAWS is running but refused the text")
+    assert len(env["notified"]) == before
+    assert frame._status_latest.endswith(
+        "(Speech: Not spoken: JAWS is running but refused the text.)")
+
+
+def test_a_speech_problem_after_the_window_closed_is_ignored(env):
+    from thechatplace.ui.main_frame import MainFrame
+    closed = MainFrame()
+    report = closed._on_speech_problem
+    closed.Destroy()
+    wx.Yield()
+    report("not spoken: NVDA is running but didn't answer (error 1722)")  # no error
+
+
+def test_settings_says_why_the_last_announcement_was_not_spoken(frame, monkeypatch):
+    """In a read-only box after the speech engine, so Tab reaches it: the
+    note under the engine choice is static text no Tab ever lands on."""
+    from thechatplace.ui.dialogs import SettingsDialog
+    monkeypatch.setattr(speech.speaker, "last_problem",
+                        "not spoken: JAWS is running but refused the text")
+    dialog = SettingsDialog(frame, speech.SpeechSettings(), speech.default_options())
+    try:
+        box = dialog.speech_problem
+        assert box.GetValue() == ("Last announcement not spoken: JAWS is running but refused "
+                                  "the text.")
+        assert box.GetName() == "Speech problem" and box.IsEditable() is False
+        assert box.AcceptsFocusFromKeyboard()
+        children = list(dialog.GetChildren())
+        assert children.index(box) == children.index(dialog.rate_choice) + 2  # after the note
+    finally:
+        dialog.Destroy()
+    monkeypatch.setattr(speech.speaker, "last_problem", "")
+    dialog = SettingsDialog(frame, speech.SpeechSettings(), speech.default_options())
+    try:
+        assert dialog.speech_problem is None
+    finally:
+        dialog.Destroy()
+
+
+def test_a_speech_problem_goes_beside_what_the_status_bar_says_now(frame, env):
+    """Not beside an older announcement: a confirmation can be what failed."""
+    frame._say("Hub probe replied.")
+    frame._feedback("Sent. Hub probe is working.")
+    frame._on_speech_problem("not spoken: JAWS is running but refused the text")
+    assert frame._status_latest == ("Sent. Hub probe is working. (Speech: Not spoken: JAWS is "
+                                    "running but refused the text.)")
 
 
 # -- Help's update item and "Update Installed" (#141) ----------------------------------------

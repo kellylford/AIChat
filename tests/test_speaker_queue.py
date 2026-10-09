@@ -7,7 +7,10 @@ import time
 import pytest
 
 from thechatplace import speech
+from thechatplace.screen_readers import Outcome
 from thechatplace.speech import Speaker, SpeechSettings
+
+from markers import windows_screen_readers  # noqa: E402
 
 
 class FakeEngine:
@@ -57,12 +60,31 @@ def text_of(engine):
                 encoding="utf-8").read()
 
 
-def make(tmp_path, monkeypatch):
+class FakeReaders:
+    """screen_readers.ScreenReaders with a chosen outcome; by default no
+    screen reader is running, so the engine script speaks, as before #98."""
+
+    def __init__(self, outcome=None):
+        self.outcome = outcome or Outcome()
+        self.calls = []
+
+    def speak(self, text, engine, interrupt):
+        self.calls.append((text, engine, interrupt))
+        return self.outcome
+
+
+def make(tmp_path, monkeypatch, readers=None):
     FakeEngine.started = []
     monkeypatch.setattr(speech.tempfile, "gettempdir", lambda: str(tmp_path))
     monkeypatch.setattr(Speaker, "_command",
                         lambda self, t, c: ["engine", "-Path", str(t), "-ConfigPath", str(c)])
-    return Speaker(popen=FakeEngine)
+    return Speaker(popen=FakeEngine, screen_readers=readers or FakeReaders())
+
+
+def log_lines(tmp_path, routes=False):
+    lines = (tmp_path / "thechatplace-speak" / "speech.log").read_text(
+        encoding="utf-8").splitlines()
+    return [line for line in lines if (" route: " in line) == routes]
 
 
 def test_confirmations_queue_instead_of_overlapping(tmp_path, monkeypatch):
@@ -147,8 +169,8 @@ def test_every_utterance_is_logged_in_its_own_file(tmp_path, monkeypatch):
     s = make(tmp_path, monkeypatch)
     s.speak("Sent. Hub is working.", SpeechSettings(), interrupt=False)
     s.speak("Hub replied. " + "word " * 40, SpeechSettings(engine="jaws"))
-    lines = (tmp_path / "thechatplace-speak" / "speech.log").read_text(
-        encoding="utf-8").splitlines()
+    assert wait_until(lambda: len(FakeEngine.started) >= 1)
+    lines = log_lines(tmp_path)
     assert len(lines) == 2
     assert lines[0].endswith(" queue auto 21 chars: Sent. Hub is working.")
     assert " interrupt jaws " in lines[1] and lines[1].endswith("…")
@@ -196,3 +218,187 @@ def test_stopping_speech_also_stops_what_the_script_started(tmp_path):
         time.sleep(0.02)
     else:
         pytest.fail("the script's child outlived it")
+
+
+# --- JAWS and NVDA from the app's own process (#98) ---------------------------
+
+
+@windows_screen_readers
+def test_a_running_screen_reader_takes_the_announcement_and_no_voice_starts(
+        tmp_path, monkeypatch):
+    readers = FakeReaders(Outcome(spoke="nvda", running=["nvda"]))
+    s = make(tmp_path, monkeypatch, readers)
+    s.speak("Session replied", SpeechSettings(), interrupt=True)
+    assert wait_until(lambda: readers.calls and not s.busy())
+    assert readers.calls == [("Session replied", "auto", True)]
+    assert FakeEngine.started == []
+    assert s.last_route == "spoke through NVDA"
+    assert log_lines(tmp_path, routes=True)[0].endswith(" route: spoke through NVDA")
+
+
+@windows_screen_readers
+def test_a_running_but_unreachable_screen_reader_gets_no_windows_voice_over_it(
+        tmp_path, monkeypatch):
+    """#98: NVDA was running, its client failed, and a Windows voice spoke
+    over it. Now nothing speaks and the reason goes to on_problem."""
+    readers = FakeReaders(Outcome(running=["nvda"],
+                                  problems={"nvda": "didn't answer (Windows error 1722)"}))
+    s = make(tmp_path, monkeypatch, readers)
+    problems = []
+    s.on_problem = problems.append
+    s.speak("Session replied", SpeechSettings(), interrupt=True)
+    assert wait_until(lambda: problems)
+    assert wait_until(lambda: not s.busy())
+    assert FakeEngine.started == []
+    assert problems == ["not spoken: NVDA is running but didn't answer (Windows error 1722)"]
+
+
+@windows_screen_readers
+def test_locked_windows_speaks_nothing(tmp_path, monkeypatch):
+    readers = FakeReaders(Outcome(running=["nvda"], locked=True))
+    s = make(tmp_path, monkeypatch, readers)
+    problems = []
+    s.on_problem = problems.append
+    s.speak("A private reply", SpeechSettings(engine="nvda"))
+    assert wait_until(lambda: readers.calls and not s.busy())
+    assert FakeEngine.started == [] and problems == []
+    assert s.last_route == "not spoken: Windows is locked"
+
+
+@windows_screen_readers
+def test_no_screen_reader_running_uses_a_plain_windows_voice(tmp_path, monkeypatch):
+    """The script then gets "onecore", so it can't reach for a screen reader
+    itself, and no voice or rate, so the Windows voice speaks at its default."""
+    s = make(tmp_path, monkeypatch)
+    s.speak("Hello", SpeechSettings(engine="jaws", voice="ignored", rate_preset="fast"))
+    assert wait_until(lambda: len(FakeEngine.started) == 1)
+    config = FakeEngine.started[0].config
+    assert (config["engine"], config["voice"], config["rate"]) == ("onecore", "", None)
+    FakeEngine.started[0].done.set()
+    assert wait_until(lambda: not s.busy())
+    assert log_lines(tmp_path, routes=True)[0].endswith(
+        "no screen reader running, so a Windows voice")
+    assert s.last_route == "no screen reader running, so a Windows voice"
+
+
+@windows_screen_readers
+def test_a_chosen_windows_voice_never_asks_the_screen_readers(tmp_path, monkeypatch):
+    readers = FakeReaders(Outcome(spoke="jaws", running=["jaws"]))
+    s = make(tmp_path, monkeypatch, readers)
+    s.speak("Hello", SpeechSettings(engine="onecore", voice="Zira", rate_preset="fast"))
+    assert wait_until(lambda: len(FakeEngine.started) == 1)
+    assert readers.calls == []
+    config = FakeEngine.started[0].config
+    assert (config["engine"], config["voice"], config["rate"]) == ("onecore", "Zira", 4.5)
+    FakeEngine.started[0].done.set()
+    assert wait_until(lambda: not s.busy())
+
+
+@windows_screen_readers
+def test_a_failing_screen_reader_bridge_never_raises_and_falls_back(tmp_path, monkeypatch):
+    class Broken:
+        def speak(self, *args):
+            raise RuntimeError("boom")
+
+    s = make(tmp_path, monkeypatch, Broken())
+    assert s.speak("Hello", SpeechSettings())
+    assert wait_until(lambda: len(FakeEngine.started) == 1)
+    assert s.last_route == "screen readers couldn't be checked, so a Windows voice"
+    FakeEngine.started[0].done.set()
+    assert wait_until(lambda: not s.busy())
+
+
+@windows_screen_readers
+def test_a_confirmation_reaches_the_screen_reader_without_interrupting(tmp_path, monkeypatch):
+    readers = FakeReaders(Outcome(spoke="jaws", running=["jaws"]))
+    s = make(tmp_path, monkeypatch, readers)
+    s.speak("Sent.", SpeechSettings(), interrupt=False)
+    assert wait_until(lambda: len(readers.calls) == 1 and not s.busy())
+    s.speak("Session replied", SpeechSettings(), interrupt=True)
+    assert wait_until(lambda: len(readers.calls) == 2 and not s.busy())
+    assert readers.calls == [("Sent.", "auto", False), ("Session replied", "auto", True)]
+
+
+@windows_screen_readers
+def test_a_problem_is_reported_once_until_speech_works_again(tmp_path, monkeypatch):
+    unreachable = Outcome(running=["nvda"], problems={"nvda": "didn't answer (error 1722)"})
+    readers = FakeReaders(unreachable)
+    s = make(tmp_path, monkeypatch, readers)
+    problems = []
+    s.on_problem = problems.append
+    for text in ("one", "two"):
+        s.speak(text, SpeechSettings(), interrupt=False)
+    assert wait_until(lambda: len(readers.calls) == 2 and not s.busy())
+    assert len(problems) == 1 and s.last_problem == problems[0]
+    readers.outcome = Outcome(spoke="nvda", running=["nvda"])
+    s.speak("three", SpeechSettings())
+    assert wait_until(lambda: len(readers.calls) == 3 and not s.busy())
+    assert s.last_problem == ""
+    readers.outcome = unreachable
+    s.speak("four", SpeechSettings())
+    assert wait_until(lambda: len(problems) == 2)
+
+
+@windows_screen_readers
+def test_locked_windows_is_not_a_problem_to_report(tmp_path, monkeypatch):
+    readers = FakeReaders(Outcome(running=["nvda"], locked=True))
+    s = make(tmp_path, monkeypatch, readers)
+    s.speak("A reply", SpeechSettings())
+    assert wait_until(lambda: readers.calls and not s.busy())
+    assert s.last_problem == ""
+
+
+@windows_screen_readers
+def test_a_hung_screen_reader_does_not_stop_speech(tmp_path, monkeypatch):
+    """A JAWS or NVDA call that never returns is given up on, and while it's
+    still out, later announcements aren't sent (no pile of hung threads) and
+    no Windows voice talks over the screen reader."""
+    monkeypatch.setattr(speech, "SCREEN_READER_TIMEOUT", 0.2)
+    monkeypatch.setattr(speech, "SCREEN_READER_FIRST_TIMEOUT", 0.2)
+    release = threading.Event()
+
+    class Hanging(FakeReaders):
+        def speak(self, text, engine, interrupt):
+            self.calls.append(text)
+            release.wait(10)
+            return Outcome(spoke="nvda", running=["nvda"])
+
+    readers = Hanging()
+    s = make(tmp_path, monkeypatch, readers)
+    problems = []
+    s.on_problem = problems.append
+    s.speak("one", SpeechSettings())
+    assert wait_until(lambda: problems)
+    assert problems == [speech.NOT_ANSWERING]
+    assert wait_until(lambda: not s.busy())
+    s.speak("two", SpeechSettings())
+    assert wait_until(lambda: len(log_lines(tmp_path, routes=True)) == 2)
+    assert s.last_route == speech.NOT_ANSWERING
+    assert problems == [speech.NOT_ANSWERING]  # one hang, one report
+    assert readers.calls == ["one"] and FakeEngine.started == []
+    release.set()
+    assert wait_until(lambda: not s._reader_call.is_alive())
+    s.speak("three", SpeechSettings())
+    assert wait_until(lambda: s.last_route == "spoke through NVDA")
+    assert readers.calls == ["one", "three"]
+
+
+@windows_screen_readers
+def test_the_first_call_gets_longer_for_its_one_time_setup(tmp_path, monkeypatch):
+    """Importing comtypes and loading NVDA's client can be slow on a busy
+    machine at start-up; that mustn't be reported as a hung screen reader."""
+    monkeypatch.setattr(speech, "SCREEN_READER_TIMEOUT", 0.05)
+
+    class SlowFirst(FakeReaders):
+        def speak(self, text, engine, interrupt):
+            self.calls.append(text)
+            if len(self.calls) == 1:
+                time.sleep(0.3)
+            return Outcome(spoke="nvda", running=["nvda"])
+
+    s = make(tmp_path, monkeypatch, SlowFirst())
+    problems = []
+    s.on_problem = problems.append
+    s.speak("first", SpeechSettings())
+    assert wait_until(lambda: s.last_route == "spoke through NVDA")
+    assert problems == []

@@ -14,3 +14,7 @@ msaa = pytest.mark.skipif(sys.platform != "win32", reason="wx.Accessible is Wind
 
 #: VoiceOver names, read back from the native views (ui/mac_a11y.py).
 voiceover = pytest.mark.skipif(sys.platform != "darwin", reason="VoiceOver names are macOS-only")
+
+#: JAWS and NVDA called from the app's own process (screen_readers.py, #98).
+windows_screen_readers = pytest.mark.skipif(
+    sys.platform != "win32", reason="JAWS and NVDA are reached from the app on Windows only")

@@ -277,11 +277,22 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   session and gives it to every later turn. It never writes Claude Code's settings files.
 - **Announcements.** When the open session gets a new reply, or one of The Chat Place's sessions
   finishes a turn, or any listed session stops working, it's announced through your screen reader
-  (or a system voice) and put on the status bar. Settings (Ctrl+Comma) chooses full (the whole
+  (or a system voice when no screen reader is running) and put on the status bar. Settings (Ctrl+Comma) chooses full (the whole
   reply), summary (the session's name and the first sentence) or silent (status bar only), whether
   every listed session is announced or just the open one, and the speech route; its Reading
   messages group chooses whether full messages open as a formatted page or plain text.
   Ctrl+Shift+R repeats the last announcement.
+- **Which voice speaks.** On Windows, Automatic (the default) speaks through JAWS or NVDA,
+  whichever is running, in your screen reader's own voice and rate. NVDA needs nothing extra: The
+  Chat Place ships NV Access's NVDA Controller Client. A system voice is used only when no screen
+  reader is running in your Windows session. If one is running but can't be reached (or takes
+  more than 3 seconds to answer), The Chat Place doesn't talk over it in another voice. Instead,
+  the status bar shows the announcement with the reason beside it, a Windows notification says
+  announcements aren't being spoken (unless notifications are off), and Settings shows a Speech
+  problem box after the speech engine. Each new reason is reported once, until speech works
+  again. Nothing is spoken through a screen reader while Windows is locked. Choosing JAWS or NVDA in
+  Settings only decides which is tried first when both are running. On a Mac, Automatic speaks
+  through VoiceOver when it's running, else a system voice.
 - **The status bar** (F6, or Ctrl+9) has parts, as in QuickMail, and Left and Right move between
   them: what was last said, then the loaded session and what it's doing (read-only text), then
   buttons that appear when there's something to act on: how full the context is (Usage and
@@ -353,7 +364,8 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
 - **Report a Bug** (Help menu) asks for a summary, what happened, what you expected and the
   steps, and shows exactly what else the report includes before it goes anywhere: versions
   (The Chat Place, Windows, Python, wxPython, Claude Code), the announcement level and speech
-  engine, the list's view and sort, and how many sessions it lists. Never a session's title,
+  engine, what happened to the last announcement (which screen reader spoke it, or why none
+  did), the list's view and sort, and how many sessions it lists. Never a session's title,
   folder or messages. **Open on GitHub** copies the whole report and opens GitHub's new-issue
   page with it filled in; **Copy Report** only copies it. Filing on GitHub needs access to the
   repository; anyone else can Copy Report and email it to support@theideaplace.net.
@@ -653,7 +665,9 @@ Send to Stop.
 
 Every announcement is also written to `speech.log` in `%TEMP%\thechatplace-speak` (on a Mac,
 `$TMPDIR/thechatplace-speak`), one line each: the time, whether it interrupts or waits its turn,
-the speech engine, and its opening words. A line means the text was handed to the speech engine,
+the speech engine, and its opening words. On Windows, with a screen reader setting, a `route:` line
+usually follows it: "spoke through NVDA", "no screen reader running, so a Windows voice", or why a running
+screen reader didn't speak. A line means the text was handed to the speech engine,
 not that it was heard: a later announcement that interrupts can cut it off. The log shows
 whether a reply went to the screen reader at all when you didn't hear it.
 
@@ -722,6 +736,8 @@ Checked with Claude Code 2.1.286 (issues #187 and #188):
 | `thechatplace/announce.py` | What gets announced |
 | `thechatplace/rendering.py` | A message's markdown as a safe HTML page, for the formatted view |
 | `thechatplace/speech.py`, `thechatplace/speech/` | Speech, adapted from Image Description Toolkit (ClaudeSpeak's engine scripts) |
+| `thechatplace/screen_readers.py` | Speaking through JAWS and NVDA on Windows |
+| `thechatplace/nvda/` | NV Access's NVDA Controller Client (LGPL 2.1, unmodified; see its README and `license.txt`) |
 | `thechatplace/platform_paths.py` | Every path and OS call |
 | `thechatplace/ui/` | The wxPython window and dialogs |
 | `tests/` | pytest tests, built on made-up records shaped like the real ones |

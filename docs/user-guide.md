@@ -340,8 +340,8 @@ the other commands for the selected session.
 ## Announcements and notifications
 
 When the open session gets a reply, when one of The Chat Place's sessions finishes a turn, or when
-any listed session stops working, it's announced through your screen reader (or a system voice)
-and put on the status bar. **Ctrl+Shift+R** repeats the last announcement.
+any listed session stops working, it's announced through your screen reader (or a system voice
+when no screen reader is running) and put on the status bar. **Ctrl+Shift+R** repeats the last announcement.
 
 **Settings** (Ctrl+Comma) chooses how much is said:
 
@@ -352,6 +352,13 @@ and put on the status bar. **Ctrl+Shift+R** repeats the last announcement.
 Settings also chooses whether every listed session is announced or just the open one, which
 speech engine and rate to use, whether your own messages are read back when they're sent, and
 whether The Chat Place tells you when an update has been installed.
+
+On Windows, **Automatic** speaks through JAWS or NVDA, whichever is running, in your screen
+reader's own voice and rate. NVDA works without installing anything else. A system voice speaks
+only when no screen reader is running, so you never hear a second voice over your screen reader.
+If your screen reader is running but The Chat Place can't reach it, a Windows notification says
+announcements aren't being spoken, the status bar gives the reason beside the announcement, and
+Settings shows it in a Speech problem box after the speech engine.
 
 When you're in another window, The Chat Place can show a notification: when one of its sessions
 finishes a turn, fails or needs you, when the session you have loaded finishes, or when a desktop

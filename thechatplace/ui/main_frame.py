@@ -152,6 +152,9 @@ class MainFrame(wx.Frame):
         self.speech = SpeechSettings.load()
         self._speech_options = None
         threading.Thread(target=self._probe_speech, daemon=True).start()
+        # A screen reader that's running but can't be reached is reported, not
+        # covered by a Windows voice (#98).
+        speaker.on_problem = lambda reason: wx.CallAfter(self._on_speech_problem, reason)
 
         self._pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix="hub")
         self._snapshot = Snapshot()
@@ -616,6 +619,27 @@ class MainFrame(wx.Frame):
         except OSError as exc:
             self._say(f"Couldn't save The Chat Place's session list: {exc}")
             return False
+
+    def _on_speech_problem(self, reason: str):
+        """Say why the screen reader didn't speak. The speaker calls this once
+        per problem, until speech works again.
+
+        Not spoken: the screen reader is what can't be reached, and a Windows
+        voice over it is the #98 defect. So it goes beside the announcement in
+        the status bar (which still has the announcement in it), and to one
+        Windows notification, which screen readers read from their own
+        notification handling even when they can't be reached this way.
+        """
+        if not self:
+            return  # the window closed before this ran
+        message = f"Speech: {reason[0].upper()}{reason[1:]}."
+        # Beside whatever the status bar says now, which is what was just
+        # spoken (an announcement or a confirmation), not an older one.
+        current = self._status_latest
+        self._status(f"{current} ({message})" if current else message)
+        if self.speech.notifications != NOTIFY_OFF:
+            self._notifier.show("Announcements aren't being spoken",
+                                f"{reason[0].upper()}{reason[1:]}.", None)
 
     def _probe_speech(self):
         try:
@@ -3912,7 +3936,8 @@ class MainFrame(wx.Frame):
             else {"desktop app": code}
         counts["Chat Place"] = sum(1 for s in listed if s.is_own)
         facts = bugreport.environment(self.speech, counts,
-                                      claude_version=self._claude_version or "checking")
+                                      claude_version=self._claude_version or "checking",
+                                      speech_route=speaker.last_route)
         dialog = BugReportDialog(self, [f"{label}: {value}" for label, value in facts])
         try:
             if dialog.ShowModal() != wx.ID_OK:
@@ -4278,6 +4303,7 @@ class MainFrame(wx.Frame):
             if timer is not None:
                 timer.Stop()
         speaker.stop()
+        speaker.on_problem = None
         self._notifier.close()  # its icon would keep the app running
         self._pool.shutdown(wait=False, cancel_futures=True)
         event.Skip()

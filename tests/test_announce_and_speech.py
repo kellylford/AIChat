@@ -237,6 +237,26 @@ def test_peer_message_announcement():
     assert announce.peer_text("Hub", "x", "  ", ANNOUNCE_FULL) is None
 
 
+def test_nvda_is_offered_whenever_it_is_installed():
+    """The probe calls NVDA "available" only if it finds a controller client
+    of its own, so NVDA vanished from the list on a normal install (#98). The
+    app ships the client now, so installed or running is enough."""
+    from thechatplace.speech import _parse_windows_probe
+    probe = {"screenReaders": [
+        {"engine": "jaws", "name": "JAWS", "available": True, "running": True},
+        {"engine": "nvda", "name": "NVDA", "available": False, "installed": True,
+         "running": False},
+    ], "systemVoices": {"engine": "onecore", "displayName": "Microsoft Zira",
+                        "match": "MSTTS_V110_enUS_ZiraM"}}
+    labels = [o.label for o in _parse_windows_probe(json.dumps(probe))]
+    assert labels[1:] == ["JAWS screen reader",
+                          "NVDA screen reader (not running right now)",
+                          "Microsoft Zira — Windows voice (OneCore)"]
+    probe["screenReaders"] = [{"engine": "nvda", "available": False, "installed": False,
+                               "running": False}]
+    assert [o.engine for o in _parse_windows_probe(json.dumps(probe))] == ["auto", "onecore"]
+
+
 def test_update_notice_settings_round_trip_and_default(tmp_path):
     # #141: the notice is on unless turned off; the last version run is kept.
     path = tmp_path / "speech.json"
