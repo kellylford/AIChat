@@ -33,6 +33,7 @@ No wx imports here: the module is used by the wx app but testable without it.
 """
 from __future__ import annotations
 
+import itertools
 import json
 import os
 import re
@@ -66,6 +67,12 @@ __all__ = [
 from .platform_paths import app_data_dir  # noqa: E402
 
 DEFAULT_SETTINGS_PATH = app_data_dir() / "speech.json"
+
+#: Numbers each utterance's file pair (#113). ``time.time_ns()`` alone is not
+#: unique: on Windows it ticks every 15.6 ms, so two utterances queued back to
+#: back got the same name, and the second overwrote the first's text and
+#: config, sometimes while the first engine was still reading them.
+_UTTERANCE_NUMBERS = itertools.count()
 
 #: Bytes ``speech.log`` may reach before its older half is dropped.
 LOG_LIMIT = 200_000
@@ -437,9 +444,11 @@ class Speaker:
             self.stop()
         try:
             # One file pair per utterance: two utterances close together
-            # must not overwrite each other's text before it is read.
+            # must not overwrite each other's text before it is read. The
+            # pid and counter keep names unique within a clock tick and
+            # between two copies of the app sharing the folder (#113).
             self._sweep_old_files()
-            stem = f"say-{time.time_ns()}"
+            stem = f"say-{time.time_ns()}-{os.getpid()}-{next(_UTTERANCE_NUMBERS)}"
             text_file = self.workdir / f"{stem}.txt"
             config_file = self.workdir / f"{stem}.json"
             # UTF-8 without BOM on purpose: the engine scripts read UTF-8,
