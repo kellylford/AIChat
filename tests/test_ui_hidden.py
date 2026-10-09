@@ -19,18 +19,8 @@ from thechatplace.sessions import NEEDS_YOU  # noqa: E402
 from records import (assistant_block, lines, text_block, tool_result, tool_use_block,  # noqa: E402
                      user_text)
 from markers import msaa, voiceover, windows_paths  # noqa: E402
-
-
-FAKE_COMMANDS = [
-    {"name": "blog-publish", "description": "Publish a post to the blog", "argumentHint": ""},
-    {"name": "compact", "description": "Clear history but keep a summary", "builtin": True,
-     "argumentHint": "<optional instructions>"},
-    {"name": "context", "description": "Show what's using the context", "builtin": True},
-]
-
-
-def now_ms():
-    return int(time.time() * 1000)
+import fake_env  # noqa: E402
+from fake_env import FAKE_COMMANDS, add_desktop, add_transcript, now_ms, pump  # noqa: E402,F401
 
 
 @pytest.fixture(scope="module")
@@ -41,106 +31,7 @@ def app():
 
 @pytest.fixture
 def env(tmp_path, monkeypatch, app):
-    desktop = tmp_path / "desktop"
-    live = tmp_path / "live"
-    projects = tmp_path / "projects"
-    cowork = tmp_path / "cowork"
-    for folder in (desktop, live, projects, cowork):
-        folder.mkdir()
-    monkeypatch.setattr(platform_paths, "desktop_sessions_dirs", lambda: [desktop])
-    monkeypatch.setattr(platform_paths, "cowork_sessions_dirs", lambda: [cowork])
-    monkeypatch.setattr(platform_paths, "live_sessions_dir", lambda: live)
-    monkeypatch.setattr(platform_paths, "projects_dir", lambda: projects)
-    monkeypatch.setattr(speech, "DEFAULT_SETTINGS_PATH", tmp_path / "speech.json")
-    # The Chat Place's own files (groups.json) go here, never in the real %APPDATA%.
-    monkeypatch.setattr(platform_paths, "app_data_dir", lambda: tmp_path / "appdata")
-    # No real claude --version (bug reports) or clipboard from the tests.
-    from thechatplace import bugreport
-    from thechatplace.ui import dialogs, main_frame
-    monkeypatch.setattr(bugreport, "claude_code_version", lambda: "2.1.286 (Claude Code)")
-    copied = []
-    monkeypatch.setattr(main_frame.MainFrame, "_copy_text",
-                        lambda self, text: copied.append(text) or True)
-    # Nor the real claude for its sign-in (#52): signed in, unless a test says not.
-    from thechatplace import signin
-    monkeypatch.setattr(signin, "check", lambda *a, **k: signin.SignIn(
-        True, signed_in=True, method="claude.ai", plan="max", email="k@example.com"))
-    # Nor the real claude for a folder's slash commands (#23).
-    monkeypatch.setattr(main_frame, "fetch_commands", lambda exe, cwd: list(FAKE_COMMANDS))
-    spoken = []
-    feedback = []
-
-    def speak(text, settings, interrupt=True):
-        (spoken if interrupt else feedback).append(text)
-    monkeypatch.setattr(speech.speaker, "speak", speak)
-    # The frame points the shared speaker at itself (#98); put it back after,
-    # so no later test reaches a destroyed frame through it.
-    monkeypatch.setattr(speech.speaker, "on_problem", None)
-    monkeypatch.setattr(speech.speaker, "last_problem", "")
-    monkeypatch.setattr(main_frame, "list_speech_options", lambda: speech.default_options())
-    # No real web page: it would open modal and wait. Tests that want the
-    # formatted view put a fake in.
-    monkeypatch.setattr(main_frame, "formatted_view_available", lambda: False)
-    monkeypatch.setattr(dialogs, "formatted_view_available", lambda: False)
-    opened = []
-    monkeypatch.setattr(platform_paths, "open_url", lambda url: opened.append(url))
-    # Nor real Claude Code files, an editor or Explorer (#92).
-    monkeypatch.setattr(platform_paths, "claude_home", lambda: tmp_path / "claude")
-    monkeypatch.setattr(platform_paths, "edit_file", lambda path: opened.append(("edit", path)))
-    monkeypatch.setattr(platform_paths, "show_in_folder",
-                        lambda path: opened.append(("show", path)))
-    boxes = []
-    monkeypatch.setattr(wx, "MessageBox", lambda *a, **k: boxes.append(a[0]) or wx.YES)
-    # No real Windows notifications (#20): they're recorded. The hidden test
-    # window is never the active one, so every notification would show.
-    notified = []
-
-    class FakeNotifier:
-        def __init__(self, on_click, tooltip):
-            self.on_click = on_click
-
-        def show(self, title, message, key):
-            notified.append((title, message, key))
-            return True
-
-        def close(self):
-            pass
-    monkeypatch.setattr(main_frame, "Notifier", FakeNotifier)
-    # Nor take the Mac's menu bar from the app you're using.
-    activated = []
-    from thechatplace.ui import mac_a11y
-    monkeypatch.setattr(mac_a11y, "activate_app", lambda: activated.append(True) or True)
-    return {"desktop": desktop, "cowork": cowork, "projects": projects, "spoken": spoken,
-            "copied": copied, "feedback": feedback, "opened": opened, "boxes": boxes, "tmp": tmp_path,
-            "live": live, "notified": notified, "activated": activated}
-
-
-def add_desktop(env, local, cli, title, cwd="C:\\G\\Repo", ago=60_000, **extra):
-    folder = env["desktop"] / local / "org"
-    folder.mkdir(parents=True, exist_ok=True)
-    data = {"sessionId": local, "cliSessionId": cli, "cwd": cwd, "title": title,
-            "isArchived": False, "lastActivityAt": now_ms() - ago}
-    data.update(extra)
-    (folder / f"{local}.json").write_text(json.dumps(data), encoding="utf-8")
-
-
-def add_transcript(env, cwd, cli, records):
-    folder = env["projects"] / platform_paths.encode_cwd(cwd)
-    folder.mkdir(parents=True, exist_ok=True)
-    path = folder / f"{cli}.jsonl"
-    path.write_text("\n".join(lines(*records)) + "\n", encoding="utf-8")
-    return path
-
-
-def pump(condition, timeout=5.0):
-    end = time.time() + timeout
-    while time.time() < end:
-        wx.GetApp().ProcessPendingEvents()
-        wx.YieldIfNeeded()
-        if condition():
-            return True
-        time.sleep(0.02)
-    return False
+    return fake_env.install(tmp_path, monkeypatch.setattr)
 
 
 def settle(frame):
