@@ -266,7 +266,8 @@ def check_resume_allowed(session_id: str, own_ids: Collection[str],
 
 def build_fork_command(executable: str, source_id: str, new_id: str, title: str,
                        permission_mode: str, model: str = "",
-                       taken_ids: Collection[str] = ()) -> List[str]:
+                       taken_ids: Collection[str] = (),
+                       cowork_ids: Collection[str] = ()) -> List[str]:
     """Command for the first turn of a copy of another session (#189), such
     as a desktop app session, to carry on in The Chat Place.
 
@@ -275,10 +276,14 @@ def build_fork_command(executable: str, source_id: str, new_id: str, title: str,
     Claude Code 2.1.286: the source transcript was byte for byte the same
     afterwards, the new id was the one asked for, and Claude knew the earlier
     conversation. So this is allowed for desktop sessions, where a plain
-    ``--resume`` is not; the new id must be one nobody has.
+    ``--resume`` is not; the new id must be one nobody has. Never for a
+    Cowork session (``cowork_ids``, #91): its history is in the desktop app's
+    own files, and its tools ran there.
     """
     if not platform_paths.is_safe_id(source_id) or source_id.startswith("local_"):
         raise ResumeRefused("That is not a session id Claude Code can continue from.")
+    if source_id in cowork_ids:
+        raise ResumeRefused("A Cowork session can't be continued here; open it in Claude.")
     if not platform_paths.is_safe_id(new_id) or new_id == source_id or new_id in taken_ids:
         raise ValueError("The new session needs an id of its own.")
     command = [executable, *_common_flags(permission_mode, model),

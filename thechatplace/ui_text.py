@@ -39,8 +39,8 @@ SHORTCUTS = [
         ("Alt+V, O", "Sort Sessions: by status, newest first, oldest first, by title or "
                      "by folder; the choice is remembered"),
         ("Alt+V, H", "Show Sessions: all, needs you or working, needs you, desktop app, "
-                     "The Chat Place, Remote Control, ungrouped (in no group), archived, or "
-                     "one of your groups"),
+                     "Cowork, The Chat Place, Remote Control, ungrouped (in no group), "
+                     "archived, or one of your groups"),
         ("Ctrl+E", "Export the selected (or loaded) session as Markdown, a web page or "
                    "plain text"),
         ("F2", "Rename the selected session (a desktop app session's new name shows only "

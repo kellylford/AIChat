@@ -22,6 +22,7 @@ from .transcript import TranscriptParser, split_jsonl
 class Snapshot:
     sessions: List[SessionInfo] = field(default_factory=list)
     desktop_cli_ids: Set[str] = field(default_factory=set)
+    cowork_cli_ids: Set[str] = field(default_factory=set)
     live: Dict[str, LiveStatus] = field(default_factory=dict)
     unreadable_files: int = 0
     #: The desktop app's own groups (#51), read-only here.
@@ -42,7 +43,8 @@ def collect(own: Iterable[OwnSession], running_own_ids: Set[str],
     # Archived ones too, flagged: the list shows them only in its Archived view
     # (#32) or a group they're in.
     desktop: DesktopLoadResult = load_desktop_sessions(desktop_dir, live,
-                                                       include_archived=True)
+                                                       include_archived=True,
+                                                       alive=alive, started=started)
     sessions = list(desktop.sessions)
     waiting = waiting or {}
     for item in own:
@@ -59,6 +61,7 @@ def collect(own: Iterable[OwnSession], running_own_ids: Set[str],
     folders = [desktop_dir] if desktop_dir is not None else platform_paths.desktop_sessions_dirs()
     return Snapshot(sessions=sort_sessions(sessions, order),
                     desktop_cli_ids=desktop.desktop_cli_ids,
+                    cowork_cli_ids=desktop.cowork_cli_ids,
                     live=live,
                     unreadable_files=desktop.unreadable_files,
                     desktop_groups=load_desktop_groups(folders))
