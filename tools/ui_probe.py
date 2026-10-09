@@ -205,10 +205,11 @@ def describe(window: wx.TopLevelWindow) -> dict:
                 entry["value"] = child.GetValue()[:400]
             elif isinstance(child, wx.Choice):
                 entry["value"] = child.GetStringSelection()
-            if not isinstance(parent, wx.TopLevelWindow) or parent is window:
+            # The status bar sits below the client area by design.
+            if depth == 0 and not isinstance(child, wx.StatusBar):
                 right, bottom = rect[0] + rect[2], rect[1] + rect[3]
-                if (depth == 0 and (rect[0] < 0 or rect[1] < 0
-                                    or right > client.width + 1 or bottom > client.height + 1)):
+                if (rect[0] < 0 or rect[1] < 0
+                        or right > client.width + 1 or bottom > client.height + 1):
                     entry["problems"].append("outside the window")
             controls.append(entry)
             walk(child, depth + 1)
