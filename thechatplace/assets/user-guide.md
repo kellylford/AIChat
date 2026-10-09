@@ -287,7 +287,7 @@ New reply when there isn't one, is simply left out of that line.
 
 **Last message** tells you where each conversation ended without loading it: "Claude:" or "You:"
 and the start of the last message either of you wrote, as plain text on one line, cut at about
-150 characters with "…". Tool calls and their results don't count. To read the whole message,
+150 characters with "…". A link reads as its words, and a bare web address as its site. Tool calls and their results don't count. To read the whole message,
 press Enter to load the session, then Enter on the message. A session whose conversation is
 missing or can't be read says nothing in this column. While a session is working, the line you're
 on keeps its last message until the status changes, so you don't hear the line again each time

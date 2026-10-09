@@ -6,9 +6,11 @@ the UI applies on the main thread.
 from __future__ import annotations
 
 import os
+import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Set
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from . import platform_paths
 from .desktop_groups import DesktopGroups, load_desktop_groups
@@ -16,11 +18,26 @@ from .own_store import OwnSession
 from .sessions import (NEEDS_YOU, SORT_STATUS, WORKING, DesktopLoadResult, LiveStatus, SessionInfo,
                        load_desktop_sessions, load_live_status, sort_sessions)
 from .transcript import LastMessages, TranscriptParser, split_jsonl
+# The row's words for it: plain text, no wx, so this stays plain data.
 from .ui_text import last_message_line
 
 #: Each session's last message (#146), remembered between snapshots by file
 #: size and modification time, so only a transcript that changed is read.
 LAST_MESSAGES = LastMessages()
+#: Sessions whose transcript wasn't found, by key: (their last activity, when
+#: looked). Finding none means searching every project folder, so it isn't
+#: done again every refresh: only when the session has been active since, or
+#: after ``NO_TRANSCRIPT_RETRY`` seconds.
+_NO_TRANSCRIPT: Dict[str, Tuple[int, float]] = {}
+_NO_TRANSCRIPT_LOCK = threading.Lock()
+NO_TRANSCRIPT_RETRY = 60.0
+
+
+def forget_last_messages() -> None:
+    """The Last message column was taken off: nothing to keep for it."""
+    LAST_MESSAGES.keep_only([])
+    with _NO_TRANSCRIPT_LOCK:
+        _NO_TRANSCRIPT.clear()
 
 
 @dataclass
@@ -84,8 +101,20 @@ def fill_last_messages(sessions: Iterable[SessionInfo],
     no transcript, or none that can be read, says nothing."""
     cache = cache if cache is not None else LAST_MESSAGES
     seen = []
+    now = time.monotonic()
     for info in sessions:
+        with _NO_TRANSCRIPT_LOCK:
+            missing = _NO_TRANSCRIPT.get(info.key)
+        if (missing is not None and missing[0] == info.last_activity_ms
+                and now - missing[1] < NO_TRANSCRIPT_RETRY):
+            info.last_message = ""
+            continue
         path = info.transcript_path()
+        with _NO_TRANSCRIPT_LOCK:
+            if path is None:
+                _NO_TRANSCRIPT[info.key] = (info.last_activity_ms, now)
+            else:
+                _NO_TRANSCRIPT.pop(info.key, None)
         if path is None:
             info.last_message = ""
             continue

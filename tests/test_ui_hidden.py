@@ -6371,3 +6371,59 @@ def test_a_new_last_message_on_your_row_waits_while_it_works(frame, env, monkeyp
     quiet.last_activity_ms -= 3 * 60_000  # a clock tick alone: left alone
     frame._refresh_list_in_place()
     assert row() == before
+
+
+def test_adding_last_message_on_a_working_session_fills_your_row_at_once(frame, env,
+                                                                        monkeypatch):
+    """The row you're on gets its message with the columns, in the one
+    rewrite OK makes, even while its session works (when later messages
+    wait for the status to change)."""
+    from thechatplace.sessions import WORKING
+    _last_message_transcripts(env)
+    select(frame, "Quiet one")
+    _session(frame, "Quiet one").state = WORKING
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    _choose_columns(monkeypatch, ["title", "status", "last_message"])
+    frame.on_session_columns()
+    assert frame.session_list.GetStringSelection() == \
+        "Quiet one, working, Claude: Yes, it's fixed."
+    settle(frame)
+    assert "Claude: Yes, it's fixed." in frame.session_list.GetStringSelection()
+
+
+def test_removing_last_message_forgets_what_was_read(frame, env, monkeypatch):
+    from thechatplace import hub
+    _last_message_transcripts(env)
+    _choose_columns(monkeypatch, ["title", "last_message"])
+    frame.on_session_columns()
+    settle(frame)
+    assert hub.LAST_MESSAGES.reads >= 1
+    hub._NO_TRANSCRIPT["own:somewhere"] = (1, 0.0)
+    _choose_columns(monkeypatch, ["title", "status"])
+    frame.on_session_columns()
+    assert hub.LAST_MESSAGES._entries == {} and hub._NO_TRANSCRIPT == {}
+    assert not any("Claude:" in r for r in frame.session_list.GetStrings())
+
+
+def test_your_working_row_waits_in_a_kept_order_and_changes_for_a_rename(frame, env,
+                                                                          monkeypatch):
+    """The same rule when a row leaves the list in the same refresh (rows
+    kept in place), and a change other than the message, such as a new
+    name, rewrites the row with the newest message."""
+    from thechatplace.sessions import WORKING
+    frame.speech.session_fields = ["title", "status", "last_message"]
+    quiet = _session(frame, "Quiet one")
+    quiet.state, quiet.last_message = WORKING, "Claude: one"
+    select(frame, "Quiet one")
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    frame._refresh_list_in_place(rewrite=True)
+    assert frame.session_list.GetStringSelection() == "Quiet one, working, Claude: one"
+    quiet.last_message = "Claude: two"
+    blocked = _session(frame, "Blocked one")
+    frame._snapshot.sessions.remove(blocked)  # gone in the same refresh
+    frame._refresh_list_in_place()
+    assert frame.session_list.GetCount() == 2
+    assert frame.session_list.GetStringSelection() == "Quiet one, working, Claude: one"
+    quiet.title = "Quieter one"
+    frame._refresh_list_in_place()
+    assert frame.session_list.GetStringSelection() == "Quieter one, working, Claude: two"

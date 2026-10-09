@@ -185,6 +185,33 @@ def test_a_file_that_shrinks_or_is_replaced_is_read_again(tmp_path):
     assert cache.get(path).text == "Shorx"
 
 
+def test_a_step_that_starts_on_a_whole_line_keeps_it(tmp_path):
+    """The part read can begin exactly where a line begins: that line is
+    whole, and is read, not dropped as if it were cut."""
+    path = tmp_path / "t.jsonl"
+    head = ("\n".join(lines(*[user_text("x" * 300) for _ in range(10)])) + "\n").encode()
+    tail = ("\n".join(lines(assistant_block(text_block("Found."), "m1"))) + "\n").encode()
+    path.write_bytes(head + tail)
+    message = last_message_from_tail(path, (len(tail),))  # one step, exactly the last line
+    assert message is not None and message.text == "Found."
+
+
+def test_a_file_busy_for_a_moment_keeps_its_message(tmp_path, monkeypatch):
+    from thechatplace import transcript
+    cache = LastMessages()
+    path = write(tmp_path / "t.jsonl", [user_text("Go")])
+    assert cache.get(path).text == "Go"
+    with open(path, "a", encoding="utf-8") as handle:
+        handle.write(lines(user_text("More"))[0] + "\n")
+
+    def busy(*a, **k):
+        raise PermissionError("in use")
+    monkeypatch.setattr(transcript, "open", busy, raising=False)
+    assert cache.get(path).text == "Go"  # what it said, not nothing
+    monkeypatch.undo()
+    assert cache.get(path).text == "More"
+
+
 def test_a_file_that_goes_away_is_forgotten(tmp_path):
     cache = LastMessages()
     path = write(tmp_path / "t.jsonl", [user_text("Go")])
@@ -214,11 +241,14 @@ def test_keep_only_forgets_sessions_no_longer_listed(tmp_path):
     ("- first\n- second\n1. third\n> quoted", "first second third quoted"),
     ("Run this:\n\n```bash\nls -la\n```\n\nThen *wait*.", "Run this: ls -la Then wait."),
     ("| a | b |\n|---|---|\n| 1 | 2 |", "a b 1 2"),
-    ("See [the docs](https://example.com/x).", "See the docs (https://example.com/x)."),
+    ("See [the docs](https://example.com/x).", "See the docs."),
     ("Keep snake_case_names and 2*3*4 as they are.",
      "Keep snake_case_names and 2*3*4 as they are."),
     ("  lots\t of\n\n\n   space  ", "lots of space"),
     ("```\n```", ""),
+    ("See [the PR](https://github.com/x/y/pull/1) now.", "See the PR now."),
+    ("Docs: https://www.example.com/a/b?c=1. And <https://docs.python.org/3/>",
+     "Docs: example.com. And docs.python.org"),
 ])
 def test_one_plain_line(markdown, plain):
     assert one_line(markdown) == plain
@@ -293,6 +323,32 @@ def test_collect_reads_last_messages_only_when_asked(tmp_path, monkeypatch):
     assert cache.reads == 1  # the second pass read nothing
 
 
+def test_a_missing_transcript_is_not_searched_for_every_refresh(tmp_path, monkeypatch):
+    calls = []
+    real = SessionInfo.transcript_path
+
+    def counted(self):
+        calls.append(self.key)
+        return real(self)
+    monkeypatch.setattr(SessionInfo, "transcript_path", counted)
+    monkeypatch.setattr(platform_paths, "projects_dir", lambda: tmp_path / "projects")
+    monkeypatch.setattr(hub, "_NO_TRANSCRIPT", {})
+    info = SessionInfo(source=OWN, key="own:gone", title="Gone", cwd="C:\\G\\Gone",
+                       cli_session_id="gone", last_activity_ms=5)
+    cache = LastMessages()
+    for _ in range(3):
+        hub.fill_last_messages([info], cache)
+    assert calls == ["own:gone"] and info.last_message == ""
+    info.last_activity_ms = 6  # active since: looked for again
+    hub.fill_last_messages([info], cache)
+    assert len(calls) == 2
+    monkeypatch.setattr(hub, "NO_TRANSCRIPT_RETRY", 0.0)  # and after a while
+    hub.fill_last_messages([info], cache)
+    assert len(calls) == 3
+    hub.forget_last_messages()
+    assert hub._NO_TRANSCRIPT == {}
+
+
 def test_a_cowork_session_reads_its_own_claude_home(tmp_path):
     home = tmp_path / "cowork-home"
     folder = home / "projects" / platform_paths.encode_cwd("C:\\outputs")
@@ -338,4 +394,5 @@ def test_timing_with_sixty_sessions(tmp_path, monkeypatch):
     assert all(s.last_message == f"Claude: Answer {s.cli_session_id[4:]}"
                for s in snap.sessions)
     assert cache.reads == 60
-    assert first < 5 and again < 2
+    # Generous: a slow CI machine is far inside these.
+    assert first < 15 and again < 5

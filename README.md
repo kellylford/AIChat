@@ -67,7 +67,7 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   it; a column with nothing to say for a session is left out of its line. Last message says
   where each conversation ended without loading it: "Claude:" or "You:" and the start of the
   last message either of you wrote, as plain text on one line (about 150 characters, cut at a
-  word with "…"). Tool calls and their results don't count. Press Enter to load the session and
+  word with "…"; a link reads as its words, a bare web address as its site). Tool calls and their results don't count. Press Enter to load the session and
   read the whole message. A session whose conversation is missing or can't be read says nothing
   there. Only the end of each conversation file is read, in the background, and again only when
   the file has changed; nothing is read while the column isn't shown. While a session is working,

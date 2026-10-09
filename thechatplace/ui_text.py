@@ -149,6 +149,7 @@ LAST_MESSAGE_LIMIT = 150
 _FENCE = re.compile(r"^\s*(```|~~~).*$", re.M)
 _LINE_MARK = re.compile(r"^\s*(?:[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+|>\s?)+", re.M)
 _SINGLE_EMPHASIS = re.compile(r"(?<![\w*_])([*_])(?=\S)([^*_\n]+?)(?<=\S)\1(?![\w*_])")
+_BARE_URL = re.compile(r"<?\bhttps?://(?:www\.)?([^/?#\s<>()]+?)(?:[/?#][^\s<>()]*?)?>?(?=[.,;:!?)]*(?:\s|$))")
 _TABLE_RULE = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$", re.M)
 
 
@@ -159,6 +160,10 @@ def one_line(text: str, limit: int = LAST_MESSAGE_LIMIT) -> str:
     stars and pipes."""
     text = _FENCE.sub("", text)
     text = _TABLE_RULE.sub("", text)
+    # A link is its words, and a bare address its site: a screen reader
+    # would spell out the whole address, and use up the line on it.
+    text = _LINK.sub(lambda m: m.group(1), text)
+    text = _BARE_URL.sub(lambda m: m.group(1), text)
     text = _LINE_MARK.sub("", markdown_as_text(text))
     text = _SINGLE_EMPHASIS.sub(r"\2", text)
     text = " ".join(text.replace("|", " ").split())

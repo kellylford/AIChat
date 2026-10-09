@@ -650,13 +650,18 @@ def _last_message(handle, size: int, steps: Tuple[int, ...]) -> Optional[ChatMes
     for number, limit in enumerate(steps):
         last_step = number == len(steps) - 1
         start = max(0, size - limit)
-        handle.seek(start)
-        data = handle.read(size - start)
         if start > 0:
+            # One byte more, to tell a whole first line (the byte before it
+            # is a newline) from one cut in the middle, which is dropped.
+            handle.seek(start - 1)
+            data = handle.read(size - start + 1)
             cut = data.find(b"\n")
-            if cut < 0:
+            if cut < 0 or cut == len(data) - 1:
                 continue  # one line longer than this step: read more
             data = data[cut + 1:]
+        else:
+            handle.seek(0)
+            data = handle.read(size)
         # A last line without its newline is parsed too: if it is still
         # being written it won't parse, and is counted, not raised.
         parser = TranscriptParser()
@@ -690,19 +695,26 @@ class LastMessages:
         if path is None:
             return None
         name = str(path)
+        with self._lock:
+            entry = self._entries.get(name)
         try:
+            # A stat, not an open, when nothing changed: most refreshes.
+            info = os.stat(path)
+            if entry is not None and entry[0] == (info.st_size, info.st_mtime_ns):
+                return entry[1]
             with open(path, "rb") as handle:
+                # The stamp of what is read, from the handle it's read from.
                 info = os.fstat(handle.fileno())
                 stamp = (info.st_size, info.st_mtime_ns)
-                with self._lock:
-                    entry = self._entries.get(name)
-                if entry is not None and entry[0] == stamp:
-                    return entry[1]
                 message = _last_message(handle, info.st_size, self._steps)
-        except OSError:
+        except FileNotFoundError:
             with self._lock:
                 self._entries.pop(name, None)
             return None
+        except OSError:
+            # Busy for a moment (being replaced, scanned): keep what it said,
+            # so the row doesn't lose its message and get it back again.
+            return entry[1] if entry is not None else None
         with self._lock:
             self._entries[name] = (stamp, message)
             self.reads += 1
