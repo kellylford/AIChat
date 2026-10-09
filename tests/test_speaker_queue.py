@@ -22,6 +22,10 @@ class FakeEngine:
                                       else command[command.index("--config") + 1],
                                       encoding="utf-8").read())
         self.done = threading.Event()
+        # Set once the speaker is blocked waiting for this engine to finish,
+        # so a test knows the speaker has recorded it as running and cannot
+        # start the next utterance, without guessing with a sleep (#113).
+        self.waiting = threading.Event()
         self.killed = False
         FakeEngine.started.append(self)
 
@@ -29,6 +33,7 @@ class FakeEngine:
         return 0 if self.done.is_set() else None
 
     def wait(self, timeout=None):
+        self.waiting.set()
         if not self.done.wait(timeout):
             raise TimeoutError
         return 0
@@ -47,6 +52,11 @@ def wait_until(condition, timeout=5.0):
     return False
 
 
+def text_of(engine):
+    return open(engine.command[engine.command.index("-Path") + 1],
+                encoding="utf-8").read()
+
+
 def make(tmp_path, monkeypatch):
     FakeEngine.started = []
     monkeypatch.setattr(speech.tempfile, "gettempdir", lambda: str(tmp_path))
@@ -61,12 +71,39 @@ def test_confirmations_queue_instead_of_overlapping(tmp_path, monkeypatch):
     assert s.speak("first", settings, interrupt=False)
     assert s.speak("second", settings, interrupt=False)
     assert wait_until(lambda: len(FakeEngine.started) == 1)
-    time.sleep(0.1)
-    assert len(FakeEngine.started) == 1          # second waits for the first
-    assert FakeEngine.started[0].config["interrupt"] is False
-    FakeEngine.started[0].done.set()
+    first = FakeEngine.started[0]
+    assert first.waiting.wait(5)                 # the speaker is waiting on it
+    # Second waits for the first. A short look for a second engine can only
+    # catch more, never flake: with a correct speaker none can appear.
+    assert not wait_until(lambda: len(FakeEngine.started) > 1, timeout=0.1)
+    assert first.config["interrupt"] is False
+    assert text_of(first) == "first"
+    first.done.set()
     assert wait_until(lambda: len(FakeEngine.started) == 2)
-    FakeEngine.started[1].done.set()
+    second = FakeEngine.started[1]
+    assert text_of(second) == "second"
+    second.done.set()
+    assert wait_until(lambda: not s.busy())
+
+
+def test_utterances_in_one_clock_tick_keep_their_own_files(tmp_path, monkeypatch):
+    """On Windows time.time_ns() ticks every 15.6 ms, so file names built from
+    it alone collided and the second utterance overwrote the first's text (#113)."""
+    monkeypatch.setattr(speech.time, "time_ns", lambda: 1_000_000)
+    s = make(tmp_path, monkeypatch)
+    settings = SpeechSettings()
+    s.speak("first", settings, interrupt=False)
+    s.speak("second", settings, interrupt=False)
+    assert wait_until(lambda: len(FakeEngine.started) == 1)
+    first = FakeEngine.started[0]
+    assert first.waiting.wait(5)
+    assert text_of(first) == "first"
+    first.done.set()
+    assert wait_until(lambda: len(FakeEngine.started) == 2)
+    second = FakeEngine.started[1]
+    assert text_of(second) == "second"
+    assert second.command != first.command
+    second.done.set()
     assert wait_until(lambda: not s.busy())
 
 
@@ -77,6 +114,7 @@ def test_an_announcement_stops_everything_in_flight_and_queued(tmp_path, monkeyp
     s.speak("confirmation two", settings, interrupt=False)
     assert wait_until(lambda: len(FakeEngine.started) == 1)
     first = FakeEngine.started[0]
+    assert first.waiting.wait(5)                 # it is running, not starting
     s.speak("Session replied", settings, interrupt=True)
     assert first.killed                           # in-flight speech stopped
     assert wait_until(lambda: len(FakeEngine.started) == 2)
@@ -93,6 +131,7 @@ def test_stop_kills_every_running_engine(tmp_path, monkeypatch):
     s = make(tmp_path, monkeypatch)
     s.speak("one", SpeechSettings(), interrupt=False)
     assert wait_until(lambda: len(FakeEngine.started) == 1)
+    assert FakeEngine.started[0].waiting.wait(5)
     s.stop()
     assert FakeEngine.started[0].killed
     assert wait_until(lambda: not s.busy())
