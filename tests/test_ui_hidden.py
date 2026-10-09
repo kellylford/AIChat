@@ -5088,3 +5088,261 @@ def test_other_machines_empty_message_sends_nothing(frame, env, fake_runner, mon
     frame.on_other_machines()
     assert fake_runner.instances == []
     assert env["feedback"][-1] == "Nothing sent: the message was empty."
+
+
+# -- status views and the session list's columns (#134) --------------------------------------
+
+
+def _session(frame, title):
+    return next(s for s in frame._snapshot.sessions if s.title == title)
+
+
+def test_show_sessions_by_status_keeps_you_on_the_same_session(frame, env):
+    from thechatplace.sessions import WORKING
+    _session(frame, "Quiet one").state = WORKING
+    _session(frame, "Hub probe").unread = True
+    for view in ("working", "new_reply", "idle"):
+        assert view in frame.view_items
+    select(frame, "Hub probe")
+    frame.on_view("idle")
+    assert _titles(frame) == ["Hub probe"]
+    assert frame.session_list.GetStringSelection().startswith("Hub probe")
+    assert env["feedback"][-1] == "Showing idle sessions: 1 session."
+    assert frame.session_list.GetName() == "Session list, idle sessions, 1 of 3"
+    frame.on_view("new_reply")
+    assert _titles(frame) == ["Hub probe"]
+    assert env["feedback"][-1] == "Showing sessions with a new reply: 1 session."
+    frame.on_view("working")
+    assert _titles(frame) == ["Quiet one"]
+    assert env["feedback"][-1] == "Showing working sessions: 1 session."
+    assert frame.view_items["working"].IsChecked()
+    assert speech.SpeechSettings.load().session_view == "working"
+    frame.on_view("all")
+    assert frame.session_list.GetCount() == 3
+
+
+def test_session_list_columns_reorder_the_rows_at_once_and_are_remembered(frame, env,
+                                                                         monkeypatch):
+    from thechatplace.ui import main_frame
+    select(frame, "Blocked one")
+    seen = {}
+
+    class Chooses:
+        def __init__(self, parent, fields, sample, say):
+            seen["fields"], seen["sample"] = list(fields), sample
+
+        def ShowModal(self):
+            return wx.ID_OK
+
+        def fields(self):
+            return ["status", "title"]
+
+        def Destroy(self):
+            pass
+    monkeypatch.setattr(main_frame, "SessionColumnsDialog", Chooses)
+    frame.on_session_columns()
+    assert seen["sample"].title == "Blocked one"  # the preview shows the selected session
+    assert seen["fields"][:3] == ["title", "folder", "status"]
+    assert frame.session_list.GetStringSelection() == "needs you: Pick a name, Blocked one"
+    assert sorted(frame.session_list.GetStrings()) == [
+        "idle, Hub probe", "idle, Quiet one", "needs you: Pick a name, Blocked one"]
+    assert env["feedback"][-1] == ("Session list columns saved. Each session reads: "
+                                   "Status, Title.")
+    assert speech.SpeechSettings.load().session_fields == ["status", "title"]
+    # A refresh keeps them.
+    frame.refresh_sessions(force=True, resort=True)
+    settle(frame)
+    assert frame.session_list.GetStringSelection() == "needs you: Pick a name, Blocked one"
+    frame.on_session_columns()  # the same again
+    assert env["feedback"][-1] == "Session list columns unchanged."
+
+
+def _choose_columns(monkeypatch, fields):
+    from thechatplace.ui import main_frame
+
+    class Chooses:
+        def __init__(self, *a):
+            pass
+
+        def ShowModal(self):
+            return wx.ID_OK
+
+        def fields(self):
+            return list(fields)
+
+        def Destroy(self):
+            pass
+    monkeypatch.setattr(main_frame, "SessionColumnsDialog", Chooses)
+
+
+def test_moving_only_last_activity_still_rewrites_the_row_you_are_on(frame, env,
+                                                                     monkeypatch):
+    # A row differing only in its age is normally left alone (a clock tick);
+    # a change of columns is not one.
+    from thechatplace.sessions import DEFAULT_FIELDS
+    select(frame, "Blocked one")
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    _choose_columns(monkeypatch, ["activity"] + [f for f in DEFAULT_FIELDS if f != "activity"])
+    frame.on_session_columns()
+    assert frame.session_list.GetStringSelection().startswith("active ")
+    _choose_columns(monkeypatch, [f for f in DEFAULT_FIELDS if f != "activity"])
+    frame.on_session_columns()
+    assert "active " not in frame.session_list.GetStringSelection()
+
+
+def test_columns_that_cannot_be_saved_say_so_and_still_apply(frame, env, monkeypatch):
+    select(frame, "Blocked one")
+    _choose_columns(monkeypatch, ["status", "title"])
+
+    def fails(*a, **k):
+        raise OSError("disk full")
+    monkeypatch.setattr(frame.speech, "save", fails)
+    frame.on_session_columns()
+    assert frame.session_list.GetStringSelection() == "needs you: Pick a name, Blocked one"
+    assert "couldn't be saved" in env["feedback"][-1] and "disk full" in env["feedback"][-1]
+    assert not any(said.startswith("Session list columns saved") for said in env["feedback"])
+
+
+def test_session_list_columns_cancel_changes_nothing(frame, env, monkeypatch):
+    from thechatplace.ui import main_frame
+    before = list(frame.session_list.GetStrings())
+
+    class Cancels:
+        def __init__(self, *a):
+            pass
+
+        def ShowModal(self):
+            return wx.ID_CANCEL
+
+        def fields(self):
+            raise AssertionError("not asked after Cancel")
+
+        def Destroy(self):
+            pass
+    monkeypatch.setattr(main_frame, "SessionColumnsDialog", Cancels)
+    frame.on_session_columns()
+    assert list(frame.session_list.GetStrings()) == before
+    assert frame.speech.session_fields[0] == "title"
+
+
+def _columns_dialog(frame, fields=None, sample=None):
+    from thechatplace.sessions import DEFAULT_FIELDS
+    from thechatplace.ui.dialogs import SessionColumnsDialog
+    said = []
+    dialog = SessionColumnsDialog(frame, fields or DEFAULT_FIELDS,
+                                  sample or _session(frame, "Blocked one"), said.append)
+    focused = []
+    for name in ("shown", "available"):
+        control = getattr(dialog, name)
+        control.SetFocus = lambda n=name: focused.append(n)
+    return dialog, said, focused
+
+
+def _key(dialog, monkeypatch, focus, code, alt=False):
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: focus))
+    event = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
+    event.SetKeyCode(code)
+    event.SetAltDown(alt)
+    dialog._on_char_hook(event)
+
+
+def test_columns_dialog_moves_says_where_and_stays_on_the_column(frame, monkeypatch):
+    dialog, said, focused = _columns_dialog(frame)
+    try:
+        assert dialog.shown.GetString(0) == "Title"
+        assert list(dialog.available.GetStrings()) == ["Every column is shown."]
+        assert dialog.preview.GetValue().startswith("Blocked one, Repo, needs you")
+        dialog.shown.SetSelection(2)  # Status
+        dialog.move_to_end(top=True)
+        assert said[-1] == "Status moved to top, 1 of 10."
+        assert dialog.fields()[:3] == ["status", "title", "folder"]
+        assert dialog.shown.GetSelection() == 0 and focused[-1] == "shown"
+        assert dialog.preview.GetValue().startswith("needs you: Pick a name, Blocked one")
+        dialog.move(-1)
+        assert said[-1] == "Status is already at the top."
+        dialog.move(1)
+        assert said[-1] == "Status moved down, 2 of 10." and dialog.shown.GetSelection() == 1
+        dialog.move_to_end(top=False)
+        assert said[-1] == "Status moved to bottom, 10 of 10."
+        assert dialog.fields()[-1] == "status" and dialog.shown.GetSelection() == 9
+        dialog.move(1)
+        assert said[-1] == "Status is already at the bottom."
+        # The keys do the same, in the Shown list only.
+        _key(dialog, monkeypatch, dialog.shown, wx.WXK_HOME, alt=True)
+        assert said[-1] == "Status moved to top, 1 of 10."
+        _key(dialog, monkeypatch, dialog.shown, wx.WXK_DOWN, alt=True)
+        assert said[-1] == "Status moved down, 2 of 10."
+        _key(dialog, monkeypatch, dialog.shown, wx.WXK_UP, alt=True)
+        _key(dialog, monkeypatch, dialog.shown, wx.WXK_END, alt=True)
+        assert dialog.fields()[-1] == "status"
+        count = len(said)
+        _key(dialog, monkeypatch, dialog.available, wx.WXK_UP, alt=True)
+        assert len(said) == count  # not in Available
+    finally:
+        dialog.Destroy()
+
+
+def test_columns_dialog_add_remove_and_reset(frame, monkeypatch):
+    dialog, said, focused = _columns_dialog(frame, ["title", "status"])
+    try:
+        assert dialog.available.GetString(0) == "Folder"
+        dialog.shown.SetSelection(0)
+        _key(dialog, monkeypatch, dialog.shown, wx.WXK_DELETE)
+        assert said[-1] == "Title removed. 1 column shown."
+        assert dialog.fields() == ["status"] and focused[-1] == "shown"
+        _key(dialog, monkeypatch, dialog.shown, wx.WXK_BACK)  # a Mac's Delete key
+        assert said[-1] == "At least one column has to be shown."  # the last one stays
+        assert dialog.fields() == ["status"]
+        assert dialog.available.GetString(0) == "Title"  # back in catalog order
+        dialog.available.SetSelection(0)
+        _key(dialog, monkeypatch, dialog.available, wx.WXK_RETURN)  # Enter adds
+        assert said[-1] == "Title added, 2 of 2."
+        assert dialog.fields() == ["status", "title"]
+        assert focused[-1] == "available"  # stays, to add more
+        assert dialog.shown.GetSelection() == 1  # on what it added
+        assert dialog.available.GetString(0) == "Folder"
+        dialog.reset()
+        assert said[-1] == "Columns reset to the default: all 10 shown, title first."
+        assert dialog.fields()[0] == "title" and len(dialog.fields()) == 10
+        dialog.add()
+        assert said[-1] == "Every column is shown already."
+        # Adding the last one left moves you to Shown, on it.
+        dialog.shown.SetSelection(9)
+        dialog.remove()
+        focused.clear()
+        dialog.add()
+        assert focused[-1] == "shown" and dialog.shown.GetSelection() == 9
+    finally:
+        dialog.Destroy()
+
+
+def test_columns_dialog_drops_unknown_columns_and_names_its_controls(frame):
+    dialog, said, focused = _columns_dialog(frame, ["from_the_future", "status"])
+    try:
+        assert dialog.fields() == ["status"]
+        assert dialog.shown.GetName() == "Shown columns, in the order they're read"
+        assert dialog.available.GetName() == "Available columns"
+        assert dialog.preview.GetName() == "Preview of the selected session's line"
+        assert dialog.GetEscapeId() == wx.ID_CANCEL
+    finally:
+        dialog.Destroy()
+
+
+def test_columns_preview_has_a_sample_when_nothing_is_selected(frame, env, monkeypatch):
+    from thechatplace.ui import main_frame
+    monkeypatch.setattr(frame, "_selected_session", lambda: None)
+    seen = {}
+
+    class Looks:
+        def __init__(self, parent, fields, sample, say):
+            seen["line"] = sample.list_line(fields=fields)
+
+        def ShowModal(self):
+            return wx.ID_CANCEL
+
+        def Destroy(self):
+            pass
+    monkeypatch.setattr(main_frame, "SessionColumnsDialog", Looks)
+    frame.on_session_columns()
+    assert seen["line"].startswith("Example session, Example, needs you: Choose a version "
+                                   "number, new reply, active 2 minutes ago")

@@ -65,9 +65,9 @@ from ..own_store import OwnSession, OwnSessionStore
 from ..groups import GroupStore
 from ..hidden import HiddenStore
 from ..titles import MAX_TITLE, TitleStore, clean_title
-from ..sessions import (GROUP_VIEW_PREFIX, IDLE, NEEDS_YOU, SORT_ORDERS, SORT_SPOKEN,
-                        VIEW_ALL, VIEW_NEEDS_YOU, VIEWS, WORKING,
-                        SessionInfo, group_view, in_view, view_spoken)
+from ..sessions import (GROUP_VIEW_PREFIX, IDLE, NEEDS_YOU, OWN, SORT_ORDERS,
+                        SORT_SPOKEN, VIEW_ALL, VIEW_NEEDS_YOU, VIEWS, WORKING,
+                        SessionInfo, field_short_name, group_view, in_view, view_spoken)
 from ..speech import ANNOUNCE_FULL, NOTIFY_ALL, NOTIFY_OFF, SpeechSettings, default_options, list_speech_options, speaker
 from ..transcript import (ASSISTANT, ERROR, PEER, PLAN, QUESTION, QUEUED, TOOL, TOOL_RESULT,
                           ChatMessage, TranscriptReader)
@@ -80,7 +80,8 @@ from ..rendering import html_page, message_page
 from ..ui_text import markdown_as_text, shortcuts_html
 from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, AboutYouDialog, ChangesDialog, CodeBlocksDialog, FormattedMessageDialog,
                       BugReportDialog, CommandPickerDialog, MessageDialog, NewSessionDialog, PermissionDialog, PlanDialog,
-                      ManageGroupsDialog, QuestionDialog, SettingsDialog, ShortcutsDialog, UsageDialog,
+                      ManageGroupsDialog, QuestionDialog, SessionColumnsDialog, SettingsDialog,
+                      ShortcutsDialog, UsageDialog,
                       formatted_view_available)
 
 APP_NAME = "The Chat Place"
@@ -302,6 +303,8 @@ class MainFrame(wx.Frame):
         self.view_items = {}
         view.AppendSubMenu(self.show_menu, "S&how Sessions")
         self._build_show_menu()
+        # What each row says, and in what order (#134).
+        self._item(view, "S&ession List Columns...", lambda e: self.on_session_columns())
         view.AppendSeparator()
         self._item(view, "Read &Full Message", lambda e: self.on_read_message())
         self._item(view, "F&ind...\tCtrl+F", lambda e: self.on_find())
@@ -760,13 +763,18 @@ class MainFrame(wx.Frame):
                 self._status(text)
         self._run_pending_refresh()
 
-    def _update_session_list(self, sessions: List[SessionInfo], keep_order: bool = False):
+    def _update_session_list(self, sessions: List[SessionInfo], keep_order: bool = False,
+                             rewrite: bool = False):
         """Rewrite only what changed, keeping the selection on the same session.
 
         With ``keep_order`` the rows stay where they are (new sessions are
         added at the end, vanished ones removed), so a refresh never moves the
         row under the reader. The proper order comes back on F5, on returning
         from a session, or on a refresh while the list doesn't have focus.
+
+        ``rewrite`` rewrites the selected row even when only its age differs:
+        the columns changed (#134), so moving or removing Last activity isn't
+        a clock tick.
         """
         now = int(time.time() * 1000)
         by_key = {s.key: s for s in sessions}
@@ -779,13 +787,14 @@ class MainFrame(wx.Frame):
             keys += [s.key for s in sessions if s.key not in set(self._list_keys)]
         else:
             keys = [s.key for s in sessions]
-        lines = [by_key[k].list_line(now) for k in keys]
+        lines = [by_key[k].list_line(now, self.speech.session_fields) for k in keys]
 
         if keys == self._list_keys:
             for i, line in enumerate(lines):
                 if self.session_list.GetString(i) == line:
                     continue
-                if i == index and _same_but_age(self.session_list.GetString(i), line):
+                if i == index and not rewrite and _same_but_age(
+                        self.session_list.GetString(i), line):
                     continue  # don't make the reader re-read for a clock tick
                 self.session_list.SetString(i, line)
             return
@@ -797,9 +806,9 @@ class MainFrame(wx.Frame):
                     self.session_list.Delete(i)
             kept = [k for k in self._list_keys if k in by_key]
             for i, key in enumerate(kept):
-                line = by_key[key].list_line(now)
+                line = by_key[key].list_line(now, self.speech.session_fields)
                 if self.session_list.GetString(i) != line and not (
-                        key == selected_key
+                        key == selected_key and not rewrite
                         and _same_but_age(self.session_list.GetString(i), line)):
                     self.session_list.SetString(i, line)
             if len(keys) > len(kept):
@@ -3109,8 +3118,9 @@ class MainFrame(wx.Frame):
 
     @staticmethod
     def _filter_text(info: SessionInfo) -> str:
-        """What Ctrl+F in the list searches: the words its row says, with
-        "Cowork" for a Cowork session whose folder has another name (#91)."""
+        """What Ctrl+F in the list searches: its title, folder and what it
+        needs, whichever columns its row shows (#134), with "Cowork" for a
+        Cowork session whose folder has another name (#91)."""
         kind = " Cowork" if info.cowork else ""
         return f"{info.title} {info.repo} {info.detail}{kind}".casefold()
 
@@ -3362,12 +3372,13 @@ class MainFrame(wx.Frame):
         self._build_show_menu()
         self._refresh_list_in_place()
 
-    def _refresh_list_in_place(self):
+    def _refresh_list_in_place(self, rewrite: bool = False):
         """The rows and the view again, from the sessions already read: their
-        groups changed, not the sessions."""
+        groups (or the columns, ``rewrite``) changed, not the sessions."""
         shown = self._in_current_view(list(self._snapshot.sessions))
         self._update_session_list(shown,
-                                  keep_order=wx.Window.FindFocus() is self.session_list)
+                                  keep_order=wx.Window.FindFocus() is self.session_list,
+                                  rewrite=rewrite)
         self._update_list_label(len(shown))
 
     def on_sort(self, order: str):
@@ -3384,6 +3395,32 @@ class MainFrame(wx.Frame):
             self._status(f"Couldn't save the sort order: {exc}")
         self.refresh_sessions(resort=True)
         self._feedback(f"Sessions sorted {SORT_SPOKEN[order]}.")
+
+    def on_session_columns(self):
+        """View, Session List Columns (#134): choose which parts each session
+        row reads and in what order; OK saves the choice and rewrites the rows
+        at once, on the same session."""
+        sample = self._selected_session() or _sample_session()
+        dialog = SessionColumnsDialog(self, self.speech.session_fields, sample, self._feedback)
+        try:
+            if dialog.ShowModal() != wx.ID_OK:
+                return
+            fields = dialog.fields()
+        finally:
+            dialog.Destroy()
+        if fields == self.speech.session_fields:
+            self._feedback("Session list columns unchanged.")
+            return
+        self.speech.session_fields = fields
+        self._refresh_list_in_place(rewrite=True)
+        names = ", ".join(field_short_name(f) for f in fields)
+        try:
+            self.speech.save()
+        except OSError as exc:
+            self._feedback(f"Session list columns changed to {names}, but couldn't be "
+                           f"saved, so they last until you close The Chat Place: {exc}")
+            return
+        self._feedback(f"Session list columns saved. Each session reads: {names}.")
 
     def on_settings(self, _event=None):
         options = self._speech_options or default_options()
@@ -4035,6 +4072,16 @@ def _delete_transcript(path, tries: int = 5) -> None:
             if attempt == tries - 1:
                 raise
             time.sleep(0.1)
+
+
+def _sample_session() -> SessionInfo:
+    """A made-up session for the Session List Columns preview when none is
+    selected, with something to say in every column."""
+    return SessionInfo(source=OWN, key="own:sample", title="Example session",
+                       cwd="Projects/Example", cli_session_id="", state=NEEDS_YOU,
+                       detail="Choose a version number", unread=True,
+                       last_activity_ms=int(time.time() * 1000) - 120_000, remote=True,
+                       groups=("Work",))
 
 
 def _same_but_age(old: str, new: str) -> bool:

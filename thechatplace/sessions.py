@@ -103,30 +103,96 @@ class SessionInfo:
         root = self.claude_home / "projects" if self.claude_home is not None else None
         return platform_paths.transcript_path(self.cwd, self.cli_session_id, root)
 
-    def list_line(self, now_ms: Optional[int] = None) -> str:
-        """What a screen reader hears on arrowing to this session."""
-        parts = [self.title or "Untitled session", self.repo]
+    def list_line(self, now_ms: Optional[int] = None,
+                  fields: Optional[Iterable[str]] = None) -> str:
+        """What a screen reader hears on arrowing to this session: its
+        columns (#134) in the order chosen in View, Session List Columns
+        (``fields``, ids from ``FIELDS``), each said only when it has
+        something to say. A row never comes out empty: with nothing to say
+        in any shown column, it reads the title."""
+        values = self.field_values(now_ms)
+        order = DEFAULT_FIELDS if fields is None else fields
+        parts = [values[f] for f in order if values.get(f)]
+        return ", ".join(parts) or values[FIELD_TITLE]
+
+    def field_values(self, now_ms: Optional[int] = None) -> Dict[str, str]:
+        """Each column's text for this session ("" when it says nothing)."""
         state = self.state
         if self.detail:
             state = f"{state}: {self.detail}"
-        parts.append(state)
-        if self.unread:
-            parts.append("new reply")
-        parts.append(describe_age(self.last_activity_ms, now_ms))
+        kind = []
         if self.is_own:
-            parts.append("Chat Place session")
+            kind.append("Chat Place session")
         if self.cowork:
-            parts.append("Cowork session")
-        if self.remote:
-            parts.append("Remote Control")  # #96: say which can be reached from claude.ai
-        if self.archived:
-            parts.append("archived")
-        if self.hidden:
-            parts.append("hidden")
+            kind.append("Cowork session")
+        groups = ""
         if self.groups:
-            parts.append(("group " if len(self.groups) == 1 else "groups ")
-                         + ", ".join(self.groups))
-        return ", ".join(parts)
+            groups = (("group " if len(self.groups) == 1 else "groups ")
+                      + ", ".join(self.groups))
+        return {
+            FIELD_TITLE: self.title or "Untitled session",
+            FIELD_FOLDER: self.repo,
+            FIELD_STATUS: state,
+            FIELD_NEW_REPLY: "new reply" if self.unread else "",
+            FIELD_ACTIVITY: describe_age(self.last_activity_ms, now_ms),
+            FIELD_KIND: ", ".join(kind),
+            # #96: say which can be reached from claude.ai
+            FIELD_REMOTE: "Remote Control" if self.remote else "",
+            FIELD_ARCHIVED: "archived" if self.archived else "",
+            FIELD_HIDDEN: "hidden" if self.hidden else "",
+            FIELD_GROUPS: groups,
+        }
+
+
+#: The session list's columns (#134): what each row can say, as (id, name).
+#: Each row is one string a screen reader reads whole, so a "column" is a part
+#: of that string, and View, Session List Columns chooses which parts and in
+#: what order. The ids are saved in settings.json; never rename one.
+FIELD_TITLE = "title"
+FIELD_FOLDER = "folder"
+FIELD_STATUS = "status"
+FIELD_NEW_REPLY = "new_reply"
+FIELD_ACTIVITY = "activity"
+FIELD_KIND = "kind"
+FIELD_REMOTE = "remote"
+FIELD_ARCHIVED = "archived"
+FIELD_HIDDEN = "hidden"
+FIELD_GROUPS = "groups"
+FIELDS = [
+    (FIELD_TITLE, "Title"),
+    (FIELD_FOLDER, "Folder"),
+    (FIELD_STATUS, "Status (needs you, working or idle)"),
+    (FIELD_NEW_REPLY, "New reply"),
+    (FIELD_ACTIVITY, "Last activity"),
+    (FIELD_KIND, "Kind (Chat Place or Cowork)"),
+    (FIELD_REMOTE, "Remote Control"),
+    (FIELD_ARCHIVED, "Archived"),
+    (FIELD_HIDDEN, "Hidden"),
+    (FIELD_GROUPS, "Groups"),
+]
+FIELD_IDS = [field_id for field_id, _name in FIELDS]
+FIELD_NAMES = dict(FIELDS)
+#: Every column, in the order rows have always been read.
+DEFAULT_FIELDS = list(FIELD_IDS)
+
+
+def field_short_name(field_id: str) -> str:
+    """A column's name without its explanation, for "Status moved to top"."""
+    return FIELD_NAMES.get(field_id, field_id).split(" (")[0]
+
+
+def clean_fields(raw) -> List[str]:
+    """A saved column order made safe: known ids only (a newer version's
+    columns are dropped, not kept as blanks), each once, in the saved order.
+    Anything unusable, or a list with no known column left, is the default."""
+    if not isinstance(raw, list):
+        return list(DEFAULT_FIELDS)
+    known = set(FIELD_IDS)
+    fields: List[str] = []
+    for value in raw:
+        if isinstance(value, str) and value in known and value not in fields:
+            fields.append(value)
+    return fields or list(DEFAULT_FIELDS)
 
 
 def describe_age(then_ms: int, now_ms: Optional[int] = None) -> str:
@@ -178,6 +244,10 @@ SORT_SPOKEN = {SORT_STATUS: "by status", SORT_NEWEST: "newest first",
 VIEW_ALL = "all"
 VIEW_ACTIVE = "active"
 VIEW_NEEDS_YOU = "needs"
+#: By status (#134), as well as Needs You above.
+VIEW_WORKING = "working"
+VIEW_NEW_REPLY = "new_reply"
+VIEW_IDLE = "idle"
 VIEW_DESKTOP = "desktop"
 VIEW_COWORK = "cowork"
 VIEW_OWN = "own"
@@ -190,6 +260,9 @@ VIEWS = [
     (VIEW_ALL, "&All Sessions"),
     (VIEW_ACTIVE, "Needs You or &Working"),
     (VIEW_NEEDS_YOU, "&Needs You"),
+    (VIEW_WORKING, "Wor&king"),
+    (VIEW_NEW_REPLY, "With a New Re&ply"),
+    (VIEW_IDLE, "&Idle"),
     (VIEW_DESKTOP, "&Desktop App Sessions"),
     (VIEW_COWORK, "C&owork Sessions"),
     (VIEW_OWN, "&Chat Place Sessions"),
@@ -200,7 +273,9 @@ VIEWS = [
 ]
 #: Said and shown in the list's name: "showing needs you or working".
 VIEW_SPOKEN = {VIEW_ALL: "all sessions", VIEW_ACTIVE: "needs you or working",
-               VIEW_NEEDS_YOU: "needs you", VIEW_DESKTOP: "desktop app sessions",
+               VIEW_NEEDS_YOU: "needs you", VIEW_WORKING: "working sessions",
+               VIEW_NEW_REPLY: "sessions with a new reply", VIEW_IDLE: "idle sessions",
+               VIEW_DESKTOP: "desktop app sessions",
                VIEW_COWORK: "Cowork sessions",
                VIEW_OWN: "Chat Place sessions", VIEW_REMOTE: "Remote Control sessions",
                VIEW_UNGROUPED: "ungrouped sessions",
@@ -235,6 +310,12 @@ def in_view(info: SessionInfo, view: str) -> bool:
         return info.state in (NEEDS_YOU, WORKING)
     if view == VIEW_NEEDS_YOU:
         return info.state == NEEDS_YOU
+    if view == VIEW_WORKING:
+        return info.state == WORKING
+    if view == VIEW_NEW_REPLY:
+        return info.unread
+    if view == VIEW_IDLE:
+        return info.state not in (NEEDS_YOU, WORKING)
     if view == VIEW_DESKTOP:
         return not info.is_own
     if view == VIEW_COWORK:

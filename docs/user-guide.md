@@ -85,7 +85,8 @@ This guide gives the Windows keys. On a Mac:
 
 Each line in the session list reads the session's title, its folder, its state (needs you,
 working or idle) and when it was last active, for example: "Fix the release build, QuickMail,
-needs you: Choose a version number, active 1 minute ago".
+needs you: Choose a version number, active 1 minute ago". To hear the state first, or to leave
+some parts out, see "Choosing what each line says" below.
 
 By default, sessions that need you come first, then the ones that are working, then the rest,
 newest first. The list refreshes itself every few seconds. While you're in it, rows stay where
@@ -249,11 +250,42 @@ With many sessions, these keep the list manageable.
 ### Choosing which sessions are listed
 
 **View, Show Sessions** (Alt+V, H) chooses what the list shows: all sessions; the ones that need
-you or are working; just the ones that need you; desktop app sessions (Code and Cowork); just
+you or are working; just the ones that need you; just the working ones; the ones with a new reply
+you haven't read yet; the idle ones; desktop app sessions (Code and Cowork); just
 Cowork sessions; The Chat Place's own; Remote Control sessions; ungrouped sessions; archived
 ones; hidden ones; or one of your groups.
 **View, Sort Sessions** (Alt+V, O) chooses the order: by status, newest first, oldest first, by
-title, or by folder. Both choices are remembered.
+title, or by folder. Both choices are remembered, and you stay on the same session when it's
+still listed.
+
+### Choosing what each line says
+
+**View, Session List Columns** (Alt+V, E) chooses which parts each session's line reads, and in
+what order. Move Status to the top, for example, and each line starts with "needs you", "working"
+or "idle", so you can stop on the one you want before hearing its title.
+
+The parts are called columns: Title, Folder, Status, New reply, Last activity, Kind (Chat Place
+or Cowork session), Remote Control, Archived, Hidden and Groups. A column with nothing to say for
+a session, such as New reply when there isn't one, is simply left out of that line.
+
+The dialog has two lists. **Available columns** (Alt+V in the dialog) are the ones not read;
+**Shown columns** (Alt+S) are the ones read, in order. The buttons Add, Remove, Move Up, Move
+Down, Move to Top, Move to Bottom and Reset to Default do what they say, and each tells you what
+happened ("Status moved to top, 1 of 10"). The keys work too:
+
+- **Enter** in Available columns adds the column to the end of the line.
+- **Delete** in Shown columns removes one (on a Mac, Delete or Fn+Delete). At least one column
+  is always shown.
+- **Alt+Up** and **Alt+Down** in Shown columns move the column up or down; **Alt+Home** and
+  **Alt+End** move it to the top or bottom. On a Mac these use Option.
+
+You stay on the column you moved. The preview at the bottom reads the selected session's line as
+it will be. **OK** saves your choice and changes the list at once, still on the same session;
+**Escape** or Cancel leaves it as it was.
+
+With Status first, every line starts with "needs you", "working" or "idle", so typing a letter
+in the list no longer jumps to a title starting with it. **Ctrl+F** still finds a session by its
+title or folder, whichever columns you show.
 
 ### Groups
 
