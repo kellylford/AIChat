@@ -35,13 +35,14 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import ssl
 import sys
 import threading
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, Tuple
 
 from . import platform_paths
 
@@ -68,6 +69,60 @@ FAILED = "failed"
 def feed_url(version: str) -> str:
     """Where one release's feed and packages are downloaded from."""
     return f"{REPO_URL}/releases/download/{TAG_PREFIX}{version}/"
+
+
+def release_notes_url(version: str) -> str:
+    """The GitHub page of one release, with its notes (What's New, #141)."""
+    return f"{REPO_URL}/releases/tag/{TAG_PREFIX}{version}"
+
+
+def parse_version(text: str) -> Optional[Tuple[int, ...]]:
+    """``"0.1.4"`` (or ``"v0.1.4"``) as numbers to compare, or None for
+    anything else: a pre-release suffix, a blank, text a hand edit left in
+    the settings. Unlike ``_version_key`` it never guesses, because the
+    update-installed notice must fail closed (#141)."""
+    text = str(text or "").strip()
+    if text[:1] in ("v", "V"):
+        text = text[1:]
+    if not re.fullmatch(r"\d+(?:\.\d+){0,3}", text):
+        return None
+    parts = tuple(int(piece) for piece in text.split("."))
+    return parts + (0,) * (4 - len(parts))
+
+
+@dataclass(frozen=True)
+class InstalledNotice:
+    """What to do at start about "The Chat Place Update Installed" (#141).
+
+    ``record``: save the running version as the last one run.
+    ``show``: show the dialog saying the app was updated to it."""
+    record: bool
+    show: bool
+
+
+def installed_notice(previous: str, current: str, installed: bool,
+                     enabled: bool = True) -> InstalledNotice:
+    """Whether this start is the first since an update was installed, as
+    QuickMail's MaybeShowUpdateInstalledNotice decides it.
+
+    ``previous`` is the version recorded at the last start ("" if none),
+    ``installed`` whether this copy is one Velopack installed and updates,
+    ``enabled`` the setting that turns the notice off.
+
+    * Only an installed copy records or tells anything: a source run or the
+      portable zip changing version is someone swapping copies, not an
+      update, and recording it would announce updates that never happened
+      when an installed copy next starts.
+    * Nothing on a first run (no record): nothing was updated as far as the
+      user knows. Nothing on a downgrade, or when either version can't be
+      read: the notice fails closed.
+    * The version is recorded even when the setting is off, so turning it
+      back on doesn't announce an old update."""
+    if not installed or str(previous or "").strip() == current:
+        return InstalledNotice(record=False, show=False)
+    old, new = parse_version(previous), parse_version(current)
+    newer = old is not None and new is not None and new > old
+    return InstalledNotice(record=True, show=bool(newer and enabled))
 
 
 def configure_logging() -> None:

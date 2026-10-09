@@ -168,3 +168,24 @@ def shortcuts_text() -> str:
             lines.append(f"  {key}: {action}")
         lines.append("")
     return "\n".join(lines).rstrip()
+
+
+# -- Help's update item (#141) ----------------------------------------------------------
+
+
+def update_item_label(running: str, available: str = "") -> str:
+    """The Help menu's update item, as QuickMail's: it always answers "what
+    am I running?", and says when a check found a newer version. U is its
+    access key either way, so Alt+H, U keeps working."""
+    if available:
+        return f"&Update to {available} Available..."
+    return f"Check for &Updates (running {running})..."
+
+
+def update_item_spoken(running: str, available: str = "") -> str:
+    """The same item as it's named in something said ("Help, Update to
+    0.1.5 Available installs it"): no access key, no dots, no version
+    when there's no update, which would only be noise."""
+    if available:
+        return f"Update to {available} Available"
+    return "Check for Updates"

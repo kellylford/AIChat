@@ -73,22 +73,29 @@ from ..sessions import (GROUP_VIEW_PREFIX, IDLE, NEEDS_YOU, OWN, SORT_ORDERS,
 from ..speech import ANNOUNCE_FULL, NOTIFY_ALL, NOTIFY_OFF, SpeechSettings, default_options, list_speech_options, speaker
 from ..transcript import (ASSISTANT, ERROR, PEER, PLAN, QUESTION, QUEUED, TOOL, TOOL_RESULT,
                           ChatMessage, TranscriptReader)
-from ..updater import AVAILABLE, FAILED, CheckResult, UpdateService
+from ..updater import (AVAILABLE, FAILED, CheckResult, UpdateService, installed_notice,
+                       release_notes_url)
 from . import mac_a11y
 from .a11y import set_accessible_name, set_list_items_accessible, set_voiceover_menu
 from .notify import Notifier
 from .statusbar import StatusParts
 from ..rendering import html_page, message_page
-from ..ui_text import markdown_as_text, shortcuts_html
+from ..ui_text import markdown_as_text, shortcuts_html, update_item_label, update_item_spoken
 from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, AboutYouDialog, ChangesDialog, CodeBlocksDialog, FormattedMessageDialog,
                       BugReportDialog, CommandPickerDialog, MessageDialog, NewSessionDialog, PermissionDialog, PlanDialog,
                       ManageGroupsDialog, PromptsDialog, QuestionDialog, SessionColumnsDialog,
-                      SettingsDialog, ShortcutsDialog, UsageDialog,
+                      SettingsDialog, ShortcutsDialog, UpdateInstalledDialog, UsageDialog,
                       formatted_view_available, press_focused_button_on_a_mac)
 
 APP_NAME = "The Chat Place"
 LIST_REFRESH_MS = 5000
 UPDATE_CHECK_DELAY_MS = 4000
+#: The update-installed notice (#141) waits this long after the window is
+#: made, then until the window is active with no dialog in front of it,
+#: trying every UPDATE_NOTICE_RETRY_MS for up to UPDATE_NOTICE_TRIES times.
+UPDATE_NOTICE_DELAY_MS = 1500
+UPDATE_NOTICE_RETRY_MS = 1000
+UPDATE_NOTICE_TRIES = 1800
 APPLY_SPEECH_WAIT_S = 4.0
 CHAT_REFRESH_MS = 2000
 #: Tool calls and in-between text are gathered this long, then said together (#12).
@@ -138,6 +145,10 @@ class MainFrame(wx.Frame):
         self.titles = TitleStore()  # names given to desktop app sessions (#93)
         self.updates = updates or UpdateService(__version__)
         self._update_busy = False
+        # The newer version the last check found, "" if none (#141): Help's
+        # update item says it.
+        self._update_available = ""
+        self._menu_open = False  # a menu is open: no dialog over it (#141)
         self.speech = SpeechSettings.load()
         self._speech_options = None
         threading.Thread(target=self._probe_speech, daemon=True).start()
@@ -212,6 +223,8 @@ class MainFrame(wx.Frame):
         self.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
         self.Bind(wx.EVT_CLOSE, self._on_close)
         self.Bind(wx.EVT_ACTIVATE, self._on_activate)
+        self.Bind(wx.EVT_MENU_OPEN, lambda e: self._on_menu_open_close(e, True))
+        self.Bind(wx.EVT_MENU_CLOSE, lambda e: self._on_menu_open_close(e, False))
 
         self._list_timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, lambda e: self.refresh_sessions(), self._list_timer)
@@ -245,6 +258,10 @@ class MainFrame(wx.Frame):
             # A few seconds in, so the list is read first.
             self._startup_update_check = wx.CallLater(UPDATE_CHECK_DELAY_MS,
                                                       self.check_for_updates, False)
+            # The first start after an update says so (#141), once the
+            # window is up.
+            self._startup_update_notice = wx.CallLater(UPDATE_NOTICE_DELAY_MS,
+                                                       self.check_update_installed)
 
     # ------------------------------------------------------------------ menus
 
@@ -341,7 +358,9 @@ class MainFrame(wx.Frame):
         help_menu = wx.Menu()
         self._item(help_menu, "User &Guide", self.on_user_guide)
         self._item(help_menu, "&Keyboard Shortcuts\tF1", self.on_shortcuts)
-        self._item(help_menu, "Check for &Updates...", lambda e: self.check_for_updates(True))
+        # Its label says the version running, or the update a check found (#141).
+        self.update_item = self._item(help_menu, update_item_label(__version__),
+                                      lambda e: self.check_for_updates(True))
         self._item(help_menu, "Claude Code &Sign-in...", lambda e: self.on_sign_in())
         self._item(help_menu, "Report a &Bug...", lambda e: self.on_report_bug())
         self._item(help_menu, "&About", self.on_about, wx.ID_ABOUT)
@@ -3487,20 +3506,26 @@ class MainFrame(wx.Frame):
             return
         text = result.describe()
         if result.status != AVAILABLE:
-            self.status_parts.set("update", "")
+            # A failed check says nothing about whether the update found
+            # before is still there, so Help and the status bar keep it.
+            if result.status != FAILED:
+                self.status_parts.set("update", "")
+                self._set_update_available("")
             if manual:
                 self._say(text, force=True)
             elif result.status == FAILED:
                 self._status(text)
             return
         self.status_parts.set("update", f"Update available: {result.version}")
+        self._set_update_available(result.version)
+        item = self._update_item_spoken()
         if not manual:
-            self._say(f"{text} Help, Check for Updates installs it, or the Update "
+            self._say(f"{text} Help, {item} installs it, or the Update "
                       "button on the status bar.")
             return
         if self._runners:
             self._say(f"{text} It can be installed once Claude finishes; use Help, "
-                      "Check for Updates then.", force=True)
+                      f"{item} then.", force=True)
             return
         # The dialog says it all; the screen reader reads it, so nothing is
         # spoken first. No is the default, so a stray Enter installs nothing.
@@ -3512,7 +3537,7 @@ class MainFrame(wx.Frame):
         answer = wx.MessageBox(question, "Update The Chat Place",
                                wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION, self)
         if answer != wx.YES:
-            self._feedback("Not now. Help, Check for Updates installs it later.")
+            self._feedback(f"Not now. Help, {item} installs it later.")
             return
         self._update_busy = True
         self._feedback(f"Downloading The Chat Place {result.version}.")
@@ -3522,6 +3547,99 @@ class MainFrame(wx.Frame):
             wx.CallAfter(self._on_update_downloaded, result, ok)
 
         self._pool.submit(work)
+
+    def _on_menu_open_close(self, event, is_open: bool):
+        event.Skip()
+        self._menu_open = is_open
+
+    def _set_update_available(self, version: str):
+        """Help's update item names the version running, or the newer one
+        a check found (#141). The label changes only while the menu is
+        closed, so a screen reader reads the new one the next time Help
+        opens; nothing is said about the change itself."""
+        self._update_available = version
+        label = update_item_label(__version__, version)
+        if self.update_item.GetItemLabel() != label:
+            self.update_item.SetItemLabel(label)
+
+    def _update_item_spoken(self) -> str:
+        return update_item_spoken(__version__, self._update_available)
+
+    # The first start after an update (#141).
+
+    def check_update_installed(self):
+        """Decide, once at start, whether to show "The Chat Place Update
+        Installed". Whether this copy is an installed one is asked off the
+        UI thread (it makes a Velopack manager); the decision and the
+        record are made on it, where the settings live."""
+        if not self or self._closing:
+            return
+
+        def work():
+            try:
+                installed = bool(self.updates.can_update)
+            except Exception:  # noqa: BLE001 - can't tell: not an installed copy
+                installed = False
+            wx.CallAfter(self._on_update_installed_known, installed)
+        try:
+            self._pool.submit(work)
+        except RuntimeError:
+            pass  # closing
+
+    def _on_update_installed_known(self, installed: bool):
+        if not self or self._closing:
+            return
+        decision = installed_notice(self.speech.last_run_version, __version__, installed,
+                                    self.speech.update_installed_notice)
+        if decision.record and not self.speech.unreadable:
+            # Never over a settings file that couldn't be read: that would
+            # replace every setting with the defaults. Recorded before anything is shown, so it's shown once even if
+            # The Chat Place is closed before the dialog appears.
+            self.speech.last_run_version = __version__
+            try:
+                self.speech.save()
+            except OSError:
+                pass  # not shown again this run; tried again next start
+        if decision.show:
+            self._show_update_installed_when_free(__version__, UPDATE_NOTICE_TRIES)
+
+    def _show_update_installed_when_free(self, version: str, tries: int,
+                                         free_before: bool = False):
+        """Only over the main window, active, with nothing else in front of
+        it: never stacked on a startup warning, a sign-in question or a
+        dialog you've opened, never over an open menu, and never popping up
+        while you're in another app. It must have been free at the last try
+        too, so it doesn't arrive the moment you switch back and start
+        typing. If that moment doesn't come, the status bar says it instead.
+
+        IsActive, not wx.GetActiveWindow: on a Mac the latter is always
+        None. A native message box (the startup warnings) makes the frame
+        inactive on Windows, and a wx dialog disables it."""
+        if not self or self._closing:
+            return
+        free = (self.IsShown() and not self.IsIconized() and self.IsActive()
+                and self.IsEnabled() and not self._menu_open and not self._modal_open())
+        if free and free_before:
+            self.show_update_installed(version)
+            return
+        if tries <= 1:
+            self._status(f"The Chat Place was updated to {version}.")
+            return
+        self._update_notice_wait = wx.CallLater(UPDATE_NOTICE_RETRY_MS,
+                                                self._show_update_installed_when_free,
+                                                version, tries - 1, free)
+
+    def show_update_installed(self, version: str):
+        def open_notes():
+            url = release_notes_url(version)
+            try:
+                platform_paths.open_url(url)
+            except OSError as exc:
+                wx.MessageBox(f"Couldn't open the release notes: {exc}\n\nThey're at {url}",
+                              APP_NAME, wx.OK | wx.ICON_WARNING, self)
+                return
+            self._feedback(f"Opening what's new in The Chat Place {version}.")
+        self._modal(UpdateInstalledDialog(self, version, open_notes))
 
     def _unsent_text(self) -> bool:
         self._save_draft()
@@ -3541,8 +3659,8 @@ class MainFrame(wx.Frame):
         if not self:
             return
         if not ok:
-            self._say(f"Couldn't download The Chat Place {result.version}. Try Help, Check for "
-                      "Updates again later.", force=True)
+            self._say(f"Couldn't download The Chat Place {result.version}. Try Help, "
+                      f"{self._update_item_spoken()} again later.", force=True)
             return
         later = self._install_later_text(result)
         # The download took a while; things may have changed since the yes.
@@ -4155,6 +4273,10 @@ class MainFrame(wx.Frame):
         startup_check = getattr(self, "_startup_update_check", None)
         if startup_check is not None:
             startup_check.Stop()
+        for name in ("_startup_update_notice", "_update_notice_wait"):
+            timer = getattr(self, name, None)
+            if timer is not None:
+                timer.Stop()
         speaker.stop()
         self._notifier.close()  # its icon would keep the app running
         self._pool.shutdown(wait=False, cancel_futures=True)
