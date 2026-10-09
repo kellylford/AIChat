@@ -473,6 +473,7 @@ class FormattedMessageDialog(wx.Dialog):
         _prepare_webview_data_folder()
         self._open_url = platform_paths.open_url
         self._loaded = False
+        self.app_link = None  # a thechatplace:// link chosen in the page (#144)
         try:
             self.view = wx.html2.WebView.New(self, backend=wx.html2.WebViewBackendEdge)
         except Exception as exc:  # noqa: BLE001
@@ -518,13 +519,20 @@ class FormattedMessageDialog(wx.Dialog):
             return  # the page itself
         # A link: never in here. http, https and mailto go to the browser.
         event.Veto()
-        url = event.GetURL()
-        if url.lower().startswith(("http:", "https:", "mailto:")):
-            self._open_url(url)
+        self._follow(event.GetURL())
 
     def _on_new_window(self, event):
-        url = event.GetURL()
-        if url.lower().startswith(("http:", "https:", "mailto:")):
+        self._follow(event.GetURL())
+
+    def _follow(self, url: str):
+        """A link to a session (#144) closes the page and is opened by the
+        window itself (``app_link``), never handed to the shell, which would
+        only start The Chat Place again."""
+        from ..links import is_app_link
+        if is_app_link(url):
+            self.app_link = url
+            wx.CallAfter(self.EndModal, wx.ID_CANCEL)
+        elif url.lower().startswith(("http:", "https:", "mailto:")):
             self._open_url(url)
 
 

@@ -156,21 +156,80 @@ def mac_update_blocker(executable: Optional[str] = None) -> str:
             "Place to Applications and open it from there, and it will update itself")
 
 
-def bootstrap() -> None:
-    """Run Velopack's install/update/uninstall hooks. Call first in main()."""
+def bootstrap(argv: Optional[list] = None) -> None:
+    """Run Velopack's install/update/uninstall hooks. Call first in main().
+
+    ``argv`` is the command line without the program. Started with a
+    thechatplace:// link (#144), Velopack is given no arguments at all: a
+    link is the one thing a web page can put on The Chat Place's command
+    line, and it must never be read as one of Velopack's hook options."""
     if not getattr(sys, "frozen", False):
         return
     try:
         import velopack
     except ImportError:
         return
+    from . import links
+
     try:
         # A package Kelly agreed to, downloaded but not yet applied (say the
         # restart failed), is applied here before any window appears; never
         # where it can't be, or every start would try again.
-        velopack.App().set_auto_apply_on_startup(not mac_update_blocker()).run()
+        app = velopack.App().set_auto_apply_on_startup(not mac_update_blocker())
+        if links.link_argument(sys.argv[1:] if argv is None else argv) is not None:
+            app = app.set_args([])
+        # Windows: thechatplace:// is registered for this user when the app
+        # is installed or updated, and removed when it's uninstalled.
+        if sys.platform == "win32":
+            # One at a time, so a Velopack without one of them still runs
+            # (and still applies a waiting update).
+            for name, hook in (("on_after_install_fast_callback", _register_links),
+                               ("on_after_update_fast_callback", _register_links),
+                               ("on_before_uninstall_fast_callback", _unregister_links)):
+                try:
+                    app = getattr(app, name)(hook)
+                except Exception as exc:  # noqa: BLE001
+                    logger.error("Velopack hook %s unavailable: %s", name, exc)
+        app.run()
     except Exception as exc:  # noqa: BLE001
         logger.error("Velopack bootstrap failed: %s", exc)
+
+
+def _register_links(*_version) -> None:
+    """Velopack's install and update hooks: register thechatplace:// links
+    for this installed copy. Never raises (a failed hook fails the install)."""
+    try:
+        from . import links
+
+        logger.info("link registration: %s", links.ensure_registered(True, sys.executable))
+    except Exception as exc:  # noqa: BLE001
+        logger.error("link registration failed: %s", exc)
+
+
+def _unregister_links(*_version) -> None:
+    """Velopack's uninstall hook: remove this copy's thechatplace:// links."""
+    try:
+        from . import links
+
+        if links.remove_registration(sys.executable):
+            logger.info("link registration removed")
+    except Exception as exc:  # noqa: BLE001
+        logger.error("removing the link registration failed: %s", exc)
+
+
+def is_installed_copy(version: str, factory: Optional[Callable[[str], object]] = None,
+                      frozen: Optional[bool] = None) -> bool:
+    """Whether this is a copy Velopack installed (Windows), not the portable
+    zip or a source run. Never raises; False when it can't tell."""
+    frozen = bool(getattr(sys, "frozen", False)) if frozen is None else frozen
+    if not frozen:
+        return False
+    try:
+        manager = (factory or _velopack_manager)(feed_url(version))
+        return not manager.get_is_portable()
+    except Exception as exc:  # noqa: BLE001
+        logger.info("couldn't tell whether this copy is installed: %s", exc)
+        return False
 
 
 def data_is_outside_install_dir(data_dir: Optional[Path] = None,

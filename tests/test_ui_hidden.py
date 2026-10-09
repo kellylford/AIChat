@@ -163,6 +163,7 @@ def frame(env):
     window._runners.clear()
     window._list_timer.Stop()
     window._chat_timer.Stop()
+    window._link_timer.Stop()
     window._pool.shutdown(wait=True)
     window.Destroy()
     wx.GetApp().ProcessPendingEvents()
@@ -2176,6 +2177,7 @@ def test_saved_sort_order_is_used_and_checked_at_start(env):
     finally:
         window._list_timer.Stop()
         window._chat_timer.Stop()
+        window._link_timer.Stop()
         window._pool.shutdown(wait=True)
         window.Destroy()
         wx.GetApp().ProcessPendingEvents()
@@ -4234,6 +4236,7 @@ def test_long_session_titles_leave_the_reply_box_its_width(env):
     finally:
         window._list_timer.Stop()
         window._chat_timer.Stop()
+        window._link_timer.Stop()
         window._pool.shutdown(wait=True)
         window.Destroy()
 
@@ -5980,6 +5983,7 @@ def test_startup_schedules_the_notice_and_close_stops_it(env, monkeypatch):
     finally:
         window._list_timer.Stop()
         window._chat_timer.Stop()
+        window._link_timer.Stop()
         window._pool.shutdown(wait=True)
         if window:
             window.Destroy()
@@ -6040,3 +6044,223 @@ def test_settings_has_the_update_installed_choice(frame, env):
         assert got.last_run_version == "0.1.3"   # passes through untouched
     finally:
         dialog.Destroy()
+
+
+# -- links to sessions (#144) --------------------------------------------------------------
+
+
+def _links_focus(frame, monkeypatch):
+    """Where focus was sent (the hidden window can't really take it)."""
+    focused = []
+    monkeypatch.setattr(frame.chat_list, "SetFocus", lambda: focused.append("messages"))
+    monkeypatch.setattr(frame, "_come_forward",
+                        lambda: focused.append("forward") or frame._open_modal())
+    return focused
+
+
+def test_copy_session_link_on_both_menus_with_its_own_key(frame):
+    bar = frame.GetMenuBar()
+    labels = []
+    keys = []
+
+    def walk(menu):
+        for item in menu.GetMenuItems():
+            if item.GetSubMenu() is not None:
+                walk(item.GetSubMenu())
+                continue
+            labels.append(item.GetItemLabelText())
+            accel = item.GetAccel()
+            if accel is not None:
+                keys.append(accel.ToString())
+    for index in range(bar.GetMenuCount()):
+        walk(bar.GetMenu(index))
+    assert "Copy Session Link..." in labels
+    assert "Ctrl+Shift+L" in keys
+    assert len(keys) == len(set(keys)), "two menu items share a key"
+    select(frame, "Quiet one")
+    menu, _actions = frame._session_menu()
+    assert "Copy Session Link..." in [i.GetItemLabelText() for i in menu.GetMenuItems()]
+    menu.Destroy()
+
+
+def test_copy_session_link_for_a_desktop_session(frame, env, monkeypatch):
+    select(frame, "Quiet one")
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    offered = []
+
+    def choose(title, prompt, choices, selection=None):
+        offered.append((title, prompt, list(choices), selection))
+        return selection
+    monkeypatch.setattr(frame, "_choose", choose)
+    frame.on_copy_session_link()
+    title, prompt, choices, selection = offered[0]
+    assert (title, prompt, selection) == ("Copy Session Link", "Copy a link to Quiet one:", 0)
+    assert choices[0] == "Open in The Chat Place, as a Markdown link"
+    assert choices[1] == "Open in Claude, as a Markdown link"
+    assert env["copied"][-1] == "[Quiet one](thechatplace://session/local_a)"
+    assert env["feedback"][-1] == ("Copied a Markdown link to Quiet one, to open it in The "
+                                   "Chat Place.")
+    monkeypatch.setattr(frame, "_choose", lambda title, prompt, choices, selection=None: next(
+        i for i, c in enumerate(choices) if c.startswith("Open in Claude, the link only")))
+    frame.on_copy_session_link()
+    assert env["copied"][-1] == "claude://claude.ai/epitaxy/local_a"
+    monkeypatch.setattr(frame, "_choose", lambda *a, **k: None)
+    count = len(env["copied"])
+    frame.on_copy_session_link()  # Escape: nothing copied
+    assert len(env["copied"]) == count
+
+
+def test_copy_session_link_for_an_own_session_on_remote_control(frame, env, monkeypatch):
+    frame.store.update("own-1", remote_url="https://claude.ai/code/session_9")
+    select(frame, "Hub probe")
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    offered = []
+    monkeypatch.setattr(frame, "_choose", lambda title, prompt, choices, selection=None:
+                        offered.append(list(choices)) or len(choices) - 1)
+    frame.on_copy_session_link()
+    assert [c.split(",")[0] for c in offered[0]] == [
+        "Open in The Chat Place", "Its claude.ai address",
+        "Open in The Chat Place", "Its claude.ai address"]
+    assert env["copied"][-1] == "https://claude.ai/code/session_9"
+    assert env["feedback"][-1] == "Copied Hub probe's claude.ai address."
+
+
+def test_a_link_selects_and_loads_its_session(frame, env, monkeypatch):
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [user_text("hi"),
+                                                  assistant_block(text_block("Hello."), "m1")])
+    focused = _links_focus(frame, monkeypatch)
+    frame.open_link("thechatplace://session/local_a")
+    assert frame._open is not None and frame._open.key == "local_a"
+    assert frame._list_keys[frame.session_list.GetSelection()] == "local_a"
+    assert "messages" in focused
+    assert pump(lambda: any(t.startswith("Loaded Quiet one") for t in env["feedback"]))
+    # Again, while it's loaded: back to it, not reloaded.
+    frame.open_link("thechatplace://session/LOCAL_A/")
+    assert env["feedback"][-1] == "Back in Quiet one."
+    # The Chat Place's own session, by its Claude Code id.
+    frame.open_link("thechatplace://session/own-1")
+    assert frame._open.key == "own:own-1"
+
+
+def test_bad_and_unknown_links_change_nothing(frame, env, monkeypatch):
+    _links_focus(frame, monkeypatch)
+    frame.open_link("thechatplace://session/../own.json")
+    assert env["feedback"][-1] == "That link isn't one The Chat Place knows."
+    frame.open_link("thechatplace://session/nobody")
+    assert env["feedback"][-1] == "No session with that link."
+    assert frame._open is None
+    assert frame._pending_link is None
+
+
+def test_a_link_to_a_session_out_of_view_shows_all(frame, env, monkeypatch):
+    _links_focus(frame, monkeypatch)
+    from thechatplace.sessions import VIEW_NEEDS_YOU
+    frame.on_view(VIEW_NEEDS_YOU)
+    assert "local_a" not in frame._list_keys
+    frame.open_link("thechatplace://session/local_a")
+    assert frame.speech.session_view == "all"
+    assert "local_a" in frame._list_keys
+    assert "Showing all sessions, to show Quiet one." in env["feedback"]
+    assert frame._open.key == "local_a"
+
+
+def test_a_link_to_a_hidden_session_shows_hidden(frame, env, monkeypatch):
+    _links_focus(frame, monkeypatch)
+    frame.hidden.hide("local_a")
+    frame._refresh_list_in_place()
+    frame.open_link("thechatplace://session/local_a")
+    assert frame.speech.session_view == "hidden"
+    assert frame._open.key == "local_a"
+
+
+def test_a_link_waits_for_the_list_and_for_a_dialog(frame, env, monkeypatch):
+    focused = _links_focus(frame, monkeypatch)
+    frame._first_snapshot = True  # as if just started
+    frame.open_link("thechatplace://session/local_a")
+    assert frame._open is None and frame._pending_link
+    frame.refresh_sessions(force=True)
+    assert pump(lambda: frame._open is not None)
+    assert frame._open.key == "local_a"
+    raised = []
+    dialog = type("Dialog", (), {"Raise": lambda self: raised.append(True)})()
+    monkeypatch.setattr(frame, "_open_modal", lambda: dialog)
+    focused.clear()
+    frame.open_link("thechatplace://session/local_b")
+    for _tick in range(3):
+        frame._check_link_inbox()
+    assert env["feedback"].count("The link opens when you close this dialog.") == 1
+    # It came forward once, not on every tick of the timer.
+    assert focused.count("forward") == 1
+    assert frame._open.key == "local_a"
+    monkeypatch.setattr(frame, "_open_modal", lambda: None)
+    frame._check_link_inbox()
+    assert frame._open.key == "local_b"
+    assert focused.count("forward") == 1
+
+
+def test_a_link_waits_behind_a_native_message_box(frame, env, monkeypatch):
+    _links_focus(frame, monkeypatch)
+    # A native message box disables the window without being a wx dialog.
+    monkeypatch.setattr(frame, "IsEnabled", lambda: False)
+    frame.open_link("thechatplace://session/local_a")
+    frame._check_link_inbox()
+    assert frame._open is None
+    assert env["feedback"].count("The link opens when you close this dialog.") == 1
+    monkeypatch.setattr(frame, "IsEnabled", lambda: True)
+    frame._check_link_inbox()
+    assert frame._open.key == "local_a"
+
+
+def test_a_link_to_an_archived_session_shows_archived(frame, env, monkeypatch):
+    _links_focus(frame, monkeypatch)
+    add_desktop(env, "local_old", "cli-old", "Old one", isArchived=True)
+    frame.refresh_sessions(force=True, resort=True)
+    settle(frame)
+    assert "local_old" not in frame._list_keys
+    frame.open_link("thechatplace://session/local_old")
+    assert frame.speech.session_view == "archived"
+    assert frame._open.key == "local_old"
+
+
+def test_a_link_from_another_copy_is_opened(frame, env, monkeypatch):
+    _links_focus(frame, monkeypatch)
+    platform_paths.drop_link("thechatplace://session/local_b")
+    assert (env["tmp"] / "appdata" / "links").is_dir()
+    frame._check_link_inbox()
+    assert frame._open.key == "local_b"
+    assert list((env["tmp"] / "appdata" / "links").iterdir()) == []
+
+
+def test_a_session_link_in_the_formatted_view_opens_here(frame, env, monkeypatch):
+    from thechatplace.ui import dialogs, main_frame
+
+    class FakePage:
+        def __init__(self, parent, title, page):
+            self.app_link = None
+
+        def ShowModal(self):
+            self.app_link = "thechatplace://session/local_a"
+            return wx.ID_CANCEL
+
+        def Destroy(self):
+            pass
+    monkeypatch.setattr(main_frame, "formatted_view_available", lambda: True)
+    monkeypatch.setattr(main_frame, "FormattedMessageDialog", FakePage)
+    _links_focus(frame, monkeypatch)
+    assert frame._show_page("t", "<p>x</p>")
+    assert pump(lambda: frame._open is not None)
+    assert frame._open.key == "local_a"
+    assert env["opened"] == []  # never handed to the shell
+    # The page itself: a session link closes it with the link; a web link
+    # goes to the browser; anything else goes nowhere.
+    ended = []
+    page = type("Page", (), {})()
+    page.app_link = None
+    page.EndModal = lambda code: ended.append(code)
+    page._open_url = lambda url: env["opened"].append(url)
+    dialogs.FormattedMessageDialog._follow(page, "thechatplace://session/x")
+    assert page.app_link == "thechatplace://session/x"
+    assert pump(lambda: ended == [wx.ID_CANCEL])
+    dialogs.FormattedMessageDialog._follow(page, "https://example.com")
+    dialogs.FormattedMessageDialog._follow(page, "file:///C:/x")
+    assert env["opened"] == ["https://example.com"]

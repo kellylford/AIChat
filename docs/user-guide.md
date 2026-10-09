@@ -383,6 +383,42 @@ notification is shown.
   instructions (CLAUDE.md files), the memories it saved, your skills, subagents, commands and
   settings. Enter reads one, and Edit in Your Editor opens it in your own editor.
 
+## Links to sessions
+
+A link to a session takes you straight to it, from anywhere you can paste one: a note, an
+email, a message to another session.
+
+**Copying one.** In the session list, press **Ctrl+Shift+L** (or File, Copy Session Link, or
+Copy Session Link on the session's menu). A list offers the links that apply, best first, and
+Enter copies the first: a Markdown link, with the session's title as its text, that opens the
+session in The Chat Place. Arrow down for the others:
+
+- the same link without the Markdown, just the address;
+- for a Claude desktop app session, its Open in Claude link, which opens it in the desktop app;
+- for one of The Chat Place's sessions on Remote Control, its claude.ai address, for another
+  computer or your phone.
+
+What was copied is said, such as "Copied a Markdown link to Fix the build, to open it in The
+Chat Place." Escape copies nothing.
+
+**Following one.** A link that starts `thechatplace://session/` opens The Chat Place, or brings
+it forward if it's running, with that session selected and its messages loaded, and you in the
+messages, just as if you'd pressed Enter on it. If the list is showing a view or a search that
+leaves it out, it shows all sessions (or Archived or Hidden, where the session is) and says so.
+A link in a message works too, from the message's formatted page. If a dialog is open, the link
+waits until you close it.
+
+A link only finds a session, as Enter on it does. It never sends a message, runs a turn or changes a
+conversation, so it's safe to follow one from anywhere. A link to a session that's gone says "No
+session with that link", and anything else that starts `thechatplace:` says "That link isn't one The
+Chat Place knows."
+
+**Where links work.** On Windows, the installed copy of The Chat Place sets up
+`thechatplace://` links for your Windows account when it's installed and each time it starts,
+and uninstalling it removes them. The portable copy doesn't, so links open the installed copy
+if you have one. On a Mac, links work once The Chat Place is in Applications. A link copied on
+one computer opens the session only on that computer.
+
 ## Remote Control
 
 Remote Control lets you keep an eye on one of The Chat Place's own sessions when you're away from

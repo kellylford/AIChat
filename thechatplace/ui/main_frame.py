@@ -51,8 +51,8 @@ import wx
 
 from ..changes import by_file, summary_text
 from ..codeblocks import find_code_blocks
-from .. import (__version__, about_you, announce, attachments, bugreport, signin, export, hub, platform_paths,
-               remote, usage)
+from .. import (__version__, about_you, announce, attachments, bugreport, signin, export, hub, links,
+               platform_paths, remote, usage)
 from ..claude_cli import (MODELS, PERMISSION_MODES, PermissionRequest, ResumeRefused, TurnEvent,
                           TurnRunner, allow_response, answer_questions_response,
                           build_fork_command, build_new_command, build_resume_command,
@@ -68,7 +68,8 @@ from ..prompts import (MAX_NAME as PROMPT_NAME_MAX, PromptStore, clean_text as c
 from ..hidden import HiddenStore
 from ..titles import MAX_TITLE, TitleStore, clean_title
 from ..sessions import (GROUP_VIEW_PREFIX, IDLE, NEEDS_YOU, OWN, SORT_ORDERS,
-                        SORT_SPOKEN, VIEW_ALL, VIEW_NEEDS_YOU, VIEWS, WORKING,
+                        SORT_SPOKEN, VIEW_ALL, VIEW_ARCHIVED, VIEW_HIDDEN, VIEW_NEEDS_YOU, VIEWS,
+                        WORKING,
                         SessionInfo, field_short_name, group_view, in_view, view_spoken)
 from ..speech import ANNOUNCE_FULL, NOTIFY_ALL, NOTIFY_OFF, SpeechSettings, default_options, list_speech_options, speaker
 from ..transcript import (ASSISTANT, ERROR, PEER, PLAN, QUESTION, QUEUED, TOOL, TOOL_RESULT,
@@ -89,6 +90,8 @@ from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, AboutYouDialog, Chang
 
 APP_NAME = "The Chat Place"
 LIST_REFRESH_MS = 5000
+#: How often the window looks for a link another copy handed it (#144).
+LINK_CHECK_MS = 1000
 UPDATE_CHECK_DELAY_MS = 4000
 #: The update-installed notice (#141) waits this long after the window is
 #: made, then until the window is active with no dialog in front of it,
@@ -215,6 +218,11 @@ class MainFrame(wx.Frame):
         # Activity in the open session waiting to be said (#12).
         self._activity: List[tuple] = []
         self._activity_timer = None
+        # A thechatplace:// link to open once the session list has been read
+        # and no dialog is in front (#144), and whether that wait was said.
+        self._pending_link: Optional[str] = None
+        self._link_wait_said = False
+        self._link_came_forward = False  # once per link, never every tick
 
         self._build_menu()
         self._build_ui()
@@ -234,6 +242,21 @@ class MainFrame(wx.Frame):
         self._list_timer.Start(LIST_REFRESH_MS)
         self._chat_timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self._on_chat_timer, self._chat_timer)
+        # Links another copy of The Chat Place handed over (#144).
+        # The timer is its own event handler, not the window: it ticks every
+        # second, so a tick already queued when the window is destroyed (a
+        # Mac destroys it later, at idle time) must never be delivered to a
+        # window that's gone. It stops itself once the window is.
+        link_timer = wx.Timer()
+
+        def link_tick(_event):
+            if not self:
+                link_timer.Stop()
+                return
+            self._check_link_inbox()
+        link_timer.Bind(wx.EVT_TIMER, link_tick)
+        self._link_timer = link_timer
+        self._link_timer.Start(LINK_CHECK_MS)
 
         if self.store.load_error:
             wx.CallAfter(wx.MessageBox, self.store.load_error, APP_NAME,
@@ -275,6 +298,8 @@ class MainFrame(wx.Frame):
         # would steal it from every button and text box in the window).
         self._item(session, "&Load Session", self.on_open_session)
         self._item(session, "Open in &Claude\tCtrl+O", self.on_open_in_claude)
+        self._item(session, "Cop&y Session Link...\tCtrl+Shift+L",
+                   lambda e: self.on_copy_session_link())
         self._item(session, "&Answer Claude...\tCtrl+Shift+A", lambda e: self.on_answer())
         self._item(session, "Con&tinue Here...\tCtrl+Shift+N", self.on_continue_here)
         self._item(session, "&New Session...\tCtrl+N", self.on_new_session)
@@ -819,6 +844,8 @@ class MainFrame(wx.Frame):
                 self._feedback(text)  # F5: Kelly asked
             else:
                 self._status(text)
+        if first and self._pending_link is not None:
+            wx.CallAfter(self._open_pending_link)  # a link it was started with (#144)
         self._run_pending_refresh()
 
     def _update_session_list(self, sessions: List[SessionInfo], keep_order: bool = False,
@@ -1571,9 +1598,13 @@ class MainFrame(wx.Frame):
             self._status(str(exc))
             return False
         try:
-            return dialog.ShowModal() != ID_PLAIN_TEXT
+            shown = dialog.ShowModal() != ID_PLAIN_TEXT
+            link = getattr(dialog, "app_link", None)
         finally:
             dialog.Destroy()
+        if link:
+            wx.CallAfter(self.open_link, link)  # a link to a session in it (#144)
+        return shown
 
     def _message_menu(self) -> wx.Menu:
         """The messages list's context menu. Its handlers are bound on the
@@ -1725,6 +1756,7 @@ class MainFrame(wx.Frame):
             actions[item.GetId()] = handler
         add("&Load Session\tEnter", self.on_open_session)
         add("Open in &Claude\tCtrl+O", self.on_open_in_claude, info.can_open_in_claude)
+        add("Copy Session Lin&k...\tCtrl+Shift+L", self.on_copy_session_link)
         if not info.is_own:
             # Heard as unavailable for a Cowork session (#91), whose button is hidden.
             add("Con&tinue Here...\tCtrl+Shift+N", self.on_continue_here, not info.cowork)
@@ -2063,14 +2095,7 @@ class MainFrame(wx.Frame):
         forward instead, and the session is left as it is."""
         if not self:
             return
-        if self.IsIconized():
-            self.Iconize(False)
-        self.Show()
-        modal = self._open_modal()
-        (modal or self).Raise()
-        mac_a11y.activate_app()  # Raise alone leaves a Mac's menu bar with the last app
-        if not self._app_is_active():
-            self.RequestUserAttention()  # Windows wouldn't let it come forward
+        modal = self._come_forward()
         if modal is not None or key is None:
             return
         info = self._current_info(key)
@@ -2080,6 +2105,119 @@ class MainFrame(wx.Frame):
             self.chat_list.SetFocus()
         else:
             self.open_session(info)
+
+    def _come_forward(self) -> Optional[wx.Dialog]:
+        """Bring The Chat Place to the front: its dialog, if one is open
+        (returned), otherwise the window."""
+        if self.IsIconized():
+            self.Iconize(False)
+        self.Show()
+        modal = self._open_modal()
+        (modal or self).Raise()
+        mac_a11y.activate_app()  # Raise alone leaves a Mac's menu bar with the last app
+        if not self._app_is_active():
+            self.RequestUserAttention()  # Windows wouldn't let it come forward
+        return modal
+
+    # ------------------------------------------------------- links (#144)
+
+    def on_copy_session_link(self, _event=None):
+        """File, Copy Session Link (Ctrl+Shift+L, #144): the links that
+        apply to the selected session, best first, each as a Markdown link
+        and then bare. Enter on the first copies a Markdown link that opens
+        it in The Chat Place."""
+        info = self._selected_session()
+        if info is None:
+            self._feedback("No session selected.")
+            return
+        own = self.store.get(info.cli_session_id) if info.is_own else None
+        # Before its first turn starts, Claude may still give it another id.
+        started = not info.is_own or (own is not None and own.started)
+        choices = links.copy_choices(
+            info, claude_link(info) if info.can_open_in_claude else "",
+            own.remote_url if own is not None else "", chat_place=started)
+        if not choices:
+            self._feedback(f"{info.title} has no link yet. Once Claude has started it, "
+                           "it has one.")
+            return
+        index = self._choose("Copy Session Link", f"Copy a link to {info.title}:",
+                             [choice.label for choice in choices], selection=0)
+        if index is None:
+            return
+        if self._copy_text(choices[index].text):
+            self._feedback(choices[index].spoken)
+
+    def open_link(self, url: str):
+        """Follow a thechatplace:// link (#144): from the command line, the
+        system, another copy, or a message. The window comes forward and
+        the session is selected and loaded, focus on its messages, as if
+        you had chosen it. A link never sends or changes anything. Until the
+        session list has been read, or while a dialog is open, it waits."""
+        if not self or self._closing:
+            return
+        self._pending_link = url
+        self._link_wait_said = False
+        self._link_came_forward = False
+        if not self._first_snapshot:
+            self._open_pending_link()
+
+    def _check_link_inbox(self):
+        if not self or self._closing:
+            return
+        for url in platform_paths.take_dropped_links():
+            self.open_link(url)
+        if self._pending_link is not None and not self._first_snapshot:
+            self._open_pending_link()  # waiting for a dialog to close
+
+    def _open_pending_link(self):
+        url = self._pending_link
+        if url is None or not self or self._closing:
+            return
+        if not self._link_came_forward:
+            # Once per link: the timer's retries mustn't pull The Chat Place
+            # in front of the app you've gone to every second.
+            self._link_came_forward = True
+            self._come_forward()
+        # Behind one of its dialogs, or a native message or file dialog
+        # (which disables the window but isn't a wx window): wait.
+        if self._open_modal() is not None or not self.IsEnabled():
+            if not self._link_wait_said:
+                self._link_wait_said = True
+                self._feedback("The link opens when you close this dialog.")
+            return
+        self._pending_link = None
+        session_id = links.parse_link(url)
+        if session_id is None:
+            self._feedback(links.NOT_OURS)
+            return
+        info = links.find_session(self._snapshot.sessions, session_id)
+        if info is None:
+            self._feedback(links.NO_SESSION)
+            return
+        self._show_in_list(info)
+        if self._open is not None and self._open.key == info.key:
+            self.chat_list.SetFocus()
+            self._feedback(f"Back in {info.title}.")
+        else:
+            self.open_session(info)
+
+    def _show_in_list(self, info: SessionInfo):
+        """Make sure ``info`` is in the session list and selected: if the
+        filter or the view leaves it out, show all sessions (or Archived, or
+        Hidden, if that's where it is) and say so."""
+        if info.key not in self._list_keys:
+            info.hidden = info.key in self.hidden
+            self._session_filter = ""
+            view = self.speech.session_view
+            if not self._in_current_view([info]):
+                view = (VIEW_HIDDEN if info.hidden else VIEW_ARCHIVED if info.archived
+                        else VIEW_ALL)
+            self._apply_view(view)
+            self._feedback(f"Showing {view_spoken(view)}, to show {info.title}.")
+        if info.key in self._list_keys:
+            row = self._list_keys.index(info.key)
+            if self.session_list.GetSelection() != row:
+                self.session_list.SetSelection(row)
 
     def _notify_turn_end(self, session_id, title, event, denials, detail, stopped=False):
         key = self._own_key(session_id)
@@ -3203,6 +3341,14 @@ class MainFrame(wx.Frame):
 
     def on_view(self, view: str):
         """View, Show Sessions: list only these, and remember it."""
+        shown = self._apply_view(view)
+        count = "no sessions" if not shown else (
+            "1 session" if len(shown) == 1 else f"{len(shown)} sessions")
+        self._feedback(f"Showing {view_spoken(view)}: {count}.")
+
+    def _apply_view(self, view: str) -> List[SessionInfo]:
+        """Show ``view``'s sessions, tick it on the menu and remember it,
+        without saying anything; the sessions now shown."""
         self.speech.session_view = view
         if view in self.view_items:
             self.view_items[view].Check(True)
@@ -3213,9 +3359,7 @@ class MainFrame(wx.Frame):
         shown = self._in_current_view(list(self._snapshot.sessions))
         self._update_session_list(shown)
         self._update_list_label(len(shown))
-        count = "no sessions" if not shown else (
-            "1 session" if len(shown) == 1 else f"{len(shown)} sessions")
-        self._feedback(f"Showing {view_spoken(view)}: {count}.")
+        return shown
 
     # ----------------------------------------------------------- search (#21)
 
@@ -4292,6 +4436,7 @@ class MainFrame(wx.Frame):
         self._clear_activity()
         self._list_timer.Stop()
         self._chat_timer.Stop()
+        self._link_timer.Stop()
         startup_sign_in = getattr(self, "_startup_sign_in", None)
         if startup_sign_in is not None:
             startup_sign_in.Stop()

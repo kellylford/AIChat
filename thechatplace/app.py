@@ -138,6 +138,15 @@ def smoke_test(out_path: str) -> int:
     if not platform_paths.user_guide_path().is_file():
         # Help, User Guide reads it (#104).
         problems.append(f"missing user guide {platform_paths.user_guide_path()}")
+    # Links to sessions (#144): the parser, and (informational) what this
+    # user's thechatplace:// links run on Windows, "" if nothing.
+    from . import links
+
+    report["links"] = links.parse_link(links.PREFIX + "smoke-test") == "smoke-test"
+    if not report["links"]:
+        problems.append("thechatplace:// links don't parse")
+    if sys.platform == "win32":
+        report["link_registration"] = platform_paths.url_scheme_command() or ""
     lookup = platform_paths.find_claude()
     report["claude"] = lookup.path or lookup.problem
     report["data_outside_install"] = updater.data_is_outside_install_dir()
@@ -149,15 +158,53 @@ def smoke_test(out_path: str) -> int:
     return 1 if problems else 0
 
 
+def register_links_in_background() -> None:
+    """Windows: make sure thechatplace:// links (#144) open this copy, if it's
+    the installed one; Velopack's install hook does it too, but a copy
+    installed before links existed, or a registration someone removed, is
+    put right here. A portable copy or a source run never registers. Off the
+    UI thread, and it never stops the app starting."""
+    if sys.platform != "win32" or not getattr(sys, "frozen", False):
+        return
+
+    def work():
+        from . import links, updater
+        try:
+            installed = updater.is_installed_copy(__version__)
+            updater.logger.info("link registration: %s",
+                                links.ensure_registered(installed, sys.executable))
+        except Exception as exc:  # noqa: BLE001
+            updater.logger.error("link registration failed: %s", exc)
+
+    threading.Thread(target=work, name="links", daemon=True).start()
+
+
+def hand_link_to_running_copy(link: str) -> bool:
+    """Leave ``link`` for the copy that's running, which looks for it every
+    second (platform_paths.drop_link). False if it couldn't be left."""
+    try:
+        platform_paths.drop_link(link)
+        return True
+    except OSError:
+        return False
+
+
 def main(argv: Optional[list] = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    from . import links
+
+    # Started with a thechatplace:// link (#144): that's all this start is
+    # about, and nothing else on the command line counts.
+    link = links.link_argument(argv)
+    if link is not None:
+        argv = []
     # Velopack's install/update/uninstall hooks first: Update.exe starts the
     # app with hook arguments and expects it to exit, before anything else.
     from . import updater
 
     # Logging before the hooks, so a failed install or update hook is recorded.
     updater.configure_logging()
-    updater.bootstrap()
+    updater.bootstrap(argv if link is None else [link])
     if "--smoke-test" in argv:
         index = argv.index("--smoke-test")
         target = argv[index + 1] if index + 1 < len(argv) else "smoke-test.json"
@@ -170,23 +217,50 @@ def main(argv: Optional[list] = None) -> int:
         return 1
     from .ui.main_frame import MainFrame
 
-    app = wx.App(False)
+    class ChatPlaceApp(wx.App):
+        """A Mac hands a thechatplace:// link to the running app as an Apple
+        event, which wx turns into MacOpenURL. One can come before the window
+        exists (the app was started by the link), so it waits for it."""
+        # Class attributes, not set in OnInit: wxOSX can deliver the link
+        # that started the app before OnInit runs. There is only ever one
+        # app object, so the class-level list isn't shared with anything.
+        frame = None
+        waiting: list = []
+
+        def MacOpenURL(self, url):  # noqa: N802 - wx's name
+            if self.frame is not None and self.frame:
+                self.frame.open_link(url)
+            else:
+                self.waiting.append(url)
+
+    app = ChatPlaceApp(False)
     app.SetAppName(APP_TITLE)
     # One copy at a time: two would both run turns, announce everything
     # twice, and write the same session list.
     checker = wx.SingleInstanceChecker(f"TheChatPlace-{getpass.getuser()}")
     if checker.IsAnotherRunning():
+        if link is not None and hand_link_to_running_copy(link):
+            # The running copy opens it and comes forward itself; bringing
+            # it forward from here as well gets past Windows' focus rules.
+            platform_paths.bring_window_forward(is_hub_window_title)
+            return 0
         if not platform_paths.bring_window_forward(is_hub_window_title):
             wx.MessageBox("The Chat Place is already running. Switch to it with Alt+Tab.",
                           APP_TITLE, wx.OK | wx.ICON_INFORMATION)
         return 0
     frame = MainFrame()
+    app.frame = frame
     frame.Centre()
     frame.Show()
     # On a Mac, the window can be in front while another app keeps the menu
     # bar (and VO+M); see mac_a11y.activate_app. Does nothing elsewhere.
     from .ui import mac_a11y
     mac_a11y.activate_app()
+    pending = ([link] if link is not None else []) + app.waiting
+    app.waiting = []
+    for each in pending:
+        frame.open_link(each)
+    register_links_in_background()
     app.MainLoop()
     del checker
     return 0

@@ -199,6 +199,26 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   back. Headings carry the time, and the date whenever the day changes.
 - **Open in Claude** (Ctrl+O) switches the desktop app to the session, for approving a permission
   prompt or answering a question card in a desktop app session.
+- **Copy Session Link** (Ctrl+Shift+L, File menu, or the session's menu) copies a link to the
+  selected session, to paste into a note, an email or another session. A list offers the links that
+  apply, best first; Enter on the first copies a Markdown link, `[Title](thechatplace://session/…)`,
+  that opens the session in The Chat Place. Below it are a desktop app session's Open in Claude link
+  (`claude://…`) and, for one of The Chat Place's sessions on Remote Control, its claude.ai address,
+  each as a Markdown link and then as the bare link. What was copied is said. Following a
+  `thechatplace://` link (from a note, Win+R or Terminal's `open`, a link in a message's formatted
+  view) brings The Chat Place forward, starting it if it isn't running, selects the session, loads
+  its messages and puts you in them, as choosing it yourself does. If the list's view or search
+  leaves the session out, it shows all sessions (or Archived or Hidden) and says so. A link only
+  ever finds a session, as Enter on it does: it never sends a message, runs a turn or changes a
+  conversation, and anything that isn't exactly a link to a session gets "That link isn't one The
+  Chat Place knows." A session's link uses the id that lasts: the Claude Code session id for The
+  Chat Place's own sessions, the desktop app's `local_…` id for its Code and Cowork sessions. On
+  Windows the installed copy registers `thechatplace://` for your user account
+  (`HKEY_CURRENT_USER\Software\Classes\thechatplace`) when it's installed and at start, and
+  uninstalling removes it; the portable copy and a source run never register. On a Mac the app
+  declares the link type itself. When The Chat Place is already running, the copy a link starts
+  hands the link over (as a small file in its own data folder, `links`, taken within a second) and
+  closes.
 - **Cowork sessions.** The desktop app's Cowork sessions are listed too, read-only, as desktop app
   sessions are. Each row says "Cowork session", and in place of a repo folder it names the folder
   you gave Cowork to work on, or says "no folder" if there isn't one. View, Show Sessions, Cowork
@@ -543,6 +563,7 @@ shows it as plain text instead.
 | Messages | Backspace | Also back to the session list |
 | Session list | Enter | Load that session and move to its messages |
 | Session list | Ctrl+O | Open the selected session in the Claude desktop app |
+| Session list | Ctrl+Shift+L | Copy Session Link: a Markdown link that opens it in The Chat Place, or the other links |
 | Session list | Ctrl+N | New Chat Place session |
 | Session list | Ctrl+G | Add the selected session to a group |
 | Session list | F2 | Rename the selected session |
@@ -739,6 +760,7 @@ Checked with Claude Code 2.1.286 (issues #187 and #188):
 | `thechatplace/screen_readers.py` | Speaking through JAWS and NVDA on Windows |
 | `thechatplace/nvda/` | NV Access's NVDA Controller Client (LGPL 2.1, unmodified; see its README and `license.txt`) |
 | `thechatplace/platform_paths.py` | Every path and OS call |
+| `thechatplace/links.py` | `thechatplace://` links to sessions: making, reading and registering them |
 | `thechatplace/ui/` | The wxPython window and dialogs |
 | `tests/` | pytest tests, built on made-up records shaped like the real ones |
 | `thechatplace/updater.py` | Velopack updates, adapted from GHManage's updater |

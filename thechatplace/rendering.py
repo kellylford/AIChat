@@ -15,8 +15,9 @@ The page is built to be inert:
   link instead.
 * A Content-Security-Policy allows nothing but the page's own styles, so
   nothing remote is fetched and no script in the page can run.
-* Links keep only http, https and mailto targets; the viewer opens them in
-  the default browser, never in itself.
+* Links keep only http, https and mailto targets, which the viewer opens in
+  the default browser, never in itself, and links to sessions
+  (``thechatplace://session/<id>``, #144), which The Chat Place opens itself.
 """
 from __future__ import annotations
 
@@ -27,6 +28,8 @@ import markdown
 from markdown.extensions.fenced_code import FencedCodeExtension
 from markdown.extensions.sane_lists import SaneListExtension
 from markdown.extensions.tables import TableExtension
+
+from .links import parse_link
 
 _CODE = re.compile(r'<pre><code(?: class="language-([^"]+)")?>(.*?)</code></pre>', re.DOTALL)
 _HREF = re.compile(r'<a href="([^"]*)"')
@@ -101,7 +104,8 @@ def markdown_to_html(text: str) -> str:
 
     def link(match: "re.Match[str]") -> str:
         href = html.unescape(match.group(1))
-        return match.group(0) if _SAFE_LINK.match(href) else "<a"
+        safe = _SAFE_LINK.match(href) or parse_link(href) is not None
+        return match.group(0) if safe else "<a"
 
     return _HREF.sub(link, _CODE.sub(code_region, body))
 

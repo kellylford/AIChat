@@ -21,6 +21,7 @@ One window, three parts, in Tab order: the session list; the messages of the loa
 | --- | --- |
 | Enter | Load that session and move to its messages |
 | Ctrl+O | Open the selected session in the Claude desktop app |
+| Ctrl+Shift+L | Copy Session Link: Enter copies a Markdown link that opens the session in The Chat Place; the list also has the bare link, and where they apply its Open in Claude link and claude.ai address |
 | Ctrl+N | New Chat Place session |
 | Ctrl+Shift+N | Continue the selected desktop app session here, as a copy you can reply to (the desktop app session isn't changed) |
 | F5 | Refresh the list now and put it back in order (it also refreshes itself every few seconds, without moving rows while you're in it) |
@@ -29,7 +30,7 @@ One window, three parts, in Tab order: the session list; the messages of the loa
 | Alt+V, E | Session List Columns: choose what each session's line says and in what order, such as status first; in the dialog, Enter adds, Delete removes, and Alt+Up, Alt+Down, Alt+Home and Alt+End move |
 | Ctrl+E | Export the selected (or loaded) session as Markdown, a web page or plain text |
 | F2 | Rename the selected session (a desktop app session's new name shows only in The Chat Place) |
-| Applications key / Shift+F10 | The session's menu: load, open in Claude, rename, Remote Control, groups, export, hide or delete |
+| Applications key / Shift+F10 | The session's menu: load, open in Claude, copy its link, rename, Remote Control, groups, export, hide or delete |
 | Alt+F, O | Remote Control: reach the selected session from claude.ai and your phone (a desktop app session can be continued here with it on) |
 | Ctrl+G | Add the selected session to a group (or a new one); File, Remove from Group and Manage Groups are on the File menu |
 | Delete | Hide the selected session; View, Show Sessions, Hidden lists hidden sessions, and File, Bring Back Session returns one |

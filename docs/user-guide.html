@@ -22,7 +22,7 @@ heading, so your screen reader's heading keys move between them. For every key i
 Help, Keyboard Shortcuts (F1).</p>
 <p>The Chat Place is an independent project by Kelly Ford. It works with Claude Code and the Claude
 desktop app, but it isn't made, sponsored or endorsed by Anthropic, and isn't affiliated with it.</p>
-<nav aria-labelledby="contents"><h2 id="contents">Contents</h2><ul><li><a href="#before-you-start">Before you start</a></li><li><a href="#the-window">The window</a></li><li><a href="#reading-a-session">Reading a session</a></li><li><a href="#desktop-app-sessions-and-the-chat-place-s-own">Desktop app sessions and The Chat Place's own</a></li><li><a href="#starting-a-session-and-replying">Starting a session and replying</a></li><li><a href="#when-claude-needs-you">When Claude needs you</a></li><li><a href="#organizing-your-sessions">Organizing your sessions</a></li><li><a href="#announcements-and-notifications">Announcements and notifications</a></li><li><a href="#more-things-you-can-do">More things you can do</a></li><li><a href="#remote-control">Remote Control</a></li><li><a href="#your-sessions-on-other-computers">Your sessions on other computers</a></li><li><a href="#updates">Updates</a></li><li><a href="#when-something-isn-t-right">When something isn't right</a></li><li><a href="#good-to-know">Good to know</a></li></ul></nav><h2 id="before-you-start">Before you start</h2>
+<nav aria-labelledby="contents"><h2 id="contents">Contents</h2><ul><li><a href="#before-you-start">Before you start</a></li><li><a href="#the-window">The window</a></li><li><a href="#reading-a-session">Reading a session</a></li><li><a href="#desktop-app-sessions-and-the-chat-place-s-own">Desktop app sessions and The Chat Place's own</a></li><li><a href="#starting-a-session-and-replying">Starting a session and replying</a></li><li><a href="#when-claude-needs-you">When Claude needs you</a></li><li><a href="#organizing-your-sessions">Organizing your sessions</a></li><li><a href="#announcements-and-notifications">Announcements and notifications</a></li><li><a href="#more-things-you-can-do">More things you can do</a></li><li><a href="#links-to-sessions">Links to sessions</a></li><li><a href="#remote-control">Remote Control</a></li><li><a href="#your-sessions-on-other-computers">Your sessions on other computers</a></li><li><a href="#updates">Updates</a></li><li><a href="#when-something-isn-t-right">When something isn't right</a></li><li><a href="#good-to-know">Good to know</a></li></ul></nav><h2 id="before-you-start">Before you start</h2>
 <p>You need:</p>
 <ul>
 <li>Windows 10 or 11, or a Mac with Apple silicon.</li>
@@ -331,6 +331,36 @@ notification is shown.</p>
   instructions (CLAUDE.md files), the memories it saved, your skills, subagents, commands and
   settings. Enter reads one, and Edit in Your Editor opens it in your own editor.</li>
 </ul>
+<h2 id="links-to-sessions">Links to sessions</h2>
+<p>A link to a session takes you straight to it, from anywhere you can paste one: a note, an
+email, a message to another session.</p>
+<p><strong>Copying one.</strong> In the session list, press <strong>Ctrl+Shift+L</strong> (or File, Copy Session Link, or
+Copy Session Link on the session's menu). A list offers the links that apply, best first, and
+Enter copies the first: a Markdown link, with the session's title as its text, that opens the
+session in The Chat Place. Arrow down for the others:</p>
+<ul>
+<li>the same link without the Markdown, just the address;</li>
+<li>for a Claude desktop app session, its Open in Claude link, which opens it in the desktop app;</li>
+<li>for one of The Chat Place's sessions on Remote Control, its claude.ai address, for another
+  computer or your phone.</li>
+</ul>
+<p>What was copied is said, such as "Copied a Markdown link to Fix the build, to open it in The
+Chat Place." Escape copies nothing.</p>
+<p><strong>Following one.</strong> A link that starts <code>thechatplace://session/</code> opens The Chat Place, or brings
+it forward if it's running, with that session selected and its messages loaded, and you in the
+messages, just as if you'd pressed Enter on it. If the list is showing a view or a search that
+leaves it out, it shows all sessions (or Archived or Hidden, where the session is) and says so.
+A link in a message works too, from the message's formatted page. If a dialog is open, the link
+waits until you close it.</p>
+<p>A link only finds a session, as Enter on it does. It never sends a message, runs a turn or changes a
+conversation, so it's safe to follow one from anywhere. A link to a session that's gone says "No
+session with that link", and anything else that starts <code>thechatplace:</code> says "That link isn't one The
+Chat Place knows."</p>
+<p><strong>Where links work.</strong> On Windows, the installed copy of The Chat Place sets up
+<code>thechatplace://</code> links for your Windows account when it's installed and each time it starts,
+and uninstalling it removes them. The portable copy doesn't, so links open the installed copy
+if you have one. On a Mac, links work once The Chat Place is in Applications. A link copied on
+one computer opens the session only on that computer.</p>
 <h2 id="remote-control">Remote Control</h2>
 <p>Remote Control lets you keep an eye on one of The Chat Place's own sessions when you're away from
 your computer, on claude.ai or in the Claude app on your phone. Turn it on with File, Remote
