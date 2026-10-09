@@ -5750,7 +5750,8 @@ def test_no_notification_about_speech_when_notifications_are_off(frame, env):
     before = len(env["notified"])
     frame._on_speech_problem("not spoken: JAWS is running but refused the text")
     assert len(env["notified"]) == before
-    assert frame._status_latest == "Speech: Not spoken: JAWS is running but refused the text."
+    assert frame._status_latest.endswith(
+        "(Speech: Not spoken: JAWS is running but refused the text.)")
 
 
 def test_a_speech_problem_after_the_window_closed_is_ignored(env):
