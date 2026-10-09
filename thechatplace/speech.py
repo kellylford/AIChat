@@ -115,6 +115,9 @@ NOTIFY_LABELS = {
 }
 
 _SCREEN_READER_ENGINES = {"auto", "jaws", "nvda", "voiceover"}
+#: Seconds a JAWS or NVDA call may take before the screen reader is treated
+#: as not answering. Both take the text in well under a tenth of a second.
+SCREEN_READER_TIMEOUT = 3.0
 #: The engine settings that speak through JAWS or NVDA from this process (#98).
 _WINDOWS_SCREEN_READER_ENGINES = {"auto", "jaws", "nvda"}
 
@@ -437,6 +440,10 @@ class Speaker:
         self.on_problem: Optional[Callable[[str], None]] = None
         #: What the last screen-reader announcement did, for the bug report.
         self.last_route = ""
+        #: Why the last one wasn't spoken while a screen reader was running;
+        #: "" once one is spoken again (Settings shows it).
+        self.last_problem = ""
+        self._reader_call: Optional[threading.Thread] = None
 
     def _readers(self):
         if self._screen_readers is None:
@@ -525,24 +532,7 @@ class Speaker:
         return True
 
     def _drain(self) -> None:
-        # JAWS is a COM object, and COM has to be set up on the thread that
-        # calls it.
-        com = None
-        if sys.platform == "win32":
-            try:
-                import comtypes
-                comtypes.CoInitialize()
-                com = comtypes
-            except Exception:  # noqa: BLE001 - JAWS then reports why it failed
-                com = None
-        try:
-            self._drain_queue()
-        finally:
-            if com is not None:
-                try:
-                    com.CoUninitialize()
-                except Exception:  # noqa: BLE001
-                    pass
+        self._drain_queue()
 
     def _drain_queue(self) -> None:
         while True:
@@ -552,8 +542,11 @@ class Speaker:
                     return
                 command, request = self._queue.popleft()
                 generation = self._generation
-            if request is not None and self._to_screen_reader(request):
-                continue
+            if request is not None:
+                if generation != self._generation:
+                    continue  # stop() ran after it left the queue
+                if self._to_screen_reader(request):
+                    continue
             kwargs = {}
             if sys.platform == "win32":
                 kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
@@ -595,27 +588,87 @@ class Speaker:
         A screen reader that's running but didn't answer also settles it: a
         Windows voice talking over the user's screen reader, in a voice they
         didn't choose, is the defect in #98. The reason goes to
-        ``on_problem`` instead, and the announcement is still in the status
-        bar and the Windows notification.
+        ``on_problem`` instead, once until speech works again, and the
+        announcement is still in the status bar.
         """
-        try:
-            outcome = self._readers().speak(*request)
-        except Exception as exc:  # noqa: BLE001 - speech never raises
-            self.last_route = f"screen readers couldn't be checked ({type(exc).__name__}), so a Windows voice"
-            self._log_route(self.last_route)
+        outcome, failure = self._ask_screen_readers(request)
+        if failure:
+            self._settle(failure, problem=failure)
+            return True
+        if outcome is None:
+            self._settle("screen readers couldn't be checked, so a Windows voice")
             return False
         if not outcome.running:
-            self.last_route = "no screen reader running, so a Windows voice"
-            self._log_route(self.last_route)
+            self._settle("no screen reader running, so a Windows voice")
             return False
-        self.last_route = outcome.describe()
-        self._log_route(self.last_route)
-        if outcome.unreachable and self.on_problem is not None:
+        self._settle(outcome.describe(),
+                     problem=outcome.describe() if outcome.unreachable else "")
+        return True
+
+    def _ask_screen_readers(self, request):
+        """(outcome, "") from screen_readers, or (None, why) when a screen
+        reader hung, or (None, "") when asking failed outright.
+
+        On a thread of its own with a deadline: the old model ran every
+        utterance in a process stop() could kill, but these are calls into
+        JAWS and NVDA, and one that hangs mustn't stop all speech. While a
+        hung call is still out, the next announcements aren't sent at all,
+        so hung threads can't pile up.
+        """
+        with self._lock:
+            if self._reader_call is not None and self._reader_call.is_alive():
+                return None, "not spoken: the screen reader is still not answering"
+        result = {}
+
+        def call():
+            # JAWS is a COM object, so COM is set up on the thread that calls
+            # it. (Importing comtypes first may set it up too; the thread's
+            # end undoes both.)
+            com = None
+            if sys.platform == "win32":
+                try:
+                    import comtypes
+                    comtypes.CoInitialize()
+                    com = comtypes
+                except Exception:  # noqa: BLE001 - JAWS then reports why it failed
+                    com = None
             try:
-                self.on_problem(self.last_route)
+                result["outcome"] = self._readers().speak(*request)
+            except Exception:  # noqa: BLE001 - speech never raises
+                pass
+            finally:
+                if com is not None:
+                    try:
+                        com.CoUninitialize()
+                    except Exception:  # noqa: BLE001
+                        pass
+
+        thread = threading.Thread(target=call, name="screen-reader", daemon=True)
+        with self._lock:
+            self._reader_call = thread
+        thread.start()
+        thread.join(SCREEN_READER_TIMEOUT)
+        if thread.is_alive():
+            return None, (f"not spoken: the screen reader didn't answer within "
+                          f"{SCREEN_READER_TIMEOUT:g} seconds")
+        return result.get("outcome"), ""
+
+    def _settle(self, route: str, problem: str = "") -> None:
+        """Record what happened to a screen-reader announcement, and tell
+        ``on_problem`` about a new problem, once until speech works again."""
+        self.last_route = route
+        self._log_route(route)
+        if not problem:
+            self.last_problem = ""
+            return
+        if problem == self.last_problem:
+            return
+        self.last_problem = problem
+        if self.on_problem is not None:
+            try:
+                self.on_problem(problem)
             except Exception:  # noqa: BLE001
                 pass
-        return True
 
     def busy(self) -> bool:
         with self._lock:

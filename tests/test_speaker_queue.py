@@ -303,6 +303,79 @@ def test_a_failing_screen_reader_bridge_never_raises_and_falls_back(tmp_path, mo
     s = make(tmp_path, monkeypatch, Broken())
     assert s.speak("Hello", SpeechSettings())
     assert wait_until(lambda: len(FakeEngine.started) == 1)
-    assert s.last_route == "screen readers couldn't be checked (RuntimeError), so a Windows voice"
+    assert s.last_route == "screen readers couldn't be checked, so a Windows voice"
     FakeEngine.started[0].done.set()
     assert wait_until(lambda: not s.busy())
+
+
+@windows_screen_readers
+def test_a_confirmation_reaches_the_screen_reader_without_interrupting(tmp_path, monkeypatch):
+    readers = FakeReaders(Outcome(spoke="jaws", running=["jaws"]))
+    s = make(tmp_path, monkeypatch, readers)
+    s.speak("Sent.", SpeechSettings(), interrupt=False)
+    assert wait_until(lambda: len(readers.calls) == 1 and not s.busy())
+    s.speak("Session replied", SpeechSettings(), interrupt=True)
+    assert wait_until(lambda: len(readers.calls) == 2 and not s.busy())
+    assert readers.calls == [("Sent.", "auto", False), ("Session replied", "auto", True)]
+
+
+@windows_screen_readers
+def test_a_problem_is_reported_once_until_speech_works_again(tmp_path, monkeypatch):
+    unreachable = Outcome(running=["nvda"], problems={"nvda": "didn't answer (error 1722)"})
+    readers = FakeReaders(unreachable)
+    s = make(tmp_path, monkeypatch, readers)
+    problems = []
+    s.on_problem = problems.append
+    for text in ("one", "two"):
+        s.speak(text, SpeechSettings(), interrupt=False)
+    assert wait_until(lambda: len(readers.calls) == 2 and not s.busy())
+    assert len(problems) == 1 and s.last_problem == problems[0]
+    readers.outcome = Outcome(spoke="nvda", running=["nvda"])
+    s.speak("three", SpeechSettings())
+    assert wait_until(lambda: len(readers.calls) == 3 and not s.busy())
+    assert s.last_problem == ""
+    readers.outcome = unreachable
+    s.speak("four", SpeechSettings())
+    assert wait_until(lambda: len(problems) == 2)
+
+
+@windows_screen_readers
+def test_locked_windows_is_not_a_problem_to_report(tmp_path, monkeypatch):
+    readers = FakeReaders(Outcome(running=["nvda"], locked=True))
+    s = make(tmp_path, monkeypatch, readers)
+    s.speak("A reply", SpeechSettings())
+    assert wait_until(lambda: readers.calls and not s.busy())
+    assert s.last_problem == ""
+
+
+@windows_screen_readers
+def test_a_hung_screen_reader_does_not_stop_speech(tmp_path, monkeypatch):
+    """A JAWS or NVDA call that never returns is given up on, and while it's
+    still out, later announcements aren't sent (no pile of hung threads) and
+    no Windows voice talks over the screen reader."""
+    monkeypatch.setattr(speech, "SCREEN_READER_TIMEOUT", 0.2)
+    release = threading.Event()
+
+    class Hanging(FakeReaders):
+        def speak(self, text, engine, interrupt):
+            self.calls.append(text)
+            release.wait(10)
+            return Outcome(spoke="nvda", running=["nvda"])
+
+    readers = Hanging()
+    s = make(tmp_path, monkeypatch, readers)
+    problems = []
+    s.on_problem = problems.append
+    s.speak("one", SpeechSettings())
+    assert wait_until(lambda: problems)
+    assert problems == ["not spoken: the screen reader didn't answer within 0.2 seconds"]
+    assert wait_until(lambda: not s.busy())
+    s.speak("two", SpeechSettings())
+    assert wait_until(lambda: s.last_route ==
+                      "not spoken: the screen reader is still not answering")
+    assert readers.calls == ["one"] and FakeEngine.started == []
+    release.set()
+    assert wait_until(lambda: not s._reader_call.is_alive())
+    s.speak("three", SpeechSettings())
+    assert wait_until(lambda: s.last_route == "spoke through NVDA")
+    assert readers.calls == ["one", "three"]

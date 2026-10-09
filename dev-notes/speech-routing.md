@@ -242,9 +242,17 @@ Kelly chose A, B, C and D, and E came with B:
    runs only for Windows voices: a screen-reader setting with no screen reader running hands it
    `onecore`, so it can't go looking for one itself.
 3. **No Windows voice over a running screen reader.** If one is running but none takes the text,
-   nothing is spoken; the reason goes to the status bar once per new reason and to Settings under
-   the speech engine. While Windows is locked or on a secure screen
-   (`platform_paths.windows_locked`), nothing is sent.
+   nothing is spoken. The reason goes beside the announcement in the status bar, to one Windows
+   notification (screen readers read those), and to a read-only "Speech problem" box in Settings
+   that Tab reaches. Each new reason is reported once, until speech works again. While Windows is
+   locked or on a secure screen (`platform_paths.windows_locked`), nothing is sent.
+
+   After the code review: only processes in the user's own Windows session count (JAWS also runs
+   at the sign-in screen, in session 0 or the console session, and counting it silenced
+   everything). NVDA also counts as running when it answers `testIfRunning`, whatever its process
+   is called. Each JAWS or NVDA call runs on a helper thread with a 3-second deadline, so a hung
+   screen reader can't stop all speech; while a hung call is still out, nothing more is sent.
+   Error text is reduced to codes (`error_code`), so no message can carry a path into a report.
 4. **Picker:** JAWS and NVDA stay. NVDA is listed whenever the probe finds it installed or running.
    Automatic now reads "your screen reader, or a system voice when none is running".
 5. **Route recorded:** `speech.log` gets a `route:` line after each screen-reader announcement, and

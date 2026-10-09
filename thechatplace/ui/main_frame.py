@@ -141,9 +141,8 @@ class MainFrame(wx.Frame):
         self.speech = SpeechSettings.load()
         self._speech_options = None
         threading.Thread(target=self._probe_speech, daemon=True).start()
-        # A screen reader that's running but can't be reached is reported in
-        # the status bar, not covered by a Windows voice (#98).
-        self._speech_problem = ""
+        # A screen reader that's running but can't be reached is reported, not
+        # covered by a Windows voice (#98).
         speaker.on_problem = lambda reason: wx.CallAfter(self._on_speech_problem, reason)
 
         self._pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix="hub")
@@ -603,19 +602,23 @@ class MainFrame(wx.Frame):
             return False
 
     def _on_speech_problem(self, reason: str):
-        """Say once, in the status bar, why the screen reader didn't speak.
+        """Say why the screen reader didn't speak. The speaker calls this once
+        per problem, until speech works again.
 
         Not spoken: the screen reader is what can't be reached, and a Windows
-        voice over it is the #98 defect. Each new reason is shown once, so it
-        doesn't push every later announcement out of the status bar.
+        voice over it is the #98 defect. So it goes beside the announcement in
+        the status bar (which still has the announcement in it), and to one
+        Windows notification, which screen readers read from their own
+        notification handling even when they can't be reached this way.
         """
-        try:
-            if reason == self._speech_problem:
-                return
-        except RuntimeError:  # the window closed before this ran
-            return
-        self._speech_problem = reason
-        self._status(f"Speech: {reason[0].upper()}{reason[1:]}.")
+        if not self:
+            return  # the window closed before this ran
+        message = f"Speech: {reason[0].upper()}{reason[1:]}."
+        last = self._last_announcement
+        self._status(f"{last} ({message})" if last else message)
+        if self.speech.notifications != NOTIFY_OFF:
+            self._notifier.show("Announcements aren't being spoken",
+                                f"{reason[0].upper()}{reason[1:]}.", None)
 
     def _probe_speech(self):
         try:

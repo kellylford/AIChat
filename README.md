@@ -285,10 +285,12 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
 - **Which voice speaks.** On Windows, Automatic (the default) speaks through JAWS or NVDA,
   whichever is running, in your screen reader's own voice and rate. NVDA needs nothing extra: The
   Chat Place ships NV Access's NVDA Controller Client. A system voice is used only when no screen
-  reader is running. If a screen reader is running but can't be reached, The Chat Place doesn't
-  talk over it in another voice: the status bar says why once, Settings shows it under the speech
-  engine, and the announcement is still on the status bar and in the Windows notification.
-  Nothing is spoken through a screen reader while Windows is locked. Choosing JAWS or NVDA in
+  reader is running in your Windows session. If one is running but can't be reached (or takes
+  more than 3 seconds to answer), The Chat Place doesn't talk over it in another voice. Instead,
+  the status bar shows the announcement with the reason beside it, a Windows notification says
+  announcements aren't being spoken (unless notifications are off), and Settings shows a Speech
+  problem box after the speech engine. Each new reason is reported once, until speech works
+  again. Nothing is spoken through a screen reader while Windows is locked. Choosing JAWS or NVDA in
   Settings only decides which is tried first when both are running. On a Mac, Automatic speaks
   through VoiceOver when it's running, else a system voice.
 - **The status bar** (F6, or Ctrl+9) has parts, as in QuickMail, and Left and Right move between
@@ -646,7 +648,7 @@ Send to Stop.
 Every announcement is also written to `speech.log` in `%TEMP%\thechatplace-speak` (on a Mac,
 `$TMPDIR/thechatplace-speak`), one line each: the time, whether it interrupts or waits its turn,
 the speech engine, and its opening words. On Windows, with a screen reader setting, a `route:` line
-follows: "spoke through NVDA", "no screen reader running, so a Windows voice", or why a running
+usually follows it: "spoke through NVDA", "no screen reader running, so a Windows voice", or why a running
 screen reader didn't speak. A line means the text was handed to the speech engine,
 not that it was heard: a later announcement that interrupts can cut it off. The log shows
 whether a reply went to the screen reader at all when you didn't hear it.

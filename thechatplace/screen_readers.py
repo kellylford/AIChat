@@ -44,10 +44,23 @@ ROUTE_ORDER = {
     "nvda": ("nvda", "jaws"),
 }
 
-#: The process each screen reader runs as.
-PROCESS_NAMES = {"jaws": "jfw.exe", "nvda": "nvda.exe"}
+#: The processes each screen reader runs as. NVDA's folder has other
+#: launchers too, so all three count; NVDA answering its controller client
+#: counts as running whatever the process is called.
+PROCESS_NAMES = {"jaws": ("jfw.exe",),
+                 "nvda": ("nvda.exe", "nvda_uiaccess.exe", "nvda_nouiaccess.exe")}
 
 NAMES = {"jaws": "JAWS", "nvda": "NVDA"}
+
+
+def error_code(exc: BaseException) -> str:
+    """An exception as a code, never its message: Windows and COM messages
+    can name files, and this text goes to the status bar and bug reports."""
+    for attribute in ("hresult", "winerror"):
+        code = getattr(exc, attribute, None)
+        if isinstance(code, int):
+            return f"error 0x{code & 0xFFFFFFFF:08X}" if code < 0 or code > 0xFFFF                 else f"error {code}"
+    return type(exc).__name__
 
 
 def nvda_client_path() -> Path:
@@ -125,10 +138,8 @@ class NvdaClient:
             dll.nvdaController_speakText.restype = ctypes.c_ulong
             dll.nvdaController_speakText.argtypes = [ctypes.c_wchar_p]
         except Exception as exc:  # noqa: BLE001
-            # The error code, not the message: Windows names the file's full
-            # path in it, and this text goes into bug reports.
-            code = getattr(exc, "winerror", None) or type(exc).__name__
-            self._load_error = f"the NVDA controller client couldn't be loaded (error {code})"
+            self._load_error = ("the NVDA controller client couldn't be loaded "
+                                f"({error_code(exc)})")
             return None
         self._dll = dll
         return dll
@@ -155,7 +166,16 @@ class NvdaClient:
                 return f"refused the text (Windows error {code})"
             return None
         except Exception as exc:  # noqa: BLE001
-            return f"failed ({exc})"
+            return f"failed ({error_code(exc)})"
+
+    def answers(self) -> bool:
+        """NVDA's controller is up in this session (its endpoint is per
+        session and desktop), however NVDA's process is named."""
+        dll = self._load()
+        try:
+            return dll is not None and dll.nvdaController_testIfRunning() == 0
+        except Exception:  # noqa: BLE001
+            return False
 
 
 class JawsClient:
@@ -179,13 +199,13 @@ class JawsClient:
             else:
                 api = self._create()
         except Exception as exc:  # noqa: BLE001
-            return f"its speech interface couldn't be reached ({exc})"
+            return f"its speech interface couldn't be reached ({error_code(exc)})"
         try:
             if not api.SayString(text, bool(interrupt)):
                 return "refused the text"
             return None
         except Exception as exc:  # noqa: BLE001
-            return f"failed ({exc})"
+            return f"failed ({error_code(exc)})"
 
 
 class ScreenReaders:
@@ -198,14 +218,20 @@ class ScreenReaders:
         self._processes = processes
         self._locked = locked
 
-    def running(self) -> List[str]:
+    def running(self, order=("jaws", "nvda")) -> List[str]:
+        """The screen readers running in this Windows session, in ``order``."""
         names = self._processes()
-        return [reader for reader in ("jaws", "nvda") if PROCESS_NAMES[reader] in names]
+        found = []
+        for reader in order:
+            if any(name in names for name in PROCESS_NAMES[reader]):
+                found.append(reader)
+            elif reader == "nvda" and self._clients["nvda"].answers():
+                found.append(reader)
+        return found
 
     def speak(self, text: str, engine: str, interrupt: bool) -> Outcome:
         order = ROUTE_ORDER.get(engine, ROUTE_ORDER["auto"])
-        names = self._processes()
-        outcome = Outcome(running=[r for r in order if PROCESS_NAMES[r] in names])
+        outcome = Outcome(running=self.running(order))
         if not outcome.running:
             return outcome
         if self._locked():

@@ -355,8 +355,9 @@ speech engine and rate to use, and whether your own messages are read back when 
 On Windows, **Automatic** speaks through JAWS or NVDA, whichever is running, in your screen
 reader's own voice and rate. NVDA works without installing anything else. A system voice speaks
 only when no screen reader is running, so you never hear a second voice over your screen reader.
-If your screen reader is running but The Chat Place can't reach it, the status bar says why, and
-so does Settings under the speech engine.
+If your screen reader is running but The Chat Place can't reach it, a Windows notification says
+announcements aren't being spoken, the status bar gives the reason beside the announcement, and
+Settings shows it in a Speech problem box after the speech engine.
 
 When you're in another window, The Chat Place can show a notification: when one of its sessions
 finishes a turn, fails or needs you, when the session you have loaded finishes, or when a desktop

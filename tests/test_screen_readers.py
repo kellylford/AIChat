@@ -10,9 +10,13 @@ from markers import windows_screen_readers
 
 
 class FakeClient:
-    def __init__(self, problem=None):
+    def __init__(self, problem=None, answers=False):
         self.problem = problem
         self.calls = []
+        self._answers = answers
+
+    def answers(self):
+        return self._answers
 
     def speak(self, text, interrupt):
         self.calls.append((text, interrupt))
@@ -199,3 +203,38 @@ def test_outcome_describes_two_running_readers_that_both_failed():
                                 "nvda": "didn't answer (Windows error 1722)"})
     assert outcome.describe() == ("not spoken: JAWS is running but refused the text; "
                                   "NVDA is running but didn't answer (Windows error 1722)")
+
+
+def test_nvda_that_answers_counts_as_running_whatever_its_process_is_called():
+    """NVDA's folder has other launchers (nvda_uiAccess.exe...); if it
+    answers its controller, it's running, so no Windows voice speaks over it."""
+    bridge, nvda, _ = readers({"explorer.exe"}, nvda=FakeClient(answers=True))
+    outcome = bridge.speak("x", "auto", True)
+    assert outcome.spoke == "nvda" and outcome.running == ["nvda"]
+
+
+def test_nvdas_other_launchers_count_as_nvda_running():
+    bridge, _, _ = readers({"nvda_uiaccess.exe"})
+    assert bridge.running() == ["nvda"]
+
+
+def test_error_text_is_a_code_never_a_message():
+    class ComError(Exception):
+        hresult = -2147221005  # CO_E_CLASSSTRING
+
+    class WinError(OSError):
+        winerror = 1722
+
+    assert screen_readers.error_code(ComError(r"C:\Users\someone\secret")) == "error 0x800401F3"
+    assert screen_readers.error_code(WinError("x")) == "error 1722"
+    assert screen_readers.error_code(ValueError(r"C:\path")) == "ValueError"
+
+
+@windows_screen_readers
+def test_the_process_list_is_this_sessions_and_includes_this_python():
+    import os
+    import sys
+    from thechatplace import platform_paths
+    names = platform_paths.running_process_names()
+    assert os.path.basename(sys.executable).lower() in names
+    assert isinstance(platform_paths.windows_locked(), bool)

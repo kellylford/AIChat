@@ -279,12 +279,16 @@ def pid_alive(pid: int) -> bool:
 
 
 def running_process_names() -> set:
-    """Lower-case executable names of every running process, e.g. ``nvda.exe``.
+    """Lower-case executable names of the processes running in this Windows
+    session, e.g. ``nvda.exe``.
 
     Windows only (an empty set elsewhere): speech uses it to tell "no screen
     reader is running" from "a screen reader is running but didn't answer"
     (#98), and those two must not be confused, because only the first may fall
-    back to a Windows voice. Never raises; a failure is an empty set.
+    back to a Windows voice. Only this session counts: JAWS and NVDA also run
+    at the sign-in screen and in other users' sessions (fast user switching,
+    Remote Desktop), and those can't speak to this user, so counting them
+    would silence every announcement. Never raises; a failure is an empty set.
     """
     if sys.platform != "win32":
         return set()
@@ -310,6 +314,12 @@ def running_process_names() -> set:
                                                 ctypes.POINTER(PROCESSENTRY32W)]
             getattr(kernel32, name).restype = wintypes.BOOL
         kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel32.ProcessIdToSessionId.argtypes = [wintypes.DWORD,
+                                                  ctypes.POINTER(wintypes.DWORD)]
+        kernel32.ProcessIdToSessionId.restype = wintypes.BOOL
+        mine = wintypes.DWORD()
+        if not kernel32.ProcessIdToSessionId(os.getpid(), ctypes.byref(mine)):
+            return set()
         snapshot = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
         if not snapshot or snapshot == wintypes.HANDLE(-1).value:
             return set()
@@ -318,8 +328,13 @@ def running_process_names() -> set:
             entry = PROCESSENTRY32W()
             entry.dwSize = ctypes.sizeof(PROCESSENTRY32W)
             ok = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
+            session = wintypes.DWORD()
             while ok:
-                names.add(entry.szExeFile.lower())
+                # A process whose session can't be read (a protected system
+                # one) isn't ours.
+                if (kernel32.ProcessIdToSessionId(entry.th32ProcessID, ctypes.byref(session))
+                        and session.value == mine.value):
+                    names.add(entry.szExeFile.lower())
                 ok = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
         finally:
             kernel32.CloseHandle(snapshot)

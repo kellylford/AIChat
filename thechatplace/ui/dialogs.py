@@ -238,6 +238,19 @@ class SettingsDialog(wx.Dialog):
         self.rate_note = wx.StaticText(self, label="")
         outer.Add(self.rate_note, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 
+        # Why the last announcement wasn't spoken, while that's still so
+        # (#98): a read-only box, so Tab reaches it and a screen reader reads
+        # it, as static text under a disabled choice never is.
+        from .. import speech as speech_module
+        problem = speech_module.speaker.last_problem
+        self.speech_problem = None
+        if problem:
+            self.speech_problem = wx.TextCtrl(
+                self, value=f"Last announcement {problem}.",
+                style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL, size=(-1, 44))
+            set_accessible_name(self.speech_problem, "Speech problem")
+            outer.Add(self.speech_problem, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+
         notify_row = wx.BoxSizer(wx.HORIZONTAL)
         notify_row.Add(wx.StaticText(self, label=NOTIFY_SETTING_LABEL), 0,
                        wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
@@ -290,13 +303,7 @@ class SettingsDialog(wx.Dialog):
         option = self._selected_option()
         self.rate_choice.Enable(option.has_rate)
         if option.is_screen_reader:
-            note = "Voice and rate follow your screen reader's own settings."
-            # Why the last announcement wasn't spoken, if it wasn't (#98): the
-            # status bar says it once, and this is where you'd look for it.
-            from .. import speech
-            if speech.speaker.last_route.startswith("not spoken"):
-                note += f"\nLast announcement {speech.speaker.last_route}."
-            self.rate_note.SetLabel(note)
+            self.rate_note.SetLabel("Voice and rate follow your screen reader's own settings.")
         elif option.has_rate:
             self.rate_note.SetLabel("")
         else:
