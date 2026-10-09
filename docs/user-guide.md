@@ -154,6 +154,20 @@ whole conversation so far, and you type its first message. Its title starts as t
 followed by "(continued)". The desktop app session isn't changed, and what you do in the copy
 doesn't appear in it.
 
+### Cowork sessions
+
+The desktop app's **Cowork** sessions are listed too, and like its other sessions they're
+read-only here. Each one's line says "Cowork session", and where a session's folder would be, it
+names the folder you gave Cowork to work on, or just says "Cowork". Press **Enter** to read the
+conversation, and **Open in Claude** (Ctrl+O) to answer it in the desktop app.
+
+A Cowork session can't be continued here: Cowork keeps its conversation inside the desktop app's
+own files and runs its tools in the desktop app, so Continue Here isn't offered for it. Whether
+The Chat Place can tell that a Cowork session is working, and so announce when it answers,
+depends on the version of Claude Code the desktop app runs it with; older versions don't record
+it. The desktop app's Chat conversations are kept on Anthropic's servers rather than on your
+computer, so they aren't listed.
+
 ## Starting a session and replying
 
 ### A new session
@@ -234,8 +248,9 @@ With many sessions, these keep the list manageable.
 ### Choosing which sessions are listed
 
 **View, Show Sessions** (Alt+V, H) chooses what the list shows: all sessions; the ones that need
-you or are working; just the ones that need you; desktop app sessions; The Chat Place's own;
-Remote Control sessions; ungrouped sessions; archived ones; hidden ones; or one of your groups.
+you or are working; just the ones that need you; desktop app sessions; Cowork sessions; The
+Chat Place's own; Remote Control sessions; ungrouped sessions; archived ones; hidden ones; or one
+of your groups.
 **View, Sort Sessions** (Alt+V, O) chooses the order: by status, newest first, oldest first, by
 title, or by folder. Both choices are remembered.
 
