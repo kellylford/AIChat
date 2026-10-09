@@ -117,6 +117,20 @@ def smoke_test(out_path: str) -> int:
     for name in (f"speak-engine.{extension}", f"speak-voices.{extension}"):
         if not (scripts / name).is_file():
             problems.append(f"missing speech script {scripts / name}")
+    if sys.platform == "win32":
+        # NVDA speech (#98): NV Access's client, a data file, and comtypes for
+        # JAWS, imported only when JAWS is asked to speak.
+        from . import screen_readers
+        client = screen_readers.nvda_client_path()
+        report["nvda_client"] = client.is_file()
+        if not client.is_file():
+            problems.append(f"missing NVDA controller client {client}")
+        try:
+            import comtypes.client  # noqa: F401
+            report["comtypes"] = True
+        except Exception as exc:  # noqa: BLE001
+            report["comtypes"] = False
+            problems.append(f"comtypes: {exc}")
     if not platform_paths.app_icon_path().is_file():
         # A build that left out the assets would fall back to a stock icon
         # without a word; the smoke test says so instead (#64).

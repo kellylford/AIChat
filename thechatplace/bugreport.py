@@ -64,9 +64,12 @@ def _system_name() -> str:
     return {"win32": "Windows", "darwin": "macOS"}.get(sys.platform, "System")
 
 
-def environment(speech, counts: Dict[str, int], claude_version: Optional[str] = None) -> List[tuple]:
+def environment(speech, counts: Dict[str, int], claude_version: Optional[str] = None,
+                speech_route: str = "") -> List[tuple]:
     """Facts for the report. ``speech`` is the SpeechSettings; ``counts`` how
-    many sessions of each kind are listed. No names, titles or paths."""
+    many sessions of each kind are listed; ``speech_route`` what the last
+    screen-reader announcement did (#98), which is how a report like "it
+    speaks in the wrong voice" can be answered. No names, titles or paths."""
     try:
         import wx
         wx_version = wx.version()
@@ -86,6 +89,8 @@ def environment(speech, counts: Dict[str, int], claude_version: Optional[str] = 
          + f", sorted {speech.session_order}"),
         ("Reading", "formatted full messages" if speech.formatted_messages else "plain text",),
     ]
+    if speech_route:
+        facts.append(("Last announcement", speech_route))
     if counts:
         facts.append(("Sessions listed", ", ".join(f"{n} {kind}" for kind, n in counts.items())))
     return facts

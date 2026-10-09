@@ -5724,3 +5724,38 @@ def test_prompts_are_on_the_file_menu(frame):
     assert "Prompts...\tCtrl+Shift+P" in labels
     keys = "Cmd+Shift+Return" if wx.Platform == "__WXMAC__" else "Ctrl+Shift+Enter"
     assert f"Send and Save as Prompt... ({keys})" in labels
+
+
+# -- screen reader can't be reached (issue #98) -------------------------------------------
+
+
+def test_an_unreachable_screen_reader_is_reported_once_in_the_status_bar(frame, env):
+    reason = "not spoken: NVDA is running but didn't answer (Windows error 1722)"
+    speech.speaker.on_problem(reason)
+    wx.Yield()
+    assert frame._status_latest == ("Speech: Not spoken: NVDA is running but didn't answer "
+                                    "(Windows error 1722).")
+    frame._status("Session replied.")
+    speech.speaker.on_problem(reason)  # the same reason again: not repeated
+    wx.Yield()
+    assert frame._status_latest == "Session replied."
+
+
+def test_settings_says_why_the_last_announcement_was_not_spoken(frame, monkeypatch):
+    from thechatplace.ui.dialogs import SettingsDialog
+    monkeypatch.setattr(speech.speaker, "last_route",
+                        "not spoken: JAWS is running but refused the text")
+    dialog = SettingsDialog(frame, speech.SpeechSettings(), speech.default_options())
+    try:
+        assert dialog.rate_note.GetLabel() == (
+            "Voice and rate follow your screen reader's own settings.\n"
+            "Last announcement not spoken: JAWS is running but refused the text.")
+    finally:
+        dialog.Destroy()
+    monkeypatch.setattr(speech.speaker, "last_route", "spoke through JAWS")
+    dialog = SettingsDialog(frame, speech.SpeechSettings(), speech.default_options())
+    try:
+        assert dialog.rate_note.GetLabel() == (
+            "Voice and rate follow your screen reader's own settings.")
+    finally:
+        dialog.Destroy()

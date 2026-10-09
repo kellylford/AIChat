@@ -69,3 +69,13 @@ def test_a_mac_report_says_macos_not_windows(monkeypatch):
     monkeypatch.setattr(sys, "platform", "darwin")
     facts = dict(bugreport.environment(SpeechSettings(), {}, claude_version="2.1.292 (Claude Code)"))
     assert "macOS" in facts and "Windows" not in facts
+
+
+def test_the_report_says_what_the_last_announcement_did():
+    """#98 hid because nothing said which route spoke; the report now does."""
+    route = "not spoken: NVDA is running but didn't answer (Windows error 1722)"
+    facts = dict(bugreport.environment(SpeechSettings(), {}, claude_version="x",
+                                       speech_route=route))
+    assert facts["Last announcement"] == route
+    assert "Last announcement" not in dict(
+        bugreport.environment(SpeechSettings(), {}, claude_version="x"))

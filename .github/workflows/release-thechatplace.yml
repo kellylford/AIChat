@@ -106,7 +106,8 @@ jobs:
 
       # --onedir, not --onefile: Velopack swaps an app folder in place, and a onefile exe would
       # unpack itself on every start. velopack is imported lazily, so it is named explicitly; the
-      # speech scripts are data files. --collect-binaries wx brings wx's WebView2Loader.dll, which
+      # speech scripts and NVDA's controller client (thechatplace/nvda, #98) are data files; the
+      # Mac build leaves the client out. --collect-binaries wx brings wx's WebView2Loader.dll, which
       # PyInstaller otherwise leaves out, and without it full messages can't open as a formatted
       # page (#190; the smoke test checks for it).
       - name: Build
@@ -116,7 +117,8 @@ jobs:
             --version-file build/version_info.txt --hidden-import velopack --collect-binaries wx `
             --icon thechatplace/assets/app.ico `
             --add-data "thechatplace/assets;thechatplace/assets" `
-            --add-data "thechatplace/speech;thechatplace/speech" TheChatPlace.pyw
+            --add-data "thechatplace/speech;thechatplace/speech" `
+            --add-data "thechatplace/nvda;thechatplace/nvda" TheChatPlace.pyw
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       # The built app imports everything and checks its data files, without opening a window, so

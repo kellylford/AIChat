@@ -235,3 +235,23 @@ def test_peer_message_announcement():
     assert announce.peer_text("Hub", "", "hi", ANNOUNCE_FULL) ==         "Hub: message from another session. hi"
     assert announce.peer_text("Hub", "x", "hi", ANNOUNCE_SILENT) is None
     assert announce.peer_text("Hub", "x", "  ", ANNOUNCE_FULL) is None
+
+
+def test_nvda_is_offered_whenever_it_is_installed():
+    """The probe calls NVDA "available" only if it finds a controller client
+    of its own, so NVDA vanished from the list on a normal install (#98). The
+    app ships the client now, so installed or running is enough."""
+    from thechatplace.speech import _parse_windows_probe
+    probe = {"screenReaders": [
+        {"engine": "jaws", "name": "JAWS", "available": True, "running": True},
+        {"engine": "nvda", "name": "NVDA", "available": False, "installed": True,
+         "running": False},
+    ], "systemVoices": {"engine": "onecore", "displayName": "Microsoft Zira",
+                        "match": "MSTTS_V110_enUS_ZiraM"}}
+    labels = [o.label for o in _parse_windows_probe(json.dumps(probe))]
+    assert labels[1:] == ["JAWS screen reader",
+                          "NVDA screen reader (not running right now)",
+                          "Microsoft Zira — Windows voice (OneCore)"]
+    probe["screenReaders"] = [{"engine": "nvda", "available": False, "installed": False,
+                               "running": False}]
+    assert [o.engine for o in _parse_windows_probe(json.dumps(probe))] == ["auto", "onecore"]

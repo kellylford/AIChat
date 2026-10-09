@@ -141,6 +141,10 @@ class MainFrame(wx.Frame):
         self.speech = SpeechSettings.load()
         self._speech_options = None
         threading.Thread(target=self._probe_speech, daemon=True).start()
+        # A screen reader that's running but can't be reached is reported in
+        # the status bar, not covered by a Windows voice (#98).
+        self._speech_problem = ""
+        speaker.on_problem = lambda reason: wx.CallAfter(self._on_speech_problem, reason)
 
         self._pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix="hub")
         self._snapshot = Snapshot()
@@ -597,6 +601,21 @@ class MainFrame(wx.Frame):
         except OSError as exc:
             self._say(f"Couldn't save The Chat Place's session list: {exc}")
             return False
+
+    def _on_speech_problem(self, reason: str):
+        """Say once, in the status bar, why the screen reader didn't speak.
+
+        Not spoken: the screen reader is what can't be reached, and a Windows
+        voice over it is the #98 defect. Each new reason is shown once, so it
+        doesn't push every later announcement out of the status bar.
+        """
+        try:
+            if reason == self._speech_problem:
+                return
+        except RuntimeError:  # the window closed before this ran
+            return
+        self._speech_problem = reason
+        self._status(f"Speech: {reason[0].upper()}{reason[1:]}.")
 
     def _probe_speech(self):
         try:
@@ -3794,7 +3813,8 @@ class MainFrame(wx.Frame):
             else {"desktop app": code}
         counts["Chat Place"] = sum(1 for s in listed if s.is_own)
         facts = bugreport.environment(self.speech, counts,
-                                      claude_version=self._claude_version or "checking")
+                                      claude_version=self._claude_version or "checking",
+                                      speech_route=speaker.last_route)
         dialog = BugReportDialog(self, [f"{label}: {value}" for label, value in facts])
         try:
             if dialog.ShowModal() != wx.ID_OK:
@@ -4156,6 +4176,7 @@ class MainFrame(wx.Frame):
         if startup_check is not None:
             startup_check.Stop()
         speaker.stop()
+        speaker.on_problem = None
         self._notifier.close()  # its icon would keep the app running
         self._pool.shutdown(wait=False, cancel_futures=True)
         event.Skip()

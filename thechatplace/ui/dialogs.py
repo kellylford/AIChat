@@ -290,7 +290,13 @@ class SettingsDialog(wx.Dialog):
         option = self._selected_option()
         self.rate_choice.Enable(option.has_rate)
         if option.is_screen_reader:
-            self.rate_note.SetLabel("Voice and rate follow your screen reader's own settings.")
+            note = "Voice and rate follow your screen reader's own settings."
+            # Why the last announcement wasn't spoken, if it wasn't (#98): the
+            # status bar says it once, and this is where you'd look for it.
+            from .. import speech
+            if speech.speaker.last_route.startswith("not spoken"):
+                note += f"\nLast announcement {speech.speaker.last_route}."
+            self.rate_note.SetLabel(note)
         elif option.has_rate:
             self.rate_note.SetLabel("")
         else:

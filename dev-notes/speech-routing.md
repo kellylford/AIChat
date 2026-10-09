@@ -228,13 +228,34 @@ others simple. Without it we keep patching a PowerShell script shared with Claud
 README's speech section and the release notes would say NVDA works out of the box, and the
 licence line would go in the README's credits.
 
-## Questions for Kelly
+## Decisions and what was built (9 October 2026)
 
-1. Ship the NVDA controller client DLL (A)? Everyone else does, and it's LGPL 2.1.
-2. Move speech to screen readers into the app's process (B), or keep the PowerShell script and
-   only bundle the DLL? (A alone is a smaller fix and would cure #98; B is the better long-term
-   design.)
-3. When a screen reader is running but can't be reached, rely on the Windows notification and stay
-   silent otherwise (C), or keep falling back to a system voice?
-4. Keep the JAWS and NVDA entries in the picker? They still matter for forcing one reader when
-   both run.
+Kelly chose A, B, C and D, and E came with B:
+
+1. **Ship the DLL.** `thechatplace/nvda/x64` and `arm64` hold NV Access's 2026.2
+   `nvdaControllerClient.dll`, unmodified, with `license.txt` and a README giving the source and
+   SHA-256. They're added to the Windows build only, not the Mac one.
+2. **Call screen readers from the app.** `thechatplace/screen_readers.py` loads the DLL once with
+   ctypes and reaches JAWS through `comtypes` (new, Windows only). Each is tried only if its
+   process (`jfw.exe`, `nvda.exe`) is running; NVDA must also pass `testIfRunning`. The speaker's
+   worker thread does it, with COM set up on that thread. `speak-engine.ps1` is unchanged and now
+   runs only for Windows voices: a screen-reader setting with no screen reader running hands it
+   `onecore`, so it can't go looking for one itself.
+3. **No Windows voice over a running screen reader.** If one is running but none takes the text,
+   nothing is spoken; the reason goes to the status bar once per new reason and to Settings under
+   the speech engine. While Windows is locked or on a secure screen
+   (`platform_paths.windows_locked`), nothing is sent.
+4. **Picker:** JAWS and NVDA stay. NVDA is listed whenever the probe finds it installed or running.
+   Automatic now reads "your screen reader, or a system voice when none is running".
+5. **Route recorded:** `speech.log` gets a `route:` line after each screen-reader announcement, and
+   Help, Report a Bug includes it as "Last announcement".
+
+Tested in the vmtest VM (ARM64 Windows 11, NVDA 2026.2): from source on native ARM64 Python, which
+uses the arm64 DLL, NVDA spoke and no Windows voice started. With the DLL removed, nothing was
+spoken and the reason was reported. With NVDA stopped, the OneCore voice spoke. The x64
+PyInstaller build, running under emulation, logged "route: spoke through NVDA" for its
+announcements. On Kelly's PC, JAWS spoke through the in-process path.
+
+Found along the way: the build doesn't include `msvcp140.dll`, so on a clean Windows without the
+Visual C++ runtime, wx fails to load and the app exits at once. That predates this work and needs
+its own issue.

@@ -8,15 +8,18 @@ endings in every listed session are announced; the temp folder is
 ``thechatplace-speak``. Speech is on by default, through the screen reader
 when one is running, because announcements are the point of this app.
 
-The actual speech routing is ClaudeSpeak's (TheWorkBench repo), bundled
-verbatim (IDT's copy, with its middle-of-the-scale default rates):
-``thechatplace/speech/speak-engine.ps1`` routes JAWS → NVDA → OneCore →
-SAPI on Windows, ``thechatplace/speech/speak-engine.sh`` routes VoiceOver → say on
-macOS. Both were verified on real hardware there; this module is only the
-harness around them — settings, engine/voice enumeration, the detached
-speaker process, and interruption by killing the previous speaker before
-starting the next (the same process model ClaudeSpeak uses for its Claude
-Code hook).
+On Windows, JAWS and NVDA are called from this process by
+``screen_readers.py``, with NV Access's controller client bundled, because
+NVDA doesn't install it and its absence sent every NVDA user to a Windows
+voice (#98). When a screen reader is running, a Windows voice never speaks
+over it. Windows voices, and VoiceOver and ``say`` on macOS, go through
+ClaudeSpeak's engine scripts (TheWorkBench repo), bundled verbatim (IDT's
+copy, with its middle-of-the-scale default rates):
+``thechatplace/speech/speak-engine.ps1`` and ``speak-engine.sh``. This module
+is the harness around them — settings, engine/voice enumeration, the
+detached speaker process, and interruption by killing the previous speaker
+before starting the next (the same process model ClaudeSpeak uses for its
+Claude Code hook).
 
 Design rules inherited from that investigation, kept on purpose:
 
@@ -25,9 +28,9 @@ Design rules inherited from that investigation, kept on purpose:
   not a feature.
 * **Speech never blocks and never raises.** The speaker is a detached hidden
   process; a failure leaves at most ``last-route.log`` in the temp dir.
-* **A clean exit only proves something spoke.** The engine scripts log which
-  route actually ran, because a broken route falling back to a system voice
-  is indistinguishable by ear.
+* **A clean exit only proves something spoke.** ``speech.log`` records which
+  route took each screen-reader announcement, because a broken route falling
+  back to a system voice is indistinguishable by ear (that's how #98 hid).
 
 No wx imports here: the module is used by the wx app but testable without it.
 """
@@ -46,7 +49,7 @@ import time
 from collections import deque
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 __all__ = [
     "SpeechOption",
@@ -112,6 +115,8 @@ NOTIFY_LABELS = {
 }
 
 _SCREEN_READER_ENGINES = {"auto", "jaws", "nvda", "voiceover"}
+#: The engine settings that speak through JAWS or NVDA from this process (#98).
+_WINDOWS_SCREEN_READER_ENGINES = {"auto", "jaws", "nvda"}
 
 
 @dataclass
@@ -239,15 +244,19 @@ def _script_dir() -> Path:
 # ---------------------------------------------------------------------------
 
 
+#: A Windows voice speaks only when no screen reader is running (#98).
+AUTO_LABEL = "Automatic (your screen reader, or a system voice when none is running)"
+
+
 def default_options() -> List[SpeechOption]:
     """What the picker offers when probing fails or has not finished.
 
-    "Automatic" always works — the engine scripts fall through to a system
-    voice on their own — so a failed probe degrades to fewer choices, never
-    to a broken feature.
+    "Automatic" always works — the running screen reader, else a system
+    voice — so a failed probe degrades to fewer choices, never to a broken
+    feature.
     """
     options = [
-        SpeechOption("auto", "", "Automatic (screen reader first, then a system voice)")
+        SpeechOption("auto", "", AUTO_LABEL)
     ]
     if sys.platform == "win32":
         options += [
@@ -265,7 +274,7 @@ def default_options() -> List[SpeechOption]:
 def _parse_windows_probe(raw: str) -> List[SpeechOption]:
     data = json.loads(raw)
     options = [
-        SpeechOption("auto", "", "Automatic (screen reader first, then a system voice)")
+        SpeechOption("auto", "", AUTO_LABEL)
     ]
 
     def _as_list(value):
@@ -275,7 +284,12 @@ def _parse_windows_probe(raw: str) -> List[SpeechOption]:
         return value or []
 
     for reader in _as_list(data.get("screenReaders")):
-        if not reader.get("available"):
+        # "available" means the probe found NVDA's controller client itself.
+        # The app ships its own now (#98), so installed is enough; leaving
+        # NVDA out of the list, with no reason given, hid the #98 bug.
+        usable = reader.get("available") or (
+            reader.get("engine") == "nvda" and (reader.get("installed") or reader.get("running")))
+        if not usable:
             continue
         name = reader.get("name") or reader.get("engine", "").upper()
         suffix = "" if reader.get("running") else " (not running right now)"
@@ -410,13 +424,25 @@ class Speaker:
     killing our process cannot silence speech the reader already queued.
     """
 
-    def __init__(self, popen=subprocess.Popen):
+    def __init__(self, popen=subprocess.Popen, screen_readers=None):
         self._popen = popen
+        self._screen_readers = screen_readers
         self._lock = threading.Lock()
-        self._queue: "deque[list]" = deque()
+        self._queue: "deque[tuple]" = deque()
         self._running: List[subprocess.Popen] = []
         self._worker: Optional[threading.Thread] = None
         self._generation = 0
+        #: Called on the speech thread with a one-line reason when a screen
+        #: reader is running but didn't take an announcement (#98).
+        self.on_problem: Optional[Callable[[str], None]] = None
+        #: What the last screen-reader announcement did, for the bug report.
+        self.last_route = ""
+
+    def _readers(self):
+        if self._screen_readers is None:
+            from .screen_readers import ScreenReaders
+            self._screen_readers = ScreenReaders()
+        return self._screen_readers
 
     @property
     def workdir(self) -> Path:
@@ -464,12 +490,20 @@ class Speaker:
             # UTF-8 without BOM on purpose: the engine scripts read UTF-8,
             # and a BOM breaks ConvertFrom-Json in Windows PowerShell.
             text_file.write_text(spoken, encoding="utf-8")
+            engine, voice, rate = settings.engine, settings.voice, settings.resolved_rate()
+            request = None
+            if sys.platform == "win32" and settings.engine in _WINDOWS_SCREEN_READER_ENGINES:
+                # JAWS and NVDA are called from this process (#98). The engine
+                # script only runs if no screen reader is, so it gets a plain
+                # Windows voice and can't reach for a screen reader itself.
+                request = (spoken, settings.engine, interrupt)
+                engine, voice, rate = "onecore", "", None
             config_file.write_text(
                 json.dumps(
                     {
-                        "engine": settings.engine,
-                        "voice": settings.voice,
-                        "rate": settings.resolved_rate(),
+                        "engine": engine,
+                        "voice": voice,
+                        "rate": rate,
                         "interrupt": interrupt,
                         "nvdaClientDll": "",
                     }
@@ -483,7 +517,7 @@ class Speaker:
             return False
         self._log(spoken, settings, interrupt)
         with self._lock:
-            self._queue.append(command)
+            self._queue.append((command, request))
             if self._worker is None or not self._worker.is_alive():
                 self._worker = threading.Thread(target=self._drain, name="speech",
                                                 daemon=True)
@@ -491,13 +525,35 @@ class Speaker:
         return True
 
     def _drain(self) -> None:
+        # JAWS is a COM object, and COM has to be set up on the thread that
+        # calls it.
+        com = None
+        if sys.platform == "win32":
+            try:
+                import comtypes
+                comtypes.CoInitialize()
+                com = comtypes
+            except Exception:  # noqa: BLE001 - JAWS then reports why it failed
+                com = None
+        try:
+            self._drain_queue()
+        finally:
+            if com is not None:
+                try:
+                    com.CoUninitialize()
+                except Exception:  # noqa: BLE001
+                    pass
+
+    def _drain_queue(self) -> None:
         while True:
             with self._lock:
                 if not self._queue:
                     self._worker = None
                     return
-                command = self._queue.popleft()
+                command, request = self._queue.popleft()
                 generation = self._generation
+            if request is not None and self._to_screen_reader(request):
+                continue
             kwargs = {}
             if sys.platform == "win32":
                 kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
@@ -530,6 +586,36 @@ class Speaker:
             with self._lock:
                 if process in self._running:
                     self._running.remove(process)
+
+    def _to_screen_reader(self, request) -> bool:
+        """Hand an announcement to the running screen reader. True when that
+        settles it, so the Windows voice must not speak; False when no screen
+        reader is running and it may.
+
+        A screen reader that's running but didn't answer also settles it: a
+        Windows voice talking over the user's screen reader, in a voice they
+        didn't choose, is the defect in #98. The reason goes to
+        ``on_problem`` instead, and the announcement is still in the status
+        bar and the Windows notification.
+        """
+        try:
+            outcome = self._readers().speak(*request)
+        except Exception as exc:  # noqa: BLE001 - speech never raises
+            self.last_route = f"screen readers couldn't be checked ({type(exc).__name__}), so a Windows voice"
+            self._log_route(self.last_route)
+            return False
+        if not outcome.running:
+            self.last_route = "no screen reader running, so a Windows voice"
+            self._log_route(self.last_route)
+            return False
+        self.last_route = outcome.describe()
+        self._log_route(self.last_route)
+        if outcome.unreachable and self.on_problem is not None:
+            try:
+                self.on_problem(self.last_route)
+            except Exception:  # noqa: BLE001
+                pass
+        return True
 
     def busy(self) -> bool:
         with self._lock:
@@ -573,6 +659,15 @@ class Speaker:
                 path.write_text(kept, encoding="utf-8")
             with path.open("a", encoding="utf-8") as log:
                 log.write(line)
+        except Exception:  # noqa: BLE001 - a log must never stop speech
+            pass
+
+    def _log_route(self, route: str) -> None:
+        """What happened to the announcement logged just before, so a bug
+        report can say whether the screen reader spoke (#98)."""
+        try:
+            with (self.workdir / "speech.log").open("a", encoding="utf-8") as log:
+                log.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} route: {route}\n")
         except Exception:  # noqa: BLE001 - a log must never stop speech
             pass
 

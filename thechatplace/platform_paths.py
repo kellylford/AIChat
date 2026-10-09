@@ -278,6 +278,106 @@ def pid_alive(pid: int) -> bool:
     return True
 
 
+def running_process_names() -> set:
+    """Lower-case executable names of every running process, e.g. ``nvda.exe``.
+
+    Windows only (an empty set elsewhere): speech uses it to tell "no screen
+    reader is running" from "a screen reader is running but didn't answer"
+    (#98), and those two must not be confused, because only the first may fall
+    back to a Windows voice. Never raises; a failure is an empty set.
+    """
+    if sys.platform != "win32":
+        return set()
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class PROCESSENTRY32W(ctypes.Structure):
+            _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD),
+                        ("th32ProcessID", wintypes.DWORD),
+                        ("th32DefaultHeapID", ctypes.c_size_t),
+                        ("th32ModuleID", wintypes.DWORD), ("cntThreads", wintypes.DWORD),
+                        ("th32ParentProcessID", wintypes.DWORD),
+                        ("pcPriClassBase", ctypes.c_long), ("dwFlags", wintypes.DWORD),
+                        ("szExeFile", ctypes.c_wchar * 260)]
+
+        TH32CS_SNAPPROCESS = 0x2
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+        kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+        for name in ("Process32FirstW", "Process32NextW"):
+            getattr(kernel32, name).argtypes = [wintypes.HANDLE,
+                                                ctypes.POINTER(PROCESSENTRY32W)]
+            getattr(kernel32, name).restype = wintypes.BOOL
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        snapshot = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+        if not snapshot or snapshot == wintypes.HANDLE(-1).value:
+            return set()
+        names = set()
+        try:
+            entry = PROCESSENTRY32W()
+            entry.dwSize = ctypes.sizeof(PROCESSENTRY32W)
+            ok = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
+            while ok:
+                names.add(entry.szExeFile.lower())
+                ok = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
+        finally:
+            kernel32.CloseHandle(snapshot)
+        return names
+    except Exception:  # noqa: BLE001 - best effort, see the docstring
+        return set()
+
+
+def windows_locked() -> bool:
+    """True while Windows is locked or showing a secure screen (a UAC prompt,
+    Ctrl+Alt+Del). Screen readers keep running there, and NV Access asks apps
+    not to send them text then, so a session's reply isn't read out on the
+    lock screen (#98). False on other systems, and whenever it can't tell:
+    a wrong True would silence every announcement.
+    """
+    if sys.platform != "win32":
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        wtsapi = ctypes.WinDLL("wtsapi32")
+        wtsapi.WTSQuerySessionInformationW.argtypes = [
+            wintypes.HANDLE, wintypes.DWORD, ctypes.c_int,
+            ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(wintypes.DWORD)]
+        wtsapi.WTSFreeMemory.argtypes = [ctypes.c_void_p]
+        WTS_CURRENT_SESSION = 0xFFFFFFFF
+        WTSSessionInfoEx = 25
+        WTS_SESSIONSTATE_LOCK = 0
+        buffer, size = ctypes.c_void_p(), wintypes.DWORD()
+        if wtsapi.WTSQuerySessionInformationW(None, WTS_CURRENT_SESSION, WTSSessionInfoEx,
+                                              ctypes.byref(buffer), ctypes.byref(size)):
+            try:
+                # WTSINFOEXW: a DWORD level, then the level-1 union, aligned to
+                # 8 (it holds LARGE_INTEGERs): SessionId at 8, SessionState at
+                # 12, SessionFlags at 16.
+                if size.value >= 20:
+                    flags = ctypes.cast(buffer, ctypes.POINTER(ctypes.c_long))[4]
+                    if flags == WTS_SESSIONSTATE_LOCK:
+                        return True
+            finally:
+                wtsapi.WTSFreeMemory(buffer)
+        # A secure screen while unlocked: the input desktop isn't ours, and
+        # opening it is refused. Only that refusal counts, not other failures.
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32.OpenInputDesktop.restype = wintypes.HANDLE
+        user32.OpenInputDesktop.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        user32.CloseDesktop.argtypes = [wintypes.HANDLE]
+        DESKTOP_READOBJECTS = 0x0001
+        desktop = user32.OpenInputDesktop(0, False, DESKTOP_READOBJECTS)
+        if not desktop:
+            return ctypes.get_last_error() == 5  # ERROR_ACCESS_DENIED
+        user32.CloseDesktop(desktop)
+        return False
+    except Exception:  # noqa: BLE001 - can't tell, so not locked
+        return False
+
+
 def open_url(url: str) -> None:
     """Hand a URL to the shell (the Claude desktop app owns ``claude://``)."""
     if sys.platform == "win32":
