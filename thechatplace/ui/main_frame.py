@@ -243,8 +243,19 @@ class MainFrame(wx.Frame):
         self._chat_timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self._on_chat_timer, self._chat_timer)
         # Links another copy of The Chat Place handed over (#144).
-        self._link_timer = wx.Timer(self)
-        self.Bind(wx.EVT_TIMER, lambda e: self._check_link_inbox(), self._link_timer)
+        # The timer is its own event handler, not the window: it ticks every
+        # second, so a tick already queued when the window is destroyed (a
+        # Mac destroys it later, at idle time) must never be delivered to a
+        # window that's gone. It stops itself once the window is.
+        link_timer = wx.Timer()
+
+        def link_tick(_event):
+            if not self:
+                link_timer.Stop()
+                return
+            self._check_link_inbox()
+        link_timer.Bind(wx.EVT_TIMER, link_tick)
+        self._link_timer = link_timer
         self._link_timer.Start(LINK_CHECK_MS)
 
         if self.store.load_error:
