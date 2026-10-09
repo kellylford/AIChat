@@ -43,7 +43,7 @@ can't find it, and to sign you in when it isn't signed in.</p>
 <p>The Chat Place never uses an API key. Reading sessions costs nothing, because everything it reads
 is on your own computer. Messages you send in its own sessions are Claude Code turns, which count
 against your plan's monthly Agent SDK credit; past that credit, turns stop unless you've turned on
-extra usage, which is billed. View, Usage and Context (Ctrl+Shift+U) says where you stand.</p>
+extra usage, which is billed. View, Usage and Context (Ctrl+Shift+U) shows where you stand.</p>
 <h3>Installing</h3>
 <p><strong>Windows:</strong> download <code>TheChatPlace-windows-Setup.exe</code> from the newest release on the
 <a href="https://github.com/kellylford/AIChat/releases">releases page</a> and run it. It installs for you
@@ -272,9 +272,11 @@ notification is shown.</p>
 <li><strong>Changed Files</strong> (Ctrl+Shift+D) lists the files Claude changed since your latest message, or in
   the whole session, with how many lines were added and removed. Enter on a file reads its changes
   line by line. It works for desktop app sessions too.</li>
-<li><strong>Usage and Context</strong> (Ctrl+Shift+U) says how full the session's context is ("Context 62% full:
-  124,000 of 200,000 tokens") and how much of your plan's limits are used. It's also said once,
-  unasked, when the context passes 80%, or a limit passes 90%.</li>
+<li><strong>Usage and Context</strong> (Ctrl+Shift+U) opens a list to read with the arrow keys: how full the
+  session's context is ("Context 62% full: 124,000 of 200,000 tokens"), then each of your plan's
+  usage limits on its own line. Ctrl+C copies the selected line, Copy All (Alt+A) copies every
+  line, and Escape closes the list. It's also said once, unasked, when the context passes 80%, or
+  a limit passes 90%.</li>
 <li><strong>Export</strong> (Ctrl+E) saves a session's conversation as Markdown, a web page or plain text.</li>
 <li><strong>What Claude Knows About You</strong> (Ctrl+Shift+K) lists what Claude Code keeps about you: your
   instructions (CLAUDE.md files), the memories it saved, your skills, subagents, commands and

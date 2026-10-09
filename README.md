@@ -29,7 +29,7 @@ It runs on your existing Claude subscription, signed in to Claude Code, and neve
 key. Its own sessions' turns are Claude Code turns in headless mode (`claude -p`). Anthropic's
 help article [Use the Claude Agent SDK with your Claude plan](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan)
 says those count against a monthly credit; past it, turns stop unless you've turned on extra
-usage, which is billed. View, Usage and Context (Ctrl+Shift+U) says where you
+usage, which is billed. View, Usage and Context (Ctrl+Shift+U) shows where you
 stand. Reading the desktop app's sessions costs nothing.
 
 ## What it does
@@ -292,12 +292,15 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   subagent Claude hands work to, and notebook edits, aren't counted yet. When the loaded
   session's turn ends, the announcement (at the full level) is followed by a one-line summary:
   "Changed 3 files: main_frame.py, 40 lines added, 12 removed; …".
-- **Usage and Context** (Ctrl+Shift+U, View menu) says how full the loaded session's context is
-  ("Context 62% full: 124,000 of 200,000 tokens"), from the token counts of Claude's latest
+- **Usage and Context** (Ctrl+Shift+U, View menu) opens a list to read with the arrow keys: first
+  how full the loaded session's context is ("Quiet one: Context 62% full: 124,000 of 200,000
+  tokens"), then each of your plan's usage limits on a line of its own. When something isn't known
+  yet, the line says so. Copy (Alt+C), or Ctrl+C in the list, copies the selected line, and Copy
+  All (Alt+A) copies every line; Escape or Close (Alt+L) closes it. The context comes from the token counts of Claude's latest
   reply (the percentage only once the window's size is known: Claude Code reports it for a model
   when one of The Chat Place's sessions runs a turn on it, and a session past 200,000 tokens has the
-  1,000,000 window), and how much of your plan's limits are used, as the latest turn reported them ("5-hour
-  limit 8% used, resets at 10:00 AM. Weekly limit 34% used, resets on Friday at 9:00 AM.").
+  1,000,000 window), and the limits are as the latest turn reported them ("5-hour limit 8% used,
+  resets at 10:00 AM.", then "Weekly limit 34% used, resets on Friday at 9:00 AM.").
   It's said once, unasked, when the loaded session's context passes 80%, when a limit passes
   90% or is reached, and when Claude Code compacts a conversation (the messages list shows
   "Conversation compacted" too). A turn that fails on a usage limit says so in plain words,
@@ -495,7 +498,7 @@ shows it as plain text instead.
 | Anywhere | Ctrl+Shift+F | Attach files or images to the next message |
 | Anywhere | Ctrl+Shift+M | Other machines: list your sessions on other computers and message one |
 | Anywhere | Ctrl+Shift+D | Changed files, and each change to read by line |
-| Anywhere | Ctrl+Shift+U | Usage and context: how full the context is, and plan limits |
+| Anywhere | Ctrl+Shift+U | Usage and context: a list of how full the context is, and each plan limit |
 | Anywhere | Alt+V, H | Show Sessions: choose which sessions are listed |
 | Anywhere | Ctrl+Shift+N | Continue the selected (or loaded) desktop app session here, as a copy |
 | Session list | F5 | Refresh the list now and put it in order |

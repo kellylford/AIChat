@@ -80,7 +80,7 @@ from ..rendering import html_page, message_page
 from ..ui_text import markdown_as_text, shortcuts_html
 from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, AboutYouDialog, ChangesDialog, CodeBlocksDialog, FormattedMessageDialog,
                       BugReportDialog, CommandPickerDialog, MessageDialog, NewSessionDialog, PermissionDialog, PlanDialog,
-                      ManageGroupsDialog, QuestionDialog, SettingsDialog, ShortcutsDialog,
+                      ManageGroupsDialog, QuestionDialog, SettingsDialog, ShortcutsDialog, UsageDialog,
                       formatted_view_available)
 
 APP_NAME = "The Chat Place"
@@ -311,7 +311,7 @@ class MainFrame(wx.Frame):
         self.Bind(wx.EVT_MENU, self.on_toggle_activity_menu, self.activity_item)
         self._item(view, "Sto&p Running Turn\tCtrl+.", self.on_stop)
         self._item(view, "T&urn Status\tCtrl+Shift+T", self.on_turn_status)
-        self._item(view, "Usage and &Context\tCtrl+Shift+U", lambda e: self.on_usage())
+        self._item(view, "Usage and &Context...\tCtrl+Shift+U", lambda e: self.on_usage())
         self._item(view, "Change&d Files...\tCtrl+Shift+D", lambda e: self.on_changes())
         self._item(view, "Repeat &Last Announcement\tCtrl+Shift+R",
                    lambda e: self._say(self._last_announcement, force=True))
@@ -1872,13 +1872,22 @@ class MainFrame(wx.Frame):
 
     def on_usage(self):
         """View, Usage and Context (Ctrl+Shift+U): how full the loaded
-        session's context is, and how much of the plan's limits are used."""
-        parts = []
+        session's context is, and how much of the plan's limits are used, as
+        a list to arrow through (#130). It used to be only spoken, which
+        left someone who can't follow the system voice (#98) nothing to
+        read. The dialog's title and the focused line are what a screen
+        reader says, so nothing is spoken on top."""
+        context = None
         if self._open is not None:
-            tokens, window = self._context(self._open)
-            parts.append(f"{self._open.title}: {usage.context_text(tokens, window)}")
-        parts.append(usage.limits_text(self._limits))
-        self._feedback(" ".join(parts))
+            context = (self._open.title, *self._context(self._open))
+        lines = usage.usage_lines(context, self._limits)
+        self._modal(UsageDialog(self, lines, self._copy_usage))
+
+    def _copy_usage(self, text: str, one_line: bool):
+        if self._copy_text(text):
+            self._feedback("Copied the line." if one_line else "Copied usage and context.")
+        else:
+            self._feedback("Couldn't open the clipboard.")
 
     def on_changes(self):
         """View, Changed Files (Ctrl+Shift+D): the files Claude changed since
