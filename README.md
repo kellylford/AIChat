@@ -52,12 +52,24 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   and a new one is added at the end. F5, or a refresh while you're elsewhere, puts it back in
   order, keeping you on the same session.
   **View, Show Sessions** (Alt+V, H) chooses which sessions are listed: all, needs you or
-  working, needs you, desktop app sessions (Code and Cowork), just Cowork sessions, The Chat
+  working, needs you, working, with a new reply (a Chat Place session whose reply you haven't
+  loaded yet), idle, desktop app sessions (Code and Cowork), just Cowork sessions, The Chat
   Place's own, Remote Control sessions (desktop app sessions linked for Remote Control, and Chat
   Place sessions you've turned it on for or that have connected), ungrouped (in none of your
   groups or the desktop app's), archived (the desktop app's archived sessions, otherwise
   hidden), hidden (the ones you've hidden), or one of your groups. The list's name says what it
   shows and how many ("Session list, needs you, 2 of 139"), and the choice is remembered.
+  Choosing one keeps you on the same session when it's still listed.
+  **View, Session List Columns** (Alt+V, E) chooses what each line says and in what order, so
+  it can start with the status rather than the title. The columns are Title, Folder,
+  Status, New reply, Last activity, Kind (Chat Place or Cowork), Remote Control, Archived,
+  Hidden and Groups; a column with nothing to say for a session is left out of its line. The
+  dialog has Available columns and Shown columns (in the order they're read), with Add, Remove,
+  Move Up, Move Down, Move to Top, Move to Bottom and Reset to Default, and a preview of the
+  selected session's line. Enter in Available adds a column, Delete in Shown removes one, and
+  Alt+Up, Alt+Down, Alt+Home and Alt+End in Shown move it (Option on a Mac); each is said
+  ("Status moved to top, 1 of 10") and you stay on the column you moved. OK saves the choice
+  in The Chat Place's settings and rewrites the list at once; Escape cancels.
   Arrowing doesn't load anything; **Enter loads that session** into the messages list, moves you
   there, and says "Loaded Quiet one, 12 messages."
 - **Hide or delete a session.** **Delete** (File, Hide Session) takes the selected session out of
@@ -500,6 +512,7 @@ shows it as plain text instead.
 | Anywhere | Ctrl+Shift+D | Changed files, and each change to read by line |
 | Anywhere | Ctrl+Shift+U | Usage and context: a list of how full the context is, and each plan limit |
 | Anywhere | Alt+V, H | Show Sessions: choose which sessions are listed |
+| Anywhere | Alt+V, E | Session List Columns: choose what each session's line says, and in what order |
 | Anywhere | Ctrl+Shift+N | Continue the selected (or loaded) desktop app session here, as a copy |
 | Session list | F5 | Refresh the list now and put it in order |
 | Session list | Delete | Hide the selected session (View, Show Sessions, Hidden lists it; File, Bring Back Session returns it) |

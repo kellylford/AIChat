@@ -44,7 +44,7 @@ import tempfile
 import threading
 import time
 from collections import deque
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
@@ -131,6 +131,11 @@ class SpeechOption:
         return self.engine in RATE_PRESETS
 
 
+def _default_fields() -> List[str]:
+    from .sessions import DEFAULT_FIELDS
+    return list(DEFAULT_FIELDS)
+
+
 @dataclass
 class SpeechSettings:
     """What the user chose. Persisted as one small JSON file."""
@@ -160,6 +165,9 @@ class SpeechSettings:
     #: Remote Control for The Chat Place's sessions unless a session says
     #: otherwise (#72).
     remote_control: bool = False
+    #: The session list's columns, in the order each row reads them (View,
+    #: Session List Columns, #134): ids from ``sessions.FIELD_IDS``.
+    session_fields: List[str] = field(default_factory=lambda: _default_fields())
 
     @property
     def enabled(self) -> bool:
@@ -200,6 +208,8 @@ class SpeechSettings:
         notify = str(raw.get("notifications", NOTIFY_ALL))
         settings.notifications = notify if notify in NOTIFY_LEVELS else NOTIFY_ALL
         settings.remote_control = raw.get("remote_control") is True
+        from .sessions import clean_fields
+        settings.session_fields = clean_fields(raw.get("session_fields"))
         return settings
 
     def save(self, path: Optional[Path] = None) -> None:

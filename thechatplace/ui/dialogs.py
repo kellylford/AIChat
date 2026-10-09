@@ -8,6 +8,7 @@ import wx
 
 from ..changes import file_text
 from ..claude_cli import DEFAULT_PERMISSION_MODE, MODELS, PERMISSION_MODES
+from ..sessions import DEFAULT_FIELDS, FIELD_IDS, FIELD_NAMES, clean_fields, field_short_name
 from ..speech import (ANNOUNCE_LABELS, ANNOUNCE_LEVELS, NOTIFY_LABELS, NOTIFY_LEVELS, RATE_PRESET_LABELS,
                       SpeechSettings)
 from ..ui_text import shortcuts_text
@@ -1353,3 +1354,208 @@ class AboutYouDialog(wx.Dialog):
         item = self.selected_item()
         if item is not None:
             self._copy(str(item.path))
+
+
+class SessionColumnsDialog(wx.Dialog):
+    """View, Session List Columns (#134): which parts each session row reads,
+    and in what order, so a row can start with its status. Modelled on
+    QuickMail's message list fields: the columns not shown, the ones shown in
+    the order they're read, Add, Remove, Move Up, Move Down, Move to Top,
+    Move to Bottom and Reset to Default, and a preview of the selected
+    session's row. OK keeps the choice; Cancel (or Escape) leaves it.
+
+    Keys as well as the buttons, since a Mac has no Alt+letter access keys:
+    Enter in Available adds, Delete in Shown removes, and Alt+Up, Alt+Down,
+    Alt+Home and Alt+End in Shown move (Option on a Mac), as QuickMail's
+    Alt+Up and Alt+Down do. Every action is said (``say``), and focus stays
+    on the column it moved, so arrowing on reads its new neighbours."""
+
+    def __init__(self, parent, fields, sample, say):
+        """``fields``: the shown column ids, in order. ``sample``: the
+        session whose row the preview shows. ``say(text)`` speaks."""
+        super().__init__(parent, title="Session List Columns", size=(640, 560),
+                         style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+        self._shown = clean_fields(list(fields))
+        self._sample = sample
+        self._say = say
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer.Add(wx.StaticText(self, label=(
+            "Each session in the list is read as one line. Choose what it says, and in "
+            "what order: put Status first to hear what each session is doing before "
+            "its title.")), 0, wx.LEFT | wx.TOP | wx.RIGHT, 8)
+        lists = wx.BoxSizer(wx.HORIZONTAL)
+        left = wx.BoxSizer(wx.VERTICAL)
+        left.Add(wx.StaticText(self, label="A&vailable columns:"), 0, wx.BOTTOM, 4)
+        self.available = wx.ListBox(self, style=wx.LB_SINGLE)
+        set_accessible_name(self.available, "Available columns")
+        self.available.SetMinSize((220, 200))
+        left.Add(self.available, 1, wx.EXPAND)
+        lists.Add(left, 1, wx.EXPAND | wx.ALL, 8)
+        right = wx.BoxSizer(wx.VERTICAL)
+        right.Add(wx.StaticText(self, label="&Shown columns, in the order they're read:"),
+                  0, wx.BOTTOM, 4)
+        self.shown = wx.ListBox(self, style=wx.LB_SINGLE)
+        set_accessible_name(self.shown, "Shown columns, in the order they're read")
+        self.shown.SetMinSize((220, 200))
+        right.Add(self.shown, 1, wx.EXPAND)
+        lists.Add(right, 1, wx.EXPAND | wx.ALL, 8)
+        sizer.Add(lists, 1, wx.EXPAND)
+        row = wx.WrapSizer(wx.HORIZONTAL)
+        self.add_btn = wx.Button(self, label="&Add")
+        self.remove_btn = wx.Button(self, label="&Remove")
+        self.up_btn = wx.Button(self, label="Move &Up")
+        self.down_btn = wx.Button(self, label="Move &Down")
+        self.top_btn = wx.Button(self, label="Move to &Top")
+        self.bottom_btn = wx.Button(self, label="Move to &Bottom")
+        self.reset_btn = wx.Button(self, label="R&eset to Default")
+        # Always enabled, so the Tab order never changes; each says when
+        # there's nothing it can do.
+        for button in (self.add_btn, self.remove_btn, self.up_btn, self.down_btn,
+                       self.top_btn, self.bottom_btn, self.reset_btn):
+            row.Add(button, 0, wx.RIGHT | wx.BOTTOM, 6)
+        sizer.Add(row, 0, wx.LEFT | wx.RIGHT, 8)
+        sizer.Add(wx.StaticText(self, label="&Preview of the selected session's line:"),
+                  0, wx.LEFT | wx.TOP, 8)
+        self.preview = _read_only_text(self, "", "Preview of the selected session's line",
+                                       min_height=60)
+        sizer.Add(self.preview, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        buttons = wx.StdDialogButtonSizer()
+        ok = wx.Button(self, wx.ID_OK, "OK")
+        ok.SetDefault()
+        buttons.AddButton(ok)
+        buttons.AddButton(wx.Button(self, wx.ID_CANCEL, "Cancel"))
+        buttons.Realize()
+        sizer.Add(buttons, 0, wx.EXPAND | wx.ALL, 8)
+        self.SetSizer(sizer)
+        self.SetEscapeId(wx.ID_CANCEL)
+        self.add_btn.Bind(wx.EVT_BUTTON, lambda e: self.add())
+        self.remove_btn.Bind(wx.EVT_BUTTON, lambda e: self.remove())
+        self.up_btn.Bind(wx.EVT_BUTTON, lambda e: self.move(-1))
+        self.down_btn.Bind(wx.EVT_BUTTON, lambda e: self.move(1))
+        self.top_btn.Bind(wx.EVT_BUTTON, lambda e: self.move_to_end(top=True))
+        self.bottom_btn.Bind(wx.EVT_BUTTON, lambda e: self.move_to_end(top=False))
+        self.reset_btn.Bind(wx.EVT_BUTTON, lambda e: self.reset())
+        self.available.Bind(wx.EVT_LISTBOX_DCLICK, lambda e: self.add())
+        self.shown.Bind(wx.EVT_LISTBOX_DCLICK, lambda e: self.remove())
+        self.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
+        self._fill(shown_index=0, available_index=0)
+        wx.CallAfter(self.shown.SetFocus)
+
+    # -------------------------------------------------------------- state
+
+    def fields(self):
+        """The shown column ids, in the order they're read."""
+        return list(self._shown)
+
+    def _not_shown(self):
+        return [f for f in FIELD_IDS if f not in self._shown]
+
+    def _fill(self, shown_index=None, available_index=None):
+        """Both lists again, each keeping its place (or going to the given
+        row), and the preview."""
+        if shown_index is None:
+            shown_index = self.shown.GetSelection()
+        if available_index is None:
+            available_index = self.available.GetSelection()
+        self.shown.Set([FIELD_NAMES[f] for f in self._shown])
+        if self._shown:
+            self.shown.SetSelection(min(max(shown_index, 0), len(self._shown) - 1))
+        rest = self._not_shown()
+        # An empty list reads as nothing at all to a screen reader.
+        self.available.Set([FIELD_NAMES[f] for f in rest] or ["Every column is shown."])
+        self.available.SetSelection(min(max(available_index, 0), max(len(rest), 1) - 1))
+        line = self._sample.list_line(fields=self._shown) if self._sample is not None else ""
+        self.preview.ChangeValue(line)
+        self.preview.SetInsertionPoint(0)
+
+    def _selected_shown(self):
+        index = self.shown.GetSelection()
+        return index if 0 <= index < len(self._shown) else None
+
+    def _position(self, index):
+        return f"{index + 1} of {len(self._shown)}"
+
+    # ------------------------------------------------------------ actions
+
+    def add(self):
+        """Add the selected available column at the end of the line; stay in
+        Available, on the next one, to add more (or go to Shown, on the
+        column just added, when that was the last)."""
+        rest = self._not_shown()
+        index = self.available.GetSelection()
+        if not rest or not 0 <= index < len(rest):
+            self._say("Every column is shown already.")
+            return
+        field = rest[index]
+        self._shown.append(field)
+        self._fill(shown_index=len(self._shown) - 1, available_index=index)
+        self._say(f"{field_short_name(field)} added, {self._position(len(self._shown) - 1)}.")
+        (self.available if len(rest) > 1 else self.shown).SetFocus()
+
+    def remove(self):
+        index = self._selected_shown()
+        if index is None:
+            self._say("No column selected.")
+            return
+        self.shown.SetFocus()
+        if len(self._shown) == 1:
+            self._say("At least one column has to be shown.")
+            return
+        field = self._shown.pop(index)
+        self._fill(shown_index=index)
+        count = len(self._shown)
+        self._say(f"{field_short_name(field)} removed. {count} column"
+                  f"{'s' if count != 1 else ''} shown.")
+
+    def move(self, step):
+        """Move Up (``step`` -1) or Move Down (1)."""
+        index = self._selected_shown()
+        if index is None:
+            self._say("No column selected.")
+            return
+        self._move_to(index, index + step, "up" if step < 0 else "down",
+                      "top" if step < 0 else "bottom")
+
+    def move_to_end(self, top):
+        index = self._selected_shown()
+        if index is None:
+            self._say("No column selected.")
+            return
+        where = "top" if top else "bottom"
+        self._move_to(index, 0 if top else len(self._shown) - 1, f"to {where}", where)
+
+    def _move_to(self, index, target, how, end):
+        name = field_short_name(self._shown[index])
+        self.shown.SetFocus()
+        if index == target or not 0 <= target < len(self._shown):
+            self._say(f"{name} is already at the {end}.")
+            return
+        self._shown.insert(target, self._shown.pop(index))
+        self._fill(shown_index=target)
+        self._say(f"{name} moved {how}, {self._position(target)}.")
+
+    def reset(self):
+        self._shown = list(DEFAULT_FIELDS)
+        self._fill(shown_index=0, available_index=0)
+        self.shown.SetFocus()
+        self._say(f"Columns reset to the default: all {len(self._shown)} shown, title first.")
+
+    def _on_char_hook(self, event):
+        key = event.GetKeyCode()
+        focus = wx.Window.FindFocus()
+        plain = not (event.ControlDown() or event.ShiftDown() or event.AltDown())
+        if focus is self.available and plain and key in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER):
+            self.add()  # Enter in Available adds, rather than pressing OK
+            return
+        if focus is self.shown:
+            if plain and key in (wx.WXK_DELETE, wx.WXK_NUMPAD_DELETE):
+                self.remove()
+                return
+            if event.AltDown() and not (event.ControlDown() or event.ShiftDown()):
+                moves = {wx.WXK_UP: lambda: self.move(-1), wx.WXK_DOWN: lambda: self.move(1),
+                         wx.WXK_HOME: lambda: self.move_to_end(True),
+                         wx.WXK_END: lambda: self.move_to_end(False)}
+                if key in moves:
+                    moves[key]()
+                    return
+        event.Skip()
