@@ -5,14 +5,14 @@ import subprocess
 from thechatplace import signin
 
 
-def _run(stdout="", error=None, seen=None):
+def _run(stdout="", error=None, seen=None, stderr="", code=0):
     def run(command, **kwargs):
         assert command[1:] == ["auth", "status", "--json"]
         if seen is not None:
             seen.update(kwargs)
         if error:
             raise error
-        return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
+        return subprocess.CompletedProcess(command, code, stdout=stdout, stderr=stderr)
     return run
 
 
@@ -58,3 +58,29 @@ def test_other_ways_of_signing_in_are_named():
     nobody = signin.SignIn(True, signed_in=False, method="none")
     assert signin.describe(nobody).startswith("Claude Code isn't signed in.")
     assert signin.login_command("claude") == ["claude", "auth", "login", "--claudeai"]
+
+
+def test_says_why_it_could_not_tell():
+    """Each reason Claude Code couldn't be asked is said, not just "didn't
+    answer"."""
+    def said(run):
+        return signin.describe(signin.check("/x/claude", run=run))
+    assert said(_run(error=subprocess.TimeoutExpired("claude", 20))).endswith(
+        "Claude Code (/x/claude) didn't answer in 20 seconds.")
+    assert "couldn't be started: gone" in said(_run(error=OSError("gone")))
+    old = said(_run(stderr="error: unknown command 'auth'\n", code=1))
+    assert "is too old to say" in old and "claude update" in old
+    assert said(_run(stderr="\nenv: node: No such file or directory\n", code=127)).endswith(
+        'said "env: node: No such file or directory".')
+    assert said(_run(code=3)).endswith("gave no answer (exit code 3).")
+
+
+def test_no_claude_is_said_with_how_to_install_it(monkeypatch):
+    from thechatplace import platform_paths
+    monkeypatch.setattr(platform_paths, "find_claude", lambda: platform_paths.ClaudeLookup(
+        None, "Claude Code isn't installed.", "To install it, run its native installer."))
+    status = signin.check()
+    assert status.missing and not status.known
+    # The lookup's own words, not "Couldn't tell whether ...: isn't installed".
+    assert signin.describe(status) == ("Claude Code isn't installed.\n\nTo install it, run its "
+                                       "native installer.")

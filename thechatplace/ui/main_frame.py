@@ -52,11 +52,11 @@ import wx
 from ..changes import by_file, summary_text
 from ..codeblocks import find_code_blocks
 from .. import (__version__, about_you, announce, attachments, bugreport, signin, export, hub, platform_paths,
-               usage)
+               remote, usage)
 from ..claude_cli import (MODELS, PERMISSION_MODES, PermissionRequest, ResumeRefused, TurnEvent,
                           TurnRunner, allow_response, answer_questions_response,
                           build_fork_command, build_new_command, build_resume_command,
-                          child_environment,
+                          SESSION_INJECTED_PREFIXES, STRIPPED_VARS, child_environment,
                           deny_response, fetch_commands, usable_commands,
                           describe_elapsed, model_label, model_matches, model_spoken,
                           new_session_id)
@@ -69,15 +69,15 @@ from ..sessions import (GROUP_VIEW_PREFIX, IDLE, NEEDS_YOU, SORT_ORDERS, SORT_SP
                         VIEW_ALL, VIEW_NEEDS_YOU, VIEWS, WORKING,
                         SessionInfo, group_view, in_view, view_spoken)
 from ..speech import ANNOUNCE_FULL, NOTIFY_ALL, NOTIFY_OFF, SpeechSettings, default_options, list_speech_options, speaker
-from ..transcript import (ASSISTANT, ERROR, PLAN, QUESTION, QUEUED, TOOL, ChatMessage,
-                          TranscriptReader)
+from ..transcript import (ASSISTANT, ERROR, PEER, PLAN, QUESTION, QUEUED, TOOL, TOOL_RESULT,
+                          ChatMessage, TranscriptReader)
 from ..updater import AVAILABLE, FAILED, CheckResult, UpdateService
 from . import mac_a11y
-from .a11y import set_accessible_name, set_list_items_accessible
+from .a11y import set_accessible_name, set_list_items_accessible, set_voiceover_menu
 from .notify import Notifier
 from .statusbar import StatusParts
 from ..rendering import html_page, message_page
-from ..ui_text import shortcuts_html
+from ..ui_text import markdown_as_text, shortcuts_html
 from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, AboutYouDialog, ChangesDialog, CodeBlocksDialog, FormattedMessageDialog,
                       BugReportDialog, CommandPickerDialog, MessageDialog, NewSessionDialog, PermissionDialog, PlanDialog,
                       ManageGroupsDialog, QuestionDialog, SettingsDialog, ShortcutsDialog,
@@ -147,6 +147,10 @@ class MainFrame(wx.Frame):
         self._runners: Dict[str, TurnRunner] = {}
         self._denials: Dict[str, List[str]] = {}
         self._pending_refresh: Optional[bool] = None
+        # Set once the window is closing (_on_close). Its destruction waits
+        # for idle time, so a menu VO+Shift+M scheduled just before Cmd+Q
+        # would otherwise still open, on a hidden window that has stopped.
+        self._closing = False
         self._claude_version = ""  # for bug reports; found in the background
         # Slash commands and skills per folder (#23), fetched in the background.
         self._commands: Dict[str, List[dict]] = {}  # by _folder_key
@@ -249,6 +253,9 @@ class MainFrame(wx.Frame):
         self._item(session, "&New Session...\tCtrl+N", self.on_new_session)
         self._item(session, "Change Mo&del...", lambda e: self.on_change_model())
         self._item(session, "Rem&ote Control...", lambda e: self.on_remote_control())
+        # As with Rename Session, every letter is taken, so the key is its shortcut.
+        self._item(session, "Other Machines...\tCtrl+Shift+M",
+                   lambda e: self.on_other_machines())
         self._item(session, "&Refresh\tF5",
                    lambda e: self.refresh_sessions(force=True, resort=True))
         # Delete and Shift+Delete belong to the session list (its char hook):
@@ -314,6 +321,7 @@ class MainFrame(wx.Frame):
         bar.Append(view, "&View")
 
         help_menu = wx.Menu()
+        self._item(help_menu, "User &Guide", self.on_user_guide)
         self._item(help_menu, "&Keyboard Shortcuts\tF1", self.on_shortcuts)
         self._item(help_menu, "Check for &Updates...", lambda e: self.check_for_updates(True))
         self._item(help_menu, "Claude Code &Sign-in...", lambda e: self.on_sign_in())
@@ -350,6 +358,7 @@ class MainFrame(wx.Frame):
         left.Add(self.session_list, 1, wx.EXPAND | wx.ALL, 8)
         self.session_list.Bind(wx.EVT_LISTBOX_DCLICK, self.on_open_session)
         self.session_list.Bind(wx.EVT_CONTEXT_MENU, self._on_session_menu)
+        set_voiceover_menu(self.session_list, self._on_session_menu)
         outer.Add(left, 2, wx.EXPAND)
 
         vsizer = wx.BoxSizer(wx.VERTICAL)
@@ -367,6 +376,7 @@ class MainFrame(wx.Frame):
         self._spoken: Dict[str, tuple] = {}  # message key -> (text, spoken words)
         vsizer.Add(self.chat_list, 2, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
         self.chat_list.Bind(wx.EVT_CONTEXT_MENU, self._on_message_menu)
+        set_voiceover_menu(self.chat_list, self._on_message_menu)
         self.chat_list.Bind(wx.EVT_LISTBOX_DCLICK, lambda e: self.on_read_message())
 
         # Where the reply goes: one panel for The Chat Place's sessions, one for
@@ -1185,7 +1195,7 @@ class MainFrame(wx.Frame):
             try:
                 changed = reader.refresh()
                 transcript = reader.transcript
-                copies = [ChatMessage(m.kind, m.text, m.timestamp, m.key)
+                copies = [ChatMessage(m.kind, m.text, m.timestamp, m.key, m.sender)
                           for m in transcript.messages]
                 wx.CallAfter(self._apply_chat, generation, changed, copies,
                              transcript.unreadable_lines, None,
@@ -1267,6 +1277,14 @@ class MainFrame(wx.Frame):
                 self._feedback(f"Loaded {self._open.title}, {count} "
                                f"message{'s' if count != 1 else ''}.{note}")
             return
+        # A message from another session (#123) is news in any session, own
+        # or not, and even mid-turn: nothing else would announce it.
+        for message in messages:
+            if message.key not in before_keys and message.kind == PEER:
+                text = announce.peer_text(self._open.title, message.sender, message.text,
+                                          self.speech.announce)
+                if text:
+                    self._say(text)
         if self._open.is_own:
             return  # its turn announces the reply when it finishes
         if self._show_activity:
@@ -1449,6 +1467,21 @@ class MainFrame(wx.Frame):
                  else message.label)
         return self._show_page(title, message_page(title, message.text))
 
+    def on_user_guide(self, _event=None):
+        """Help, User Guide (#104): the guide as a page, read by heading like
+        the shortcuts, or in the text box when the page can't be shown or on
+        Read as Plain Text. It ships with the app, so it never needs the web."""
+        try:
+            text = platform_paths.user_guide_path().read_text(encoding="utf-8")
+        except OSError as exc:
+            # Only a broken build gets here; the smoke test checks for it.
+            wx.MessageBox(f"Couldn't open the user guide: {exc}", APP_NAME,
+                          wx.OK | wx.ICON_WARNING, self)
+            return
+        if self._show_page("User Guide", message_page("User Guide", text)):
+            return
+        self._modal(MessageDialog(self, "User Guide", markdown_as_text(text)))
+
     def on_shortcuts(self, _event=None):
         """The keyboard shortcuts as a page: a heading and a table per group.
         The text box when the page can't be shown, or on Read as Plain Text.
@@ -1588,6 +1621,21 @@ class MainFrame(wx.Frame):
         return wx.Point(8, 8)
 
     def _on_message_menu(self, event=None):
+        """Right-click, the Applications key, Shift+F10 or VO+Shift+M in the
+        messages list. As in the session list (_on_session_menu), the menu
+        is for the row clicked, and focus goes to the list: VO+Shift+M can
+        open it from the VoiceOver cursor while focus is elsewhere."""
+        if self._closing:
+            return
+        position = event.GetPosition() if event is not None else wx.DefaultPosition
+        if position != wx.DefaultPosition:
+            # A list box doesn't select the row right-clicked, so the menu
+            # meant the old highlight while the mouse was on another message.
+            row = self.chat_list.HitTest(self.chat_list.ScreenToClient(position))
+            if row == wx.NOT_FOUND:
+                return
+            self.chat_list.SetSelection(row)
+        self.chat_list.SetFocus()
         menu = self._message_menu()
         try:
             self.chat_list.PopupMenu(menu, self._message_menu_position(event))
@@ -1632,6 +1680,8 @@ class MainFrame(wx.Frame):
         The choice runs once the menu has closed and focus is back on the
         list, so the command means the highlighted session, not the loaded
         one (see _selected_session)."""
+        if self._closing:
+            return
         position = event.GetPosition() if event is not None else wx.DefaultPosition
         if position != wx.DefaultPosition:
             # A right-click: a list box neither selects the row clicked nor
@@ -2030,6 +2080,85 @@ class MainFrame(wx.Frame):
         self._refresh_list_in_place()
         self._feedback(f"Remote Control {'on' if on else 'off'} for {info.title}, "
                        "from its next turn.")
+
+    def on_other_machines(self):
+        """File, Other Machines (Ctrl+Shift+M, #123): your sessions on other
+        computers, listed and messaged through Claude in the loaded session.
+        Only Claude can reach them (ListAgents, SendMessage), and only with
+        Remote Control on; see remote.py for why it's done this way."""
+        info = self._open
+        if info is None or not info.is_own:
+            wx.MessageBox("Other machines are reached through one of The Chat Place's own "
+                          "sessions with Remote Control on. Load one first, or start one "
+                          "with File, New Session.", APP_NAME,
+                          wx.OK | wx.ICON_INFORMATION, self)
+            return
+        own = self.store.get(info.cli_session_id)
+        if own is None:
+            self._feedback(f"Couldn't find {info.title} in The Chat Place's sessions.")
+            return
+        if not self._remote_control_on(own):
+            wx.MessageBox(f"Remote Control is off for {info.title}, and Claude can only "
+                          "reach your other computers with it on. Turn it on with File, "
+                          "Remote Control, then try again.", APP_NAME,
+                          wx.OK | wx.ICON_INFORMATION, self)
+            return
+        found = remote.latest_list(m.text for m in self._chat_messages
+                                   if m.kind == TOOL_RESULT)
+        sessions = found or []
+        refresh = "Refresh the list (asks Claude)"
+        if found is None:
+            prompt = (f"{info.title} hasn't listed your other computers' sessions yet. "
+                      "Refresh asks Claude for them; the list is here next time:")
+        elif not sessions:
+            prompt = ("Claude's latest list had no sessions on other computers. Each needs "
+                      "Remote Control on, and its computer awake:")
+        else:
+            prompt = ("Send a message to which session? From Claude's latest list. "
+                      "Offline often only means between turns; a message waits for it:")
+        index = self._choose("Other Machines", prompt,
+                             [s.describe() for s in sessions] + [refresh])
+        if index is None:
+            return
+        if index == len(sessions):
+            self._send_generated(info, remote.LIST_PROMPT,
+                                 f"Asking Claude in {info.title} for your other computers' "
+                                 "sessions. Ctrl+Shift+M again once it has answered.")
+            return
+        target = sessions[index]
+        address = remote.addresses(sessions)[index]
+        # One line, so Enter sends.
+        dialog = wx.TextEntryDialog(self, f"Message to {target.name} (Enter sends):",
+                                    "Other Machines", "")
+        try:
+            if dialog.ShowModal() != wx.ID_OK:
+                return
+            text = dialog.GetValue().strip()
+        finally:
+            dialog.Destroy()
+        if not text:
+            self._feedback("Nothing sent: the message was empty.")
+            return
+        self._send_generated(info, remote.send_prompt(address, text),
+                             f"Claude in {info.title} is sending your message to "
+                             f"{target.name}. A reply shows here as from {target.name}.")
+
+    def _send_generated(self, info: SessionInfo, message: str, said: str):
+        """Send a message The Chat Place wrote for you (Other Machines) into
+        an own session. It isn't read back, or given back to the reply box if
+        the turn fails (``spoken=""``): it's instructions to Claude, not your
+        words, and ``said`` tells you what happened instead. It isn't queued
+        either, where it would show and be editable as if you'd typed it."""
+        session_id = info.cli_session_id
+        if session_id in self._runners:
+            self._feedback(f"{info.title} is working. Use Other Machines again when "
+                           "the turn ends.")
+            return
+        problem = self._send_now(session_id, message, spoken="")
+        if problem:
+            wx.MessageBox(problem, APP_NAME, wx.OK | wx.ICON_WARNING, self)
+            return
+        self._feedback(said)
 
     def _desktop_remote_control(self, info: SessionInfo):
         """Remote Control for a desktop app session (#96). The Chat Place
@@ -2538,7 +2667,7 @@ class MainFrame(wx.Frame):
                     exe, own.cli_session_id, own.permission_mode,
                     own_ids={s.cli_session_id for s in self.store.all()},
                     desktop_ids=self._snapshot.desktop_cli_ids, model=own.model,
-                    allowed_tools=own.allowed_tools)
+                    allowed_tools=own.allowed_tools, title=own.title)
             else:
                 # The first turn never got as far as creating the session:
                 # start it again rather than resume something that isn't there.
@@ -3554,11 +3683,18 @@ class MainFrame(wx.Frame):
             # At start-up, only a problem is news, and not over the list.
             if getattr(self, "_sign_in_asked", False):
                 return
-            if status.known and not (status.signed_in and status.subscription):
+            if status.missing:
+                first = re.split(r"(?<=\.) ", status.problem, maxsplit=1)[0]
+                self._feedback(f"{first} To install it, choose Claude Code Sign-in on the "
+                               "Help menu.")
+            elif status.known and not (status.signed_in and status.subscription):
                 self._feedback(f"{text} To sign in, choose Claude Code Sign-in on the "
                                "Help menu.")
             return
         self._sign_in_asked = False
+        if status.missing:
+            self._offer_install(text)
+            return
         if not status.known:
             wx.MessageBox(text, "Claude Code Sign-in", wx.OK | wx.ICON_WARNING, self)
             return
@@ -3567,7 +3703,7 @@ class MainFrame(wx.Frame):
             return
         answer = wx.MessageBox(
             f"{text}\n\nSign in now? A window opens, and your browser shows Claude's sign-in "
-            "page. When you've finished, choose Help, Claude Code Sign-in again to check.",
+            "page. When you've finished, The Chat Place checks again and says so.",
             "Claude Code Sign-in", wx.YES_NO | wx.YES_DEFAULT | wx.ICON_QUESTION, self)
         if answer != wx.YES:
             return
@@ -3575,21 +3711,66 @@ class MainFrame(wx.Frame):
         try:
             if command is None:
                 raise OSError("Claude Code wasn't found")
-            process = subprocess.Popen(command, env=child_environment(),
-                                       creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
+            process = platform_paths.run_in_terminal(
+                command, "sign-in-claude-code.command", "Signing in to Claude Code.",
+                env=child_environment(), clear=STRIPPED_VARS,
+                clear_prefixes=SESSION_INJECTED_PREFIXES)
         except OSError as exc:
             wx.MessageBox(f"Couldn't start the sign-in: {exc}", APP_NAME,
                           wx.OK | wx.ICON_ERROR, self)
             return
-        self._feedback("Signing in, in a new window. The Chat Place checks again when it closes.")
+        self._feedback("Signing in, in a new window. The Chat Place checks again when you've "
+                       "finished.")
+
+        def signed_in():
+            status = signin.check()
+            return status.signed_in and status.subscription
+        self._check_sign_in_after(process, signed_in)
+
+    def _offer_install(self, text: str):
+        """Claude Code isn't there, or isn't one The Chat Place can use:
+        offer to run its native installer in a window of its own."""
+        answer = wx.MessageBox(
+            f"{text}\n\nInstall Claude Code now? A window opens and runs its native installer "
+            "from claude.ai. When it's finished, The Chat Place checks the sign-in again.",
+            "Claude Code Sign-in", wx.YES_NO | wx.YES_DEFAULT | wx.ICON_QUESTION, self)
+        if answer != wx.YES:
+            return
+        try:
+            process = platform_paths.start_claude_install(env=child_environment())
+        except OSError as exc:
+            wx.MessageBox(f"Couldn't start the installer: {exc}", APP_NAME,
+                          wx.OK | wx.ICON_ERROR, self)
+            return
+        self._feedback("Installing Claude Code, in a new window. The Chat Place checks again "
+                       "when it's finished.")
+        self._check_sign_in_after(process, lambda: bool(platform_paths.find_claude().path))
+
+    def _check_sign_in_after(self, process, done):
+        """Check the sign-in again, and say the result, once a window The
+        Chat Place opened is finished: when its process ends on Windows, or
+        on a Mac (where Terminal runs it, out of reach) once ``done()`` says
+        so, for up to ten minutes. Its own thread, not the pool's: a wait
+        this long would hold up the list's refreshes."""
+        def closing():
+            try:
+                return not self or self._closing
+            except RuntimeError:
+                return True  # the window is already gone
 
         def wait():
-            process.wait()
-            wx.CallAfter(self._check_sign_in, manual=True)  # the result, said
-        try:
-            self._pool.submit(wait)
-        except RuntimeError:
-            pass
+            if process is not None:
+                process.wait()
+            else:
+                deadline = time.monotonic() + 600
+                while not closing() and time.monotonic() < deadline:
+                    time.sleep(5)
+                    if not closing() and done():
+                        break
+            # Said even when it never finished, so the promise to check is kept.
+            if not closing():
+                wx.CallAfter(self._check_sign_in, manual=True)  # the result, said
+        threading.Thread(target=wait, name="sign-in-wait", daemon=True).start()
 
     def on_about(self, _event=None):
         wx.MessageBox(
@@ -3622,6 +3803,14 @@ class MainFrame(wx.Frame):
                 return
             if not ctrl and focus is self.chat_list:
                 self.on_read_message()
+                return
+            if (wx.Platform == "__WXMAC__" and isinstance(focus, wx.Button)
+                    and not event.HasAnyModifiers()):
+                # A Mac presses a focused button only with Space; Return did
+                # nothing on Send and the rest. Windows presses it itself.
+                click = wx.CommandEvent(wx.wxEVT_BUTTON, focus.GetId())
+                click.SetEventObject(focus)
+                focus.GetEventHandler().ProcessEvent(click)
                 return
         if (key == wx.WXK_INSERT and event.ShiftDown() and not ctrl
                 and focus is self.reply_text):
@@ -3774,6 +3963,7 @@ class MainFrame(wx.Frame):
             if answer != wx.YES:
                 event.Veto()
                 return
+        self._closing = True
         for runner in list(self._runners.values()):
             runner.cancel()
         self._clear_activity()

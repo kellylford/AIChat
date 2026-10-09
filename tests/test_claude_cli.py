@@ -79,6 +79,20 @@ def test_model_goes_on_every_turn():
     assert command[command.index("--model") + 1] == "claude-opus-5-5"
 
 
+def test_title_goes_on_every_turn():
+    """#123: the name other sessions reach this one by must not change each turn."""
+    command = build_resume_command(EXE, "aaaa-1111", "auto", OWN, DESKTOP,
+                                   title="  Hub \n on   Clark ")
+    assert command[command.index("--name") + 1] == "Hub on Clark"
+    assert command[-2:] == ["--resume", "aaaa-1111"]
+    assert "--name" not in build_resume_command(EXE, "aaaa-1111", "auto", OWN, DESKTOP)
+    # A title that looks like a flag is still only ever the value of --name.
+    command = build_resume_command(EXE, "aaaa-1111", "auto", OWN, DESKTOP,
+                                   title="--dangerously-skip-permissions")
+    assert command[command.index("--name") + 1] == "--dangerously-skip-permissions"
+    assert command.count("--dangerously-skip-permissions") == 1
+
+
 def test_default_model_passes_no_model_flag():
     assert "--model" not in build_new_command(EXE, "aaaa-1111", "t", "auto", "")
     assert "--model" not in build_resume_command(EXE, "aaaa-1111", "auto", OWN, DESKTOP)
@@ -175,7 +189,110 @@ def test_find_claude_refuses_scripts(script, tmp_path):
 
 def test_find_claude_missing():
     lookup = platform_paths.find_claude(which=lambda n: None, native_candidates=[])
-    assert lookup.path is None and "wasn't found" in lookup.problem
+    assert lookup.path is None and "isn't installed" in lookup.problem
+    # Short enough to speak, pointing at where it can be installed; the
+    # commands for this computer are kept for that dialog.
+    assert lookup.problem.endswith("choose Claude Code Sign-in on the Help menu.")
+    assert "claude.ai/install" not in lookup.problem
+    assert "claude.ai/install" in lookup.install_help
+
+
+def test_find_claude_uses_the_native_program_behind_an_npm_shim(tmp_path):
+    """A newer npm install's claude.cmd starts the native claude.exe, which
+    is used directly, never through cmd.exe."""
+    npm = tmp_path / "npm"
+    exe = npm / "node_modules" / "@anthropic-ai" / "claude-code" / "bin" / "claude.exe"
+    exe.parent.mkdir(parents=True)
+    exe.write_bytes(b"")
+    shim = npm / "claude.cmd"
+    shim.write_text("@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n"
+                    ":start\r\nSETLOCAL\r\nCALL :find_dp0\r\n"
+                    '"%dp0%\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe"   %*\r\n')
+    lookup = platform_paths.find_claude(which=lambda n: str(shim), native_candidates=[])
+    assert lookup.path is not None and Path(lookup.path).samefile(exe)
+    # An old shim that runs cli.js through Node is refused, with the install
+    # help, even with node.exe beside it (nvm-windows), which it also names.
+    exe.unlink()
+    (npm / "node.exe").write_bytes(b"")
+    shim.write_text(
+        "@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\n"
+        "SETLOCAL\r\nCALL :find_dp0\r\n\r\n"
+        'IF EXIST "%dp0%\\node.exe" (\r\n  SET "_prog=%dp0%\\node.exe"\r\n) ELSE (\r\n'
+        '  SET "_prog=node"\r\n  SET PATHEXT=%PATHEXT:;.JS;=;%\r\n)\r\n\r\n'
+        'endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  '
+        '"%dp0%\\node_modules\\@anthropic-ai\\claude-code\\cli.js" %*\r\n')
+    lookup = platform_paths.find_claude(which=lambda n: str(shim), native_candidates=[])
+    assert lookup.path is None and "older npm install" in lookup.problem
+    assert "claude.ai/install" in lookup.install_help
+
+
+def test_find_claude_refuses_a_node_script(tmp_path):
+    """An old npm install on a Mac: a JavaScript file that needs Node, which
+    an app started from the Finder can't find."""
+    script = tmp_path / "claude"
+    script.write_text("#!/usr/bin/env node\nrequire('./cli.js')\n")
+    native = tmp_path / "native-claude"
+    native.write_bytes(b"\xcf\xfa\xed\xfe")
+    lookup = platform_paths.find_claude(which=lambda n: str(script), native_candidates=[])
+    assert lookup.path is None and "older npm install" in lookup.problem
+    lookup = platform_paths.find_claude(which=lambda n: str(script),
+                                        native_candidates=[script, native])
+    assert lookup.path == str(native)
+
+
+def test_claude_is_looked_for_where_installers_put_it(monkeypatch, tmp_path):
+    """Off the PATH, as for an app started from the Finder: the native
+    installer's, Homebrew's and npm's folders on a Mac, and the native
+    installer's and WinGet's on Windows."""
+    monkeypatch.setattr(platform_paths.Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.setattr(platform_paths.sys, "platform", "darwin")
+    mac = platform_paths._native_candidates()
+    assert mac[0] == tmp_path / ".local" / "bin" / "claude"
+    assert Path("/opt/homebrew/bin/claude") in mac and Path("/usr/local/bin/claude") in mac
+    monkeypatch.setattr(platform_paths.sys, "platform", "win32")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "Local"))
+    windows = platform_paths._native_candidates()
+    assert windows[0] == tmp_path / ".local" / "bin" / "claude.exe"
+    assert windows[1] == tmp_path / "Local" / "Microsoft" / "WinGet" / "Links" / "claude.exe"
+    assert "irm https://claude.ai/install.ps1 | iex" in platform_paths.claude_install_help()
+
+
+def test_install_runs_in_a_terminal_window_on_a_mac(monkeypatch, tmp_path):
+    """The installer runs from a .command file in the app's own folder, so
+    Terminal shows it; no permission to control Terminal is needed."""
+    import subprocess
+    monkeypatch.setattr(platform_paths.sys, "platform", "darwin")
+    monkeypatch.setattr(platform_paths, "app_data_dir", lambda: tmp_path)
+    opened = []
+    monkeypatch.setattr(subprocess, "Popen", lambda argv, **k: opened.append(argv))
+    assert platform_paths.start_claude_install() is None
+    script = tmp_path / "install-claude-code.command"
+    assert opened == [["open", "-a", "Terminal", str(script)]]
+    text = script.read_text()
+    assert text.startswith("#!/bin/bash\n")
+    assert "/bin/bash -c 'curl -fsSL https://claude.ai/install.sh | bash'" in text
+    assert "status=$?" in text  # a failure isn't reported as finished
+
+
+def test_a_terminal_window_drops_billing_variables(monkeypatch, tmp_path):
+    """Terminal starts the user's own shell, whose profile may export an API
+    key: the script unsets what child_environment() would remove."""
+    import subprocess
+    monkeypatch.setattr(platform_paths.sys, "platform", "darwin")
+    monkeypatch.setattr(platform_paths, "app_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(subprocess, "Popen", lambda argv, **k: None)
+    platform_paths.run_in_terminal(["/x/claude", "auth", "login"], "s.command", "Signing in.",
+                                   clear=cli.STRIPPED_VARS,
+                                   clear_prefixes=cli.SESSION_INJECTED_PREFIXES)
+    lines = (tmp_path / "s.command").read_text().splitlines()
+    unset = next(line for line in lines if line.startswith("unset "))
+    assert "ANTHROPIC_API_KEY" in unset.split() and "CLAUDE_CODE_USE_BEDROCK" in unset.split()
+    assert any("CLAUDE_CODE_SDK_*" in line for line in lines)
+    assert lines.index(unset) < lines.index("/x/claude auth login")
+    monkeypatch.undo()  # the real Popen, for bash
+    if sys.platform != "win32":  # the script is valid bash
+        out = subprocess.run(["/bin/bash", "-n", str(tmp_path / "s.command")])
+        assert out.returncode == 0
 
 
 # -- stream-json events ---------------------------------------------------------------

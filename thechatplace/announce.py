@@ -59,6 +59,17 @@ def reply_text(title: str, reply: str, level: str) -> Optional[str]:
     return f"{title} replied. {reply.strip()}"
 
 
+def peer_text(title: str, sender: str, message: str, level: str) -> Optional[str]:
+    """Another Claude session sent the open session a message (#123): a reply
+    from a session on another computer, say. None means say nothing."""
+    if level == ANNOUNCE_SILENT or not (message or "").strip():
+        return None
+    who = sender or "another session"
+    if level == ANNOUNCE_SUMMARY:
+        return f"{title}: message from {who}: {first_sentence(message)}"
+    return f"{title}: message from {who}. {message.strip()}"
+
+
 def turn_end_text(title: str, state: str, detail: str, reply: str, level: str) -> Optional[str]:
     """A session finished a turn (used for sessions The Chat Place only watches)."""
     if level == ANNOUNCE_SILENT:

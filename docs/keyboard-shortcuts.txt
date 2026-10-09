@@ -46,6 +46,7 @@ Reply box:
   Ctrl+/: Insert a slash command or one of your skills (type to search); it goes at the start of the reply box
   Ctrl+Shift+F: Attach files or images to your next message (Attach Files button, Alt+T); Delete in the attachments list removes one
   Ctrl+V with a picture copied: Attach the picture (a screenshot from Win+Shift+S, say)
+  Ctrl+Shift+M: Other machines: list your sessions on other computers and send one a message, through Claude in the loaded Chat Place session (it needs Remote Control on)
   Ctrl+Shift+D: Changed files: what Claude changed since your latest message or in the whole session; Enter on a file reads its changes line by line
   Ctrl+Shift+U: Usage and context: how full the loaded session's context is, and how much of your plan's limits are used
   Ctrl+Shift+T: Turn status: how long Claude has been working, on what, and whether a message is queued
@@ -54,6 +55,7 @@ Anywhere:
   Ctrl+Shift+A: Answer Claude: approve or deny a tool, answer its questions, or approve its plan (the loaded session first, then the one that has waited longest). Escape in the dialog answers later
   Ctrl+Shift+K: What Claude knows about you: your instructions, memories, skills, subagents, commands and settings, to read or open in your editor
   F1: This list of shortcuts
+  Alt+H, G: The user guide, read by heading
   Ctrl+Comma: Settings (announcements and speech)
   Ctrl+Shift+R: Repeat the last announcement
   Alt+F4: Quit

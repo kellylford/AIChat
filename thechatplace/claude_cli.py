@@ -68,8 +68,9 @@ from . import platform_paths
 #: (value passed to --permission-mode, label shown in the New Session dialog)
 PERMISSION_MODES = [
     ("auto", "Auto: Claude decides what is safe to run without asking"),
-    ("acceptEdits", "Accept edits: file edits allowed, commands that need approval are refused"),
-    ("manual", "Manual: anything that needs approval is refused"),
+    ("acceptEdits", "Accept edits: file edits allowed; Claude asks before commands that need "
+                    "approval"),
+    ("manual", "Manual: Claude asks before anything that needs approval"),
     ("plan", "Plan: Claude plans but does not change anything"),
 ]
 PERMISSION_MODE_VALUES = [value for value, _label in PERMISSION_MODES]
@@ -107,6 +108,8 @@ BILLING_VARS = frozenset({
 })
 
 _STRIP = SESSION_INJECTED_VARS | BILLING_VARS
+#: For a Terminal window on a Mac, which can't be given child_environment().
+STRIPPED_VARS = _STRIP
 
 #: Whole families a host session sets, including names newer Claude Code
 #: versions add. User settings (CLAUDE_CODE_GIT_BASH_PATH and the like) don't
@@ -289,11 +292,21 @@ def build_fork_command(executable: str, source_id: str, new_id: str, title: str,
 def build_resume_command(executable: str, session_id: str, permission_mode: str,
                          own_ids: Collection[str],
                          desktop_ids: Collection[str], model: str = "",
-                         allowed_tools: Collection[str] = ()) -> List[str]:
-    """Command for a later turn. Refuses anything but The Chat Place's own sessions."""
+                         allowed_tools: Collection[str] = (), title: str = "") -> List[str]:
+    """Command for a later turn. Refuses anything but The Chat Place's own sessions.
+
+    ``--name`` goes on every turn, not just the first (#123). Other sessions
+    address this one by that name (``SendMessage``); without it each resumed
+    turn got a new made-up name ("project-37", then "project-36"), so a reply
+    sent to the name seen earlier never arrived. Checked with Claude Code
+    2.1.286: ``--resume`` with ``--name`` is accepted and keeps the title.
+    """
     check_resume_allowed(session_id, own_ids, desktop_ids)
-    return [executable, *_common_flags(permission_mode, model, allowed_tools),
-            "--resume", session_id]
+    command = [executable, *_common_flags(permission_mode, model, allowed_tools)]
+    title = " ".join((title or "").split())
+    if title:
+        command += ["--name", title]
+    return command + ["--resume", session_id]
 
 
 # ---------------------------------------------------------------------------

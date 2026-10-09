@@ -6,15 +6,19 @@ The Chat Place is an independent project by Kelly Ford. It works with Claude Cod
 Claude desktop app, but it isn't made, sponsored or endorsed by Anthropic, and isn't affiliated
 with it. Claude and Claude Code are trademarks of Anthropic.
 
-Keyboard shortcuts: [docs/keyboard-shortcuts.md](docs/keyboard-shortcuts.md) (also as
-[HTML](docs/keyboard-shortcuts.html) and [plain text](docs/keyboard-shortcuts.txt)), the same list
+New to The Chat Place? The [user guide](https://kellylford.github.io/AIChat/user-guide.html) starts
+with the everyday things and goes deeper; it's also in the app, under Help, User Guide. This README
+has the full details.
+
+Keyboard shortcuts: [a web page](https://kellylford.github.io/AIChat/keyboard-shortcuts.html), also as
+[Markdown](docs/keyboard-shortcuts.md) and [plain text](docs/keyboard-shortcuts.txt): the same list
 as Help, Keyboard Shortcuts (F1) in the app.
 
 > **Status: version 0.1.2, a pre-release** (0.1.0, the first release, came out on 7 October 2026). Used with JAWS on Kelly's PC; the
 > installer, uninstaller and update check have been tested in the vmtest VM. Downloading and
 > installing an update needs two published releases, so it is first tried with 0.1.1. It has not
-> yet had a pass with NVDA. The Mac build is new: built, smoke-tested and Developer ID signed on
-> Kelly's Mac, but not yet notarized in CI or used with VoiceOver.
+> yet had a pass with NVDA. The Mac build is used with VoiceOver on Kelly's Mac, and since 0.1.2
+> the release workflow signs and notarizes it.
 
 A keyboard and screen reader friendly reader for Claude Code sessions. It lists every session the
 Claude desktop app has open, shows each one as a conversation you can arrow through, tells you
@@ -69,9 +73,9 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   Chat Place, since its files are never changed: it's kept in
   `%APPDATA%\TheChatPlace\titles.json`, and the desktop app keeps its own name for it. Renaming
   it to nothing (clear the box) goes back to the desktop app's name.
-- **The session's menu** (Applications key or Shift+F10 in the session list, or a right-click)
-  has the File menu's commands for the selected session: load, open in Claude, continue here,
-  rename, Remote Control, groups, export, and hide or delete.
+- **The session's menu** (Applications key or Shift+F10 in the session list, VO+Shift+M with
+  VoiceOver on a Mac, or a right-click) has the File menu's commands for the selected session:
+  load, open in Claude, continue here, rename, Remote Control, groups, export, and hide or delete.
 - **What Claude knows about you** (Ctrl+Shift+K, View, What Claude Knows About You). Claude Code
   keeps what it knows about you in plain files, and this lists them by kind: your instructions
   (`CLAUDE.md`, yours and each project's), the memories Claude saved for each project, your
@@ -110,32 +114,29 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   restart, until its next turn starts.
 - **Messages:** newest last, with focus on the newest. Each row shows "You:" or "Claude:" and its
   first line, but your screen reader reads the **whole message** as you arrow onto it, as words
-  (headings and list items as sentences, and each code block as what it is: "Code block,
-  Python, 14 lines"). Settings, Reading
-  messages turns that off, to hear just the first line. The list's name says the session's state
-  and whether it's read-only. **Enter**
-  (or the context menu's Read Full Message, with the Applications key or Shift+F10) shows the
-  whole message as a formatted page, so your screen reader's browse mode moves by heading (H),
-  table (T, then its cell commands), list (L) and code block (each is a region, R, named like
-  "Code block, Python, 14 lines"). Links open in your browser. **Read as Plain Text** (Alt+P)
-  switches to a read-only text box, to read by line, word and character, and Settings can make
-  that the default. Escape closes either, back on the same message. The page needs Microsoft's
-  Edge WebView2 runtime, which comes with Windows 11; without it, the text box opens. Nothing in
-  the page is fetched from the internet, and HTML in a message is shown as text, never run.
-  **Code Blocks** (**Ctrl+Shift+B**, or on the context menu) lists the message's code blocks by
-  language and size, with the selected one's code in a box to read by line (Enter on a block
-  goes there) and a Copy button for just that block;
-  **Ctrl+Shift+C** copies the message's last code block straight away.
-  Question cards read as "Claude asked: Which version?" with the
-  options in the full text, then "You answered: ...". Refused tools read "Permission denied:
-  ...". Tool calls and tool results are hidden unless you turn on Show Tool Activity (Ctrl+T).
-  With it on, the open session's tool calls are also **spoken as they happen**, so a long turn
-  isn't silent: "Using Bash: git status; Read: main.py." In The Chat Place's own sessions, what
-  Claude writes between tool calls ("Let me check the build.") is spoken too. A run of calls is
-  gathered for a moment and said together, counted when there are many ("Using Read 4 times,
-  then Bash."), and never cuts off your screen reader. At the summary level tools are always
-  counted; at silent only the status bar shows them. Tool results aren't spoken.
-  New messages arrive at the end without moving you.
+  (headings and list items as sentences, and each code block as what it is: "Code block, Python, 14
+  lines"). Settings, Reading messages turns that off, to hear just the first line. The list's name
+  says the session's state and whether it's read-only. **Enter** (or the context menu's Read Full
+  Message, with the Applications key, Shift+F10, VO+Shift+M or a right-click) shows the whole
+  message as a formatted page, so your screen reader's browse mode moves by heading (H), table (T,
+  then its cell commands), list (L) and code block (each is a region: R in JAWS, D in NVDA, named
+  like "Code block, Python, 14 lines"). Links open in your browser. **Read as Plain Text** (Alt+P)
+  switches to a read-only text box, to read by line, word and character, and Settings can make that
+  the default. Escape closes either, back on the same message. The page needs Microsoft's Edge
+  WebView2 runtime, which comes with Windows 11; without it, the text box opens. Nothing in the
+  page is fetched from the internet, and HTML in a message is shown as text, never run. **Code
+  Blocks** (**Ctrl+Shift+B**, or on the context menu) lists the message's code blocks by language
+  and size, with the selected one's code in a box to read by line (Enter on a block goes there) and
+  a Copy button for just that block; **Ctrl+Shift+C** copies the message's last code block straight
+  away. Question cards read as "Claude asked: Which version?" with the options in the full text,
+  then "You answered: ...". Refused tools read "Permission denied: ...". Tool calls and tool
+  results are hidden unless you turn on Show Tool Activity (Ctrl+T). With it on, the open session's
+  tool calls are also **spoken as they happen**, so a long turn isn't silent: "Using Bash: git
+  status; Read: main.py." In The Chat Place's own sessions, what Claude writes between tool calls
+  ("Let me check the build.") is spoken too. A run of calls is gathered for a moment and said
+  together, counted when there are many ("Using Read 4 times, then Bash."), and never cuts off your
+  screen reader. At the summary level tools are always counted; at silent only the status bar shows
+  them. Tool results aren't spoken. New messages arrive at the end without moving you.
 - **Reply box:** for The Chat Place's own sessions, type and press Ctrl+Enter (or Send). You stay in
   the reply box. For desktop app sessions the same place holds a read-only note saying why
   replying happens in Claude, and an Open in Claude button.
@@ -210,6 +211,24 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   desktop app session, File, Remote Control offers to open it in the desktop app, where its
   Remote Control is turned on, or to continue it here as a copy with Remote Control on from the
   first turn; The Chat Place never changes the desktop app's session itself.
+- **Other machines (File, Other Machines, Ctrl+Shift+M).** Your Claude Code sessions on
+  your other computers, reached through Claude in the loaded Chat Place session, which needs
+  Remote Control on (as do they). It lists them from Claude's latest look: their names and
+  whether each is idle, busy or offline. "Offline" often only means between turns, and a
+  message waits for it. **Refresh the list** asks Claude to look again, as a turn in the
+  session, and the list is there next time you press Ctrl+Shift+M. Choose a session, type
+  your message, and Claude sends it word for word; its reply comes back to the same session.
+  Only Claude can reach other computers, and only what they send back can be shown: their
+  own conversations can't be read from here. It works between turns, not during one.
+- **Messages from other sessions.** Claude can also send a message to another Claude Code
+  session when you ask in your own words, for example "send the session called Mac Hub a
+  message asking for its hostname". A message that comes back shows in the messages list as **From** and the
+  session's name ("From Mac Hub: ..."), not as something you typed, and it's announced in
+  any open session. Other sessions reach a Chat Place session by its title, which stays the
+  same every turn, so rename it to something they can find. A Chat Place session only acts on
+  a message during one of its turns, so a message that arrives between turns waits for the
+  next one. The other computer's own conversation can't be read from here; only what its
+  Claude sends back.
 - **Claude asks, you answer.** In The Chat Place's own sessions, when Claude needs permission
   for something the permission mode doesn't allow, asks you a question, or has a plan for you
   to approve, the turn waits for you. It's announced ("Build needs you. Claude wants to run
@@ -284,12 +303,21 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
 - **Turn Status** (Ctrl+Shift+T) says how long Claude has been working on the current turn and what
   it last did. There's no time limit on a turn; Stop (Ctrl+Period) ends it, along with anything it
   started, such as a build.
+- **User Guide** (Help menu, Alt+H, G) shows the user guide as a page, read by heading like the
+  keyboard shortcuts, or as plain text (Alt+P). It's part of the app, so it works offline. It's
+  edited in `thechatplace/assets/user-guide.md`; `python tools/make_docs.py` makes the copies in
+  `docs/`.
 - **Claude Code Sign-in** (Help menu) says whether Claude Code is signed in, to which plan and
   as whom ("Claude Code is signed in to your Claude Max plan as …"). If it isn't, it offers to
-  sign in: `claude auth login` opens in its own window and your browser shows Claude's sign-in
-  page. The Chat Place also checks at start-up and says so only if there's a problem. Your
-  sessions are listed whether or not Claude Code is signed in (they're read from disk); only
-  sending a message needs a sign-in.
+  sign in: `claude auth login` opens in its own window (a Terminal window on a Mac) and your
+  browser shows Claude's sign-in page; when you've finished, The Chat Place checks again and
+  says the result. If Claude Code isn't installed, or only an old npm install is, it says so,
+  gives the install command, and offers to run Claude Code's native installer in its own
+  window, then checks again once it's done. If Claude Code is there but can't be asked, it says
+  why: no answer in 20 seconds, couldn't be started, too old (`claude update` fixes that), or
+  what it printed. The Chat Place also checks at start-up and says so only if there's a problem.
+  Your sessions are listed whether or not Claude Code is signed in (they're read from disk);
+  only sending a message needs a sign-in.
 - **Report a Bug** (Help menu) asks for a summary, what happened, what you expected and the
   steps, and shows exactly what else the report includes before it goes anywhere: versions
   (The Chat Place, Windows, Python, wxPython, Claude Code), the announcement level and speech
@@ -302,7 +330,17 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
 
 You need Windows 10 or 11, or a Mac with Apple silicon, and **Claude Code installed with its
 native installer and signed in** to a Claude subscription (the `claude` command, the same login
-the desktop app uses).
+the desktop app uses). The Claude desktop app's own copy of Claude Code isn't on the PATH and
+isn't meant for other programs, so install the command as well, from a terminal:
+
+- Mac: `curl -fsSL https://claude.ai/install.sh | bash`
+- Windows PowerShell: `irm https://claude.ai/install.ps1 | iex`
+- Windows Command Prompt:
+  `curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd && del install.cmd`
+
+Then run `claude` once to sign in. Help, Claude Code Sign-in can run the installer and the
+sign-in for you. Homebrew (`brew install --cask claude-code`) and WinGet
+(`winget install Anthropic.ClaudeCode`) installs work too.
 
 **Windows.** Download `TheChatPlace-windows-Setup.exe` from the newest release on
 [the releases page](https://github.com/kellylford/AIChat/releases) and run it.
@@ -453,6 +491,7 @@ shows it as plain text instead.
 | Anywhere | Ctrl+E | Export the session to a file |
 | Reply box | Ctrl+/ | Insert a slash command or skill |
 | Anywhere | Ctrl+Shift+F | Attach files or images to the next message |
+| Anywhere | Ctrl+Shift+M | Other machines: list your sessions on other computers and message one |
 | Anywhere | Ctrl+Shift+D | Changed files, and each change to read by line |
 | Anywhere | Ctrl+Shift+U | Usage and context: how full the context is, and plan limits |
 | Anywhere | Alt+V, H | Show Sessions: choose which sessions are listed |
@@ -471,6 +510,7 @@ shows it as plain text instead.
 | Reply box | Ctrl+Shift+T | Turn status: how long it has been working, and on what |
 | Anywhere | Ctrl+Shift+A | Answer Claude: a permission request, a question or a plan |
 | Anywhere | F1 | Keyboard shortcuts |
+| Anywhere | Alt+H, G | The user guide |
 | Anywhere | Ctrl+Comma | Settings |
 | Anywhere | Ctrl+Shift+R | Repeat the last announcement |
 | Anywhere | Alt+F4 | Quit |
@@ -478,6 +518,9 @@ shows it as plain text instead.
 Menus are File (Alt+F), View (Alt+V) and Help (Alt+H). Controls have their own Alt letters
 (Alt+L the session list, Alt+M the messages, Alt+Y the reply box, Alt+D Send), and none of them
 takes a menu's letter.
+
+On a Mac, Ctrl is the Command key, the menus are in the menu bar (VO+M) rather than on Alt, and
+Settings is in the app menu.
 
 ## How it works
 
@@ -513,8 +556,14 @@ turn's result arrives. That runs under the same login as the desktop app, never 
 uses the plan's Agent SDK credit, as any `claude -p` does.
 
 - It never uses `--bare`, which needs an API key.
-- It needs the native `claude.exe`. The npm install's `claude.cmd` is refused, because Windows runs
-  a `.cmd` through `cmd.exe`, which would let characters in a session title run a command.
+- It needs the native `claude.exe`. The npm install's `claude.cmd` is never run, because Windows
+  runs a `.cmd` through `cmd.exe`, which would let characters in a session title run a command.
+  A newer npm install's `claude.cmd` only starts the same native `claude.exe` from
+  `node_modules`, so that program is run directly instead; an old one that runs `cli.js` through
+  Node is refused. Off the PATH, it looks in `~/.local/bin` (the native installer) and WinGet's
+  `Links` folder on Windows, and in `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin` and
+  `~/.npm-global/bin` on a Mac, where an app started from the Finder doesn't get your shell's
+  PATH.
 - Before starting `claude` it removes two named sets of environment variables, and keeps the rest
   (your `CLAUDE_CODE_GIT_BASH_PATH`, `CLAUDE_CONFIG_DIR`, proxy and timeout settings). The first set
   is what a Claude session puts in the environment of anything started inside it: started from
@@ -583,7 +632,7 @@ Checked with Claude Code 2.1.286 (issues #187 and #188):
 
 ## Limitations
 
-- The Mac version is new and hasn't had a full pass with VoiceOver. Edit boxes, lists and
+- On a Mac, edit boxes, lists and
   choices have their names under VoiceOver, as under JAWS and NVDA. But the text a screen reader
   reads for each row of the messages list (the whole message) uses MSAA, which wxPython has only
   on Windows, so VoiceOver reads the row's own text instead. The OS-specific parts are in

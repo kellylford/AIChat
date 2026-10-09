@@ -395,6 +395,29 @@ def test_enter_on_a_message_opens_its_full_text_and_returns_to_it(frame, env, mo
     assert frame.chat_list.GetSelection() == 1  # same message
 
 
+def test_return_on_a_focused_button_presses_it_on_a_mac(frame, monkeypatch):
+    # On a Mac, Return on Send did nothing; only Space pressed it.
+    monkeypatch.setattr(wx, "Platform", "__WXMAC__")
+    pressed = []
+    for button in (frame.send_btn, frame.attach_btn):
+        button.Bind(wx.EVT_BUTTON, lambda e, b=button: pressed.append(b))
+
+    def press(focus, key=wx.WXK_RETURN, shift=False):
+        monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: focus))
+        event = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
+        event.SetKeyCode(key)
+        event.SetShiftDown(shift)
+        frame._on_char_hook(event)
+        return event.GetSkipped()
+
+    assert not press(frame.send_btn) and pressed == [frame.send_btn]
+    assert not press(frame.attach_btn, wx.WXK_NUMPAD_ENTER) and pressed[-1] is frame.attach_btn
+    assert press(frame.send_btn, shift=True) and len(pressed) == 2  # modified: left alone
+    monkeypatch.setattr(wx, "Platform", "__WXMSW__")
+    press(frame.send_btn)
+    assert len(pressed) == 2  # Windows presses the button itself
+
+
 def test_message_dialog_is_a_labelled_read_only_rich_edit(frame):
     from thechatplace.ui.dialogs import MessageDialog
     dialog = MessageDialog(frame, "Claude", "Line one\nLine two")
@@ -624,6 +647,22 @@ def test_close_during_turn_asks_and_stops(frame, env, fake_runner):
     frame._on_close(event)
     assert "Quit anyway" in env["boxes"][-1]
     assert fake_runner.instances[0].cancelled
+    assert frame._closing  # no context menu opens from here on
+
+
+def test_a_cancelled_quit_leaves_the_window_working(frame, env, fake_runner, monkeypatch):
+    # Answering No to "Quit anyway?" keeps the window, so its menus must
+    # still open: the closing flag is set only past the question.
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame.reply_text.SetValue("long job")
+    frame.on_send()
+    monkeypatch.setattr(wx, "MessageBox", lambda *a, **k: wx.NO)
+    event = wx.CloseEvent(wx.wxEVT_CLOSE_WINDOW)
+    event.SetCanVeto(True)
+    frame._on_close(event)
+    assert event.GetVeto() and not frame._closing
+    assert not fake_runner.instances[0].cancelled
 
 
 def test_store_write_failure_is_reported_and_send_state_still_updates(frame, env,
@@ -1381,7 +1420,8 @@ def test_queued_message_refused_at_send_time_is_spoken_and_goes_to_its_draft(
     assert len(fake_runner.instances) == 1
     assert env["boxes"] == []  # no dialog he didn't ask for
     assert env["feedback"][-1] == ("Your queued message for Hub probe wasn't sent: Claude "
-                                   "Code isn't installed. It's back in the message box.")
+                                   "Code isn't installed. To install it, choose Claude Code "
+                                   "Sign-in on the Help menu. It's back in the message box.")
     assert frame._drafts["own-1"] == "later\n\ntyped elsewhere"
     assert frame._last_announcement == env["feedback"][-1]  # Ctrl+Shift+R repeats it
 
@@ -1538,6 +1578,8 @@ def test_a_later_turn_keeps_the_sessions_model(frame, env, fake_runner):
     command = fake_runner.instances[-1].command
     assert command[-2:] == ["--resume", "own-1"]
     assert command[command.index("--model") + 1] == "sonnet"
+    # The session's name goes too, so other sessions can keep reaching it (#123).
+    assert command[command.index("--name") + 1] == "Hub probe"
 
 
 def test_an_old_session_without_a_model_uses_the_default(frame, env, fake_runner):
@@ -1960,6 +2002,70 @@ def test_f1_shows_the_shortcuts_page_or_the_text_box(frame, env, monkeypatch):
     shown2 = _fake_viewer(monkeypatch, ID_PLAIN_TEXT)
     frame.on_shortcuts()
     assert len(shown2) == 1 and len(texts) == 1  # Read as Plain Text: the text box
+
+
+def test_help_user_guide_shows_the_guide_page_or_the_text_box(frame, env, monkeypatch):
+    # #104: the guide shipped in assets, as a page read by heading, or the
+    # text box on Read as Plain Text or without the formatted view.
+    from thechatplace.ui.dialogs import ID_PLAIN_TEXT, MessageDialog
+    texts = []
+    monkeypatch.setattr(frame, "_modal", lambda dialog: texts.append(dialog) or dialog.Destroy())
+    shown = _fake_viewer(monkeypatch, wx.ID_CANCEL)
+    frame.on_user_guide()
+    assert shown[0][0] == "User Guide"
+    assert "<h1>The Chat Place User Guide</h1>" in shown[0][1]
+    assert ">When Claude needs you</h2>" in shown[0][1] and texts == []
+    _fake_viewer(monkeypatch, ID_PLAIN_TEXT)
+    frame.on_user_guide()
+    assert len(texts) == 1 and isinstance(texts[0], MessageDialog)
+
+
+def test_help_user_guide_text_box_has_no_markdown(frame, env, monkeypatch):
+    # Without the formatted view (a Mac, or no WebView2): straight to the text
+    # box, as clean text.
+    seen = []
+    monkeypatch.setattr(frame, "_modal",
+                        lambda dialog: seen.append(dialog.text.GetValue()) or dialog.Destroy())
+    frame.on_user_guide()
+    assert seen and seen[0].startswith("The Chat Place User Guide")
+    assert "**" not in seen[0] and "](" not in seen[0]
+
+
+def test_help_user_guide_says_so_when_the_guide_is_missing(frame, env, monkeypatch, tmp_path):
+    from thechatplace.ui import main_frame
+    boxes = []
+    monkeypatch.setattr(main_frame.wx, "MessageBox",
+                        lambda message, caption, *a: boxes.append((message, caption)))
+    monkeypatch.setattr(platform_paths, "user_guide_path", lambda: tmp_path / "missing.md")
+    frame.on_user_guide()
+    assert boxes and boxes[0][0].startswith("Couldn't open the user guide")
+    assert boxes[0][1] == "The Chat Place"
+
+
+def test_no_menu_repeats_an_access_letter(frame):
+    # A letter two items share only moves between them (#104: User Guide
+    # first took Check for Updates' U). Each menu, and each submenu, on its own.
+    def letter(label):
+        label = label.replace("&&", "")
+        at = label.find("&")
+        return label[at + 1].lower() if 0 <= at < len(label) - 1 else None
+
+    def check(menu, where):
+        letters = {}
+        for item in menu.GetMenuItems():
+            if item.IsSeparator():
+                continue
+            label = item.GetItemLabel().split("\t")[0]
+            key = letter(label)
+            if key:
+                assert key not in letters, f"{where}: {label!r} and {letters[key]!r} share {key}"
+                letters[key] = label
+            if item.GetSubMenu():
+                check(item.GetSubMenu(), f"{where}, {item.GetItemLabelText()}")
+
+    bar = frame.GetMenuBar()
+    for i in range(bar.GetMenuCount()):
+        check(bar.GetMenu(i), bar.GetMenuLabelText(i))
 
 
 def test_shortcuts_and_messages_fall_back_to_the_text_box(frame, env, monkeypatch):
@@ -3523,8 +3629,8 @@ def test_sign_in_is_checked_and_offered(frame, env, monkeypatch):
     class Process:
         def wait(self):
             return 0
-    monkeypatch.setattr(main_frame.subprocess, "Popen",
-                        lambda command, **k: started.append((command, k)) or Process())
+    monkeypatch.setattr(main_frame.platform_paths, "run_in_terminal",
+                        lambda command, *a, **k: started.append((command, k)) or Process())
     frame._on_sign_in_result(signin.SignIn(True, signed_in=False), manual=True)
     assert shown[-1][0].startswith("Claude Code isn't signed in.")
     assert started[0][0] == ["claude", "auth", "login"]
@@ -3533,7 +3639,7 @@ def test_sign_in_is_checked_and_offered(frame, env, monkeypatch):
     frame._sign_in_asked = False
     count = len(env["feedback"])
     frame._on_sign_in_result(signin.SignIn(True, True, "claude.ai", plan="max"), manual=False)
-    frame._on_sign_in_result(signin.SignIn(False, problem="no claude"), manual=False)
+    frame._on_sign_in_result(signin.SignIn(False, problem="no answer"), manual=False)
     assert len(env["feedback"]) == count
     frame._on_sign_in_result(signin.SignIn(True, signed_in=False), manual=False)
     assert env["feedback"][-1].endswith(
@@ -3547,6 +3653,45 @@ def test_sign_in_is_checked_and_offered(frame, env, monkeypatch):
     monkeypatch.setattr(signin, "login_command", lambda: None)
     frame._on_sign_in_result(signin.SignIn(True, signed_in=False), manual=True)
     assert shown[-1][0].startswith("Couldn't start the sign-in")
+
+
+def test_install_is_offered_when_claude_is_missing(frame, env, monkeypatch):
+    """No claude The Chat Place can use: said at start-up, and Claude Code
+    Sign-in offers to run its installer, then checks again."""
+    from thechatplace import signin
+    from thechatplace.ui import main_frame
+    missing = signin.SignIn(False, missing=True,
+                            problem="Claude Code isn't installed. The desktop app's isn't for "
+                                    "other programs.",
+                            install_help="To install it, run its native installer. In …")
+    frame._sign_in_asked = False
+    frame._on_sign_in_result(missing, manual=False)
+    # Spoken short: the first sentence, without the commands.
+    assert env["feedback"][-1] == ("Claude Code isn't installed. To install it, choose Claude "
+                                   "Code Sign-in on the Help menu.")
+    shown, answers = [], [wx.NO, wx.YES]
+    monkeypatch.setattr(wx, "MessageBox", lambda text, title, style, parent=None: (
+        shown.append(text), answers.pop(0))[1])
+    installs, checks = [], []
+
+    class Process:
+        def wait(self):
+            return 0
+    monkeypatch.setattr(main_frame.platform_paths, "start_claude_install",
+                        lambda env: installs.append(env) or Process())
+    monkeypatch.setattr(main_frame.wx, "CallAfter", lambda fn, *a, **k: checks.append(k))
+    frame._on_sign_in_result(missing, manual=True)  # No: nothing runs
+    assert shown[-1].startswith("Claude Code isn't installed.")
+    assert "To install it, run its native installer." in shown[-1]
+    assert "Install Claude Code now?" in shown[-1] and installs == []
+    frame._on_sign_in_result(missing, manual=True)  # Yes
+    assert len(installs) == 1 and "ANTHROPIC_API_KEY" not in installs[0]
+    assert env["feedback"][-1].startswith("Installing Claude Code, in a new window.")
+    for _ in range(100):
+        if checks:
+            break
+        time.sleep(0.02)
+    assert checks == [{"manual": True}]  # checked again once the window closed
 
 
 def test_change_model_for_the_next_turns(frame, env, monkeypatch):
@@ -3641,6 +3786,57 @@ def test_each_question_is_a_group_box_its_options_follow(frame):
         first.SetValue(True)
         fourth.SetValue(True)
         assert first.GetValue() and fourth.GetValue()
+    finally:
+        dialog.Destroy()
+
+
+def test_arrow_keys_move_through_a_question_s_options(frame):
+    # #121: on a Mac the arrows did nothing in the answer dialog's radio group.
+    from thechatplace.ui.dialogs import RADIO_ARROW_STEPS, QuestionDialog
+    assert RADIO_ARROW_STEPS == {wx.WXK_UP: -1, wx.WXK_LEFT: -1, wx.WXK_DOWN: 1, wx.WXK_RIGHT: 1}
+    dialog = QuestionDialog(frame, "Probe", _Questions())
+    try:
+        fired = []
+        dialog.Bind(wx.EVT_RADIOBUTTON, lambda e: fired.append(e.GetEventObject()._hub_label))
+        (_k1, first, _t1), (_k2, multi, _t2), _third, (_k4, fourth, _t4) = dialog._controls
+        red, blue, other = first
+        fourth[0].SetValue(True)
+        assert dialog.move_in_radio_group(red, 1)
+        assert blue.GetValue() and not red.GetValue()
+        assert dialog.move_in_radio_group(blue, 1) and other.GetValue()
+        assert dialog.move_in_radio_group(other, 1) and red.GetValue()  # wraps, as Windows does
+        assert dialog.move_in_radio_group(red, -1) and other.GetValue()
+        assert fired == ["Blue", "Other", "Red", "Other"]
+        assert fourth[0].GetValue()  # another question's answer is untouched
+        assert not dialog.move_in_radio_group(multi[0], 1)  # check boxes aren't a radio group
+    finally:
+        dialog.Destroy()
+
+
+def test_only_plain_arrows_on_a_radio_are_taken(frame, monkeypatch):
+    # #121's key hook keeps every other key, and arrows anywhere else, working.
+    from thechatplace.ui.dialogs import QuestionDialog
+    dialog = QuestionDialog(frame, "Probe", _Questions())
+    try:
+        (_k1, first, other_text), (_k2, multi, _t2), _third, _fourth = dialog._controls
+        red, blue, _other = first
+        red.SetValue(True)
+
+        def press(focus, key, control=False):
+            monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: focus))
+            event = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
+            event.SetKeyCode(key)
+            event.SetControlDown(control)
+            dialog._on_char_hook(event)
+            return event.GetSkipped()
+
+        assert not press(red, wx.WXK_DOWN) and blue.GetValue()  # taken: moves the choice
+        for focus, key, control in [(blue, wx.WXK_RETURN, False), (blue, wx.WXK_ESCAPE, False),
+                                    (blue, wx.WXK_TAB, False), (blue, wx.WXK_DOWN, True),
+                                    (other_text, wx.WXK_DOWN, False), (multi[0], wx.WXK_DOWN, False),
+                                    (None, wx.WXK_DOWN, False)]:
+            assert press(focus, key, control), (focus, key, control)
+        assert blue.GetValue()  # none of those moved it
     finally:
         dialog.Destroy()
 
@@ -3778,6 +3974,75 @@ def test_voiceover_follows_a_changing_name(frame):
     from thechatplace.ui.a11y import set_accessible_name
     set_accessible_name(frame.chat_list, "Messages, Hub probe, idle")
     assert mac_a11y.get_label(frame.chat_list) == "Messages, Hub probe, idle"
+
+
+def _voiceover_actions(listbox):
+    import ctypes
+    from thechatplace.ui import mac_a11y
+    names = mac_a11y._send(mac_a11y._target_view(listbox), "accessibilityActionNames")
+    count = mac_a11y._send(ctypes.c_void_p(names), "count", restype=ctypes.c_ulong)
+    return [mac_a11y._to_str(mac_a11y._send(ctypes.c_void_p(names), "objectAtIndex:", i,
+                                            argtypes=(ctypes.c_ulong,)))
+            for i in range(count)]
+
+
+def _voiceover_show_menu(listbox):
+    """What VO+Shift+M does: perform AXShowMenu on the list's table."""
+    import ctypes
+    from thechatplace.ui import mac_a11y
+    mac_a11y._send(mac_a11y._target_view(listbox), "accessibilityPerformAction:",
+                   ctypes.c_void_p(mac_a11y._nsstring("AXShowMenu")),
+                   restype=None, argtypes=(ctypes.c_void_p,))
+
+
+@voiceover
+def test_voiceover_opens_the_lists_context_menus(frame, env, monkeypatch):
+    # A wx list box's table offered VoiceOver no AXShowMenu, so VO+Shift+M
+    # did nothing in either list.
+    assert "AXShowMenu" in _voiceover_actions(frame.session_list)
+    assert "AXShowMenu" in _voiceover_actions(frame.chat_list)
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    select(frame, "Quiet one")
+    shown = []
+    monkeypatch.setattr(frame.session_list, "GetPopupMenuSelectionFromUser",
+                        lambda menu, position: shown.append(_labels(menu)) or wx.ID_NONE)
+    _voiceover_show_menu(frame.session_list)
+    assert shown == []  # not inside VoiceOver's request, which it would hold up
+    assert pump(lambda: shown)
+    assert "H&ide Session" in shown[0]
+    popped = []
+    monkeypatch.setattr(frame.chat_list, "PopupMenu",
+                        lambda menu, position: popped.append(menu) or True)
+    _voiceover_show_menu(frame.chat_list)
+    assert pump(lambda: popped)
+
+
+@voiceover
+def test_voiceover_menu_by_the_newer_call_and_only_for_live_lists(frame, monkeypatch):
+    import ctypes
+    from thechatplace.ui import mac_a11y
+    popped = []
+    monkeypatch.setattr(frame.chat_list, "PopupMenu",
+                        lambda menu, position: popped.append(menu) or True)
+    view = mac_a11y._target_view(frame.chat_list)
+    assert mac_a11y._send(view, "accessibilityPerformShowMenu", restype=ctypes.c_bool)
+    assert pump(lambda: popped)
+    # Another list box is left as it was, and a destroyed one is forgotten,
+    # so a new view at its address doesn't open the old list's menu.
+    other = wx.ListBox(frame, choices=["one"])
+    assert "AXShowMenu" not in _voiceover_actions(other)
+    from thechatplace.ui.a11y import set_voiceover_menu
+    opened = []
+    set_voiceover_menu(other, lambda: opened.append(True))
+    address = mac_a11y._target_view(other).value
+    assert address in mac_a11y._menu_handlers
+    # VO+Shift+M, then the list goes before the menu's turn comes: nothing
+    # opens and nothing raises.
+    mac_a11y._menu_handlers[address]()
+    other.Destroy()
+    assert address not in mac_a11y._menu_handlers
+    wx.GetApp().ProcessPendingEvents()
+    assert opened == []
 
 
 @voiceover
@@ -4113,6 +4378,54 @@ def test_a_right_click_means_the_row_under_the_mouse(frame, env, monkeypatch):
     monkeypatch.setattr(frame.session_list, "GetPopupMenuSelectionFromUser", pick)
     frame._on_session_menu(_RightClick())
     assert "local_b" in frame.hidden and "local_a" not in frame.hidden
+
+
+def test_a_right_click_in_the_messages_means_the_message_under_the_mouse(frame, monkeypatch):
+    # The messages list didn't select the row right-clicked either, so the
+    # menu acted on the highlighted message, not the one clicked.
+    frame.chat_list.Set(["first", "second", "third"])
+    frame.chat_list.SetSelection(0)
+    monkeypatch.setattr(frame.chat_list, "HitTest", lambda point: 2)
+    focus = {"on": frame.reply_text}
+    monkeypatch.setattr(frame.chat_list, "SetFocus", lambda: focus.update(on=frame.chat_list))
+    seen = []
+    monkeypatch.setattr(frame.chat_list, "PopupMenu",
+                        lambda menu, position: seen.append(frame.chat_list.GetSelection()))
+    frame._on_message_menu(_RightClick())
+    assert seen == [2] and focus["on"] is frame.chat_list
+    # Below the last message, nothing opens and the highlight stays.
+    monkeypatch.setattr(frame.chat_list, "HitTest", lambda point: wx.NOT_FOUND)
+    frame._on_message_menu(_RightClick())
+    assert seen == [2] and frame.chat_list.GetSelection() == 2
+
+
+def test_the_messages_menu_from_the_keyboard_keeps_the_highlight(frame, monkeypatch):
+    # The Applications key and VO+Shift+M (no mouse position) use the
+    # highlighted message and move focus to the list, even from the reply box.
+    frame.chat_list.Set(["first", "second"])
+    frame.chat_list.SetSelection(1)
+    focus = {"on": frame.reply_text}
+    monkeypatch.setattr(frame.chat_list, "SetFocus", lambda: focus.update(on=frame.chat_list))
+    seen = []
+    monkeypatch.setattr(frame.chat_list, "PopupMenu",
+                        lambda menu, position: seen.append(frame.chat_list.GetSelection()))
+    frame._on_message_menu()
+    assert seen == [1] and focus["on"] is frame.chat_list
+
+
+def test_no_menu_opens_once_the_window_is_closing(frame, monkeypatch):
+    # A menu scheduled by VO+Shift+M can come due after Cmd+Q, before the
+    # window is destroyed.
+    shown = []
+    monkeypatch.setattr(frame.chat_list, "PopupMenu",
+                        lambda menu, position: shown.append(menu))
+    monkeypatch.setattr(frame.session_list, "GetPopupMenuSelectionFromUser",
+                        lambda menu, position: shown.append(menu) or wx.ID_NONE)
+    select(frame, "Quiet one")
+    frame._closing = True
+    frame._on_message_menu()
+    frame._on_session_menu()
+    assert shown == []
 
 
 def test_a_right_click_below_the_rows_does_nothing(frame, env, monkeypatch):
@@ -4569,3 +4882,104 @@ def test_filing_a_session_takes_it_out_of_ungrouped(frame, env, monkeypatch):
     assert "Quiet one" not in _titles(frame)
     if next_title:
         assert frame.session_list.GetStringSelection().startswith(next_title)
+
+
+# -- other machines (#123) -----------------------------------------------------------
+
+
+def _load_hub_probe_with_listing(frame, listing=None):
+    from thechatplace.transcript import TOOL_RESULT, ChatMessage
+    frame.store.update("own-1", remote_control="on")
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame._chat_messages = [ChatMessage("user", "hello", "", "u1")]
+    if listing is not None:
+        frame._chat_messages.append(ChatMessage(TOOL_RESULT, "ListAgents returned: " + listing,
+                                                "", "r1"))
+
+
+class _FakeTextDialog:
+    value = ""
+
+    def __init__(self, parent, prompt, title, value="", style=0):
+        _FakeTextDialog.prompt = prompt
+
+    def ShowModal(self):
+        return wx.ID_OK
+
+    def GetValue(self):
+        return _FakeTextDialog.value
+
+    def Destroy(self):
+        pass
+
+
+def test_other_machines_needs_an_own_session_with_remote_control(frame, env, fake_runner):
+    frame.on_other_machines()  # nothing loaded
+    assert "Load one first" in env["boxes"][-1]
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame.store.update("own-1", remote_control="off")
+    frame.on_other_machines()
+    assert "Remote Control is off for Hub probe" in env["boxes"][-1]
+    assert fake_runner.instances == []
+
+
+def test_other_machines_refresh_asks_claude_for_the_list(frame, env, fake_runner, monkeypatch):
+    _load_hub_probe_with_listing(frame)
+    seen = {}
+    monkeypatch.setattr(frame, "_choose",
+                        lambda title, prompt, choices: seen.update(p=prompt, c=choices) or 0)
+    frame.on_other_machines()
+    assert "hasn't listed" in seen["p"]
+    assert seen["c"] == ["Refresh the list (asks Claude)"]
+    runner = fake_runner.instances[-1]
+    assert "Call ListAgents" in runner.prompt and runner.remote_control
+    assert "Ctrl+Shift+M again" in env["feedback"][-1]
+
+
+def test_other_machines_sends_your_words_to_the_chosen_session(frame, env, fake_runner,
+                                                             monkeypatch):
+    from thechatplace.ui import main_frame
+    _load_hub_probe_with_listing(
+        frame, "Peer sessions (2):\n  Surface Hub [66e038]  ·  Remote Control  ·  offline\n"
+               "  Mac work [a03676]  ·  Remote Control  ·  idle")
+    seen = {}
+    monkeypatch.setattr(frame, "_choose",
+                        lambda title, prompt, choices: seen.update(c=choices) or 1)
+    _FakeTextDialog.value = "What's your hostname?"
+    monkeypatch.setattr(main_frame.wx, "TextEntryDialog", _FakeTextDialog)
+    frame.on_other_machines()
+    assert seen["c"] == ["Surface Hub, offline", "Mac work, idle",
+                         "Refresh the list (asks Claude)"]
+    assert _FakeTextDialog.prompt == "Message to Mac work (Enter sends):"
+    runner = fake_runner.instances[-1]
+    assert '"Mac work"' in runner.prompt
+    assert runner.prompt.endswith("<<<MESSAGE\nWhat's your hostname?\nMESSAGE>>>")
+    # The instructions aren't read back, or given back if the turn fails.
+    assert runner.typed == ""
+    assert not any("SendMessage" in said for said in env["feedback"])
+    assert env["feedback"][-1].endswith("A reply shows here as from Mac work.")
+
+
+def test_other_machines_not_during_a_turn(frame, env, fake_runner, monkeypatch):
+    _load_hub_probe_with_listing(frame)
+    frame._runners["own-1"] = FakeRunner([], "", "", None)
+    monkeypatch.setattr(frame, "_choose", lambda title, prompt, choices: 0)
+    frame.on_other_machines()
+    # Not queued, where Claude's instructions would show as your message.
+    assert not frame._queued.get("own-1")
+    assert env["feedback"][-1] == ("Hub probe is working. Use Other Machines again when "
+                                   "the turn ends.")
+
+
+def test_other_machines_empty_message_sends_nothing(frame, env, fake_runner, monkeypatch):
+    from thechatplace.ui import main_frame
+    _load_hub_probe_with_listing(
+        frame, "Peer sessions (1):\n  Mac work [a03676]  ·  Remote Control  ·  idle")
+    monkeypatch.setattr(frame, "_choose", lambda title, prompt, choices: 0)
+    _FakeTextDialog.value = "   "
+    monkeypatch.setattr(main_frame.wx, "TextEntryDialog", _FakeTextDialog)
+    frame.on_other_machines()
+    assert fake_runner.instances == []
+    assert env["feedback"][-1] == "Nothing sent: the message was empty."

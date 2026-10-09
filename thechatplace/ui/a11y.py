@@ -92,3 +92,24 @@ def set_list_items_accessible(listbox: wx.ListBox, name, item_text) -> None:
         listbox._hub_accessible = accessible  # keep it alive
     except (NotImplementedError, AttributeError):
         pass
+
+
+def set_voiceover_menu(listbox: wx.ListBox, open_menu) -> None:
+    """Open `listbox`'s context menu with VoiceOver's VO+Shift+M, which wx
+    doesn't connect to EVT_CONTEXT_MENU on a Mac. ``open_menu()`` is called
+    as for the Applications key, with no event, and after VoiceOver's request
+    has been answered (see ``mac_a11y.set_show_menu``). Nothing elsewhere."""
+    def open_if_alive():
+        # The window can close between VO+Shift+M and this call, and a menu
+        # for a deleted list would end in a RuntimeError.
+        if listbox:
+            open_menu()
+
+    if not mac_a11y.set_show_menu(listbox, lambda: wx.CallAfter(open_if_alive)):
+        return
+
+    def forget(event):
+        if event.GetEventObject() is listbox:
+            mac_a11y.set_show_menu(listbox, None)
+        event.Skip()
+    listbox.Bind(wx.EVT_WINDOW_DESTROY, forget)

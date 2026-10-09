@@ -1,6 +1,7 @@
 """Text the UI shows that is worth testing without wx."""
 from __future__ import annotations
 
+import re
 from typing import List
 
 #: The window, in Tab order. The Help dialog and the README both describe it.
@@ -85,6 +86,9 @@ SHORTCUTS = [
                          "Alt+T); Delete in the attachments list removes one"),
         ("Ctrl+V with a picture copied", "Attach the picture (a screenshot from Win+Shift+S, "
                                          "say)"),
+        ("Ctrl+Shift+M", "Other machines: list your sessions on other computers and send one "
+                         "a message, through Claude in the loaded Chat Place session (it needs "
+                         "Remote Control on)"),
         ("Ctrl+Shift+D", "Changed files: what Claude changed since your latest message or in "
          "the whole session; Enter on a file reads its changes line by line"),
         ("Ctrl+Shift+U", "Usage and context: how full the loaded session's context is, and "
@@ -100,11 +104,30 @@ SHORTCUTS = [
                          "skills, subagents, commands and settings, to read or open in "
                          "your editor"),
         ("F1", "This list of shortcuts"),
+        ("Alt+H, G", "The user guide, read by heading"),
         ("Ctrl+Comma", "Settings (announcements and speech)"),
         ("Ctrl+Shift+R", "Repeat the last announcement"),
         ("Alt+F4", "Quit"),
     ]),
 ]
+
+
+_HEADING = re.compile(r"^#{1,6}\s+", re.M)
+_LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
+_EMPHASIS = re.compile(r"(\*\*|__)(.+?)\1")
+_CODE = re.compile(r"`([^`]+)`")
+
+
+def markdown_as_text(text: str) -> str:
+    """A document's Markdown as plain text, for the text box (#104): Read as
+    Plain Text, and the only view on a Mac. Headings lose their #s, bold and
+    code lose their marks, and a link reads "text (address)", so a screen
+    reader doesn't read out stars and brackets."""
+    text = _HEADING.sub("", text)
+    text = _LINK.sub(lambda m: m.group(1) if m.group(1) == m.group(2)
+                     else f"{m.group(1)} ({m.group(2)})", text)
+    text = _EMPHASIS.sub(r"\2", text)
+    return _CODE.sub(r"\1", text)
 
 
 def shortcuts_html() -> str:

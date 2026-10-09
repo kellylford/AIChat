@@ -80,3 +80,22 @@ def test_shortcuts_page_escapes_everything(monkeypatch):
     assert "<b>" not in body and "<i>" not in body and "<script>" not in body
     assert "<h2 id=\"group1\">A&lt;b&gt;</h2>" in body
     assert '<th scope="row">x&amp;y</th><td>&quot;q&quot; &lt;i&gt;</td>' in body
+
+
+def test_markdown_as_text_reads_without_marks():
+    # #104: the user guide's text box, Read as Plain Text and on a Mac.
+    from thechatplace.ui_text import markdown_as_text
+    text = markdown_as_text("# Guide\n\n## Part two\n\nPress **Ctrl+N** and `claude`; see the "
+                            "[releases page](https://example.com/r), or "
+                            "[https://example.com](https://example.com).\n- __Bold__ item")
+    assert text == ("Guide\n\nPart two\n\nPress Ctrl+N and claude; see the releases page "
+                    "(https://example.com/r), or https://example.com.\n- Bold item")
+
+
+def test_the_user_guide_as_text_has_no_markdown_left():
+    from thechatplace.platform_paths import user_guide_path
+    from thechatplace.ui_text import markdown_as_text
+    text = markdown_as_text(user_guide_path().read_text(encoding="utf-8"))
+    assert text.startswith("The Chat Place User Guide\n")
+    for mark in ("**", "](", "`", "\n#"):
+        assert mark not in text, mark
