@@ -14,7 +14,7 @@ Keyboard shortcuts: [a web page](https://kellylford.github.io/AIChat/keyboard-sh
 [Markdown](docs/keyboard-shortcuts.md) and [plain text](docs/keyboard-shortcuts.txt): the same list
 as Help, Keyboard Shortcuts (F1) in the app.
 
-> **Status: version 0.1.2, a pre-release** (0.1.0, the first release, came out on 7 October 2026). Used with JAWS on Kelly's PC; the
+> **Status: version 0.1.3, a pre-release** (0.1.0, the first release, came out on 7 October 2026). Used with JAWS on Kelly's PC; the
 > installer, uninstaller and update check have been tested in the vmtest VM. Downloading and
 > installing an update needs two published releases, so it is first tried with 0.1.1. It has not
 > yet had a pass with NVDA. The Mac build is used with VoiceOver on Kelly's Mac, and since 0.1.2
