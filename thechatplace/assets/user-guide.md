@@ -35,7 +35,7 @@ can't find it, and to sign you in when it isn't signed in.
 The Chat Place never uses an API key. Reading sessions costs nothing, because everything it reads
 is on your own computer. Messages you send in its own sessions are Claude Code turns, which count
 against your plan's monthly Agent SDK credit; past that credit, turns stop unless you've turned on
-extra usage, which is billed. View, Usage and Context (Ctrl+Shift+U) says where you stand.
+extra usage, which is billed. View, Usage and Context (Ctrl+Shift+U) shows where you stand.
 
 ### Installing
 
@@ -317,8 +317,9 @@ notification is shown.
 - **Changed Files** (Ctrl+Shift+D) lists the files Claude changed since your latest message, or in
   the whole session, with how many lines were added and removed. Enter on a file reads its changes
   line by line. It works for desktop app sessions too.
-- **Usage and Context** (Ctrl+Shift+U) says how full the session's context is ("Context 62% full:
-  124,000 of 200,000 tokens") and how much of your plan's limits are used. It's also said once,
+- **Usage and Context** (Ctrl+Shift+U) opens a list to read with the arrow keys: how full the
+  session's context is ("Context 62% full: 124,000 of 200,000 tokens"), then each of your plan's
+  usage limits on its own line. Ctrl+C copies the selected line, and Escape closes the list. It's also said once,
   unasked, when the context passes 80%, or a limit passes 90%.
 - **Export** (Ctrl+E) saves a session's conversation as Markdown, a web page or plain text.
 - **What Claude Knows About You** (Ctrl+Shift+K) lists what Claude Code keeps about you: your

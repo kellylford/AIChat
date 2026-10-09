@@ -60,7 +60,7 @@ One window, three parts, in Tab order: the session list; the messages of the loa
 | Ctrl+V with a picture copied | Attach the picture (a screenshot from Win+Shift+S, say) |
 | Ctrl+Shift+M | Other machines: list your sessions on other computers and send one a message, through Claude in the loaded Chat Place session (it needs Remote Control on) |
 | Ctrl+Shift+D | Changed files: what Claude changed since your latest message or in the whole session; Enter on a file reads its changes line by line |
-| Ctrl+Shift+U | Usage and context: how full the loaded session's context is, and how much of your plan's limits are used |
+| Ctrl+Shift+U | Usage and context: a list of how full the loaded session's context is, and how much of each of your plan's limits is used; Ctrl+C copies a line |
 | Ctrl+Shift+T | Turn status: how long Claude has been working, on what, and whether a message is queued |
 
 ## Anywhere

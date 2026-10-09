@@ -91,8 +91,9 @@ SHORTCUTS = [
                          "Remote Control on)"),
         ("Ctrl+Shift+D", "Changed files: what Claude changed since your latest message or in "
          "the whole session; Enter on a file reads its changes line by line"),
-        ("Ctrl+Shift+U", "Usage and context: how full the loaded session's context is, and "
-                         "how much of your plan's limits are used"),
+        ("Ctrl+Shift+U", "Usage and context: a list of how full the loaded session's context "
+                         "is, and how much of each of your plan's limits is used; Ctrl+C "
+                         "copies a line"),
         ("Ctrl+Shift+T", "Turn status: how long Claude has been working, on what, "
                          "and whether a message is queued"),
     ]),

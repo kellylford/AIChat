@@ -92,24 +92,45 @@ def _windows(info: dict):
     return found
 
 
+def limit_lines(info: Optional[dict], now: Optional[float] = None) -> list:
+    """Each usage limit as its own line (#130): "5-hour limit 8% used,
+    resets at 7:00 AM.", "Weekly limit 34% used, resets on Friday at 3:00
+    PM.", and a limit reached or extra usage as lines of their own. Never
+    empty: when nothing is known, that is the line."""
+    if not isinstance(info, dict) or not info:
+        return ["Usage limits: not known until a Chat Place session runs a turn."]
+    lines = []
+    for name, used, resets in _windows(info):
+        line = f"{name[0].upper()}{name[1:]} {round(used * 100)}% used"
+        if resets:
+            line += f", resets {when(resets, now)}"
+        lines.append(line + ".")
+    if info.get("status") not in (None, "allowed", "allowed_warning"):
+        reset = info.get("resetsAt")
+        lines.insert(0, "You've reached a usage limit" + (
+            f"; it resets {when(float(reset), now)}." if reset else "."))
+    if info.get("isUsingOverage"):
+        lines.append("Turns are now billed as extra usage.")
+    return lines or ["Usage limits: Claude Code didn't say."]
+
+
 def limits_text(info: Optional[dict], now: Optional[float] = None) -> str:
     """"5-hour limit 8% used, resets at 7:00 AM. Weekly limit 34% used,
     resets on Friday at 3:00 PM." """
-    if not isinstance(info, dict) or not info:
-        return "Usage limits: not known until a Chat Place session runs a turn."
-    parts = []
-    for name, used, resets in _windows(info):
-        part = f"{name[0].upper()}{name[1:]} {round(used * 100)}% used"
-        if resets:
-            part += f", resets {when(resets, now)}"
-        parts.append(part + ".")
-    if info.get("status") not in (None, "allowed", "allowed_warning"):
-        reset = info.get("resetsAt")
-        parts.insert(0, "You've reached a usage limit" + (
-            f"; it resets {when(float(reset), now)}." if reset else "."))
-    if info.get("isUsingOverage"):
-        parts.append("Turns are now billed as extra usage.")
-    return " ".join(parts) or "Usage limits: Claude Code didn't say."
+    return " ".join(limit_lines(info, now))
+
+
+def usage_lines(title: Optional[str], tokens: int, window: int, info: Optional[dict],
+                now: Optional[float] = None) -> list:
+    """What View, Usage and Context (Ctrl+Shift+U) lists, one line each
+    (#130): the loaded session's context, then each usage limit. ``title``
+    is None when no session is loaded. Shown rather than spoken, so a person
+    who can't follow the system voice can read it by arrowing."""
+    if title is None:
+        first = "Context: no session is loaded. Load one to see how full its context is."
+    else:
+        first = f"{title}: {context_text(tokens, window)}"
+    return [first] + limit_lines(info, now)
 
 
 def limit_warning(info: Optional[dict], now: Optional[float] = None) -> Optional[str]:

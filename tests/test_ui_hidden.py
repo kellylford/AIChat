@@ -3067,7 +3067,24 @@ def test_limits_are_kept_and_a_near_limit_is_said_once(frame, env):
     assert len(warnings) == 1 and warnings[0].startswith("You've used 92% of your weekly limit")
 
 
-def test_usage_and_context_command(frame, env):
+def _usage_dialog(frame, monkeypatch, act=None):
+    """Ctrl+Shift+U with the dialog never shown: what it lists, its title,
+    the list's name, and what's selected."""
+    seen = {}
+
+    def modal(dialog):
+        seen.update(title=dialog.GetTitle(), name=dialog.list.GetName(),
+                    selected=dialog.list.GetSelection(), escape=dialog.GetEscapeId(),
+                    rows=[dialog.list.GetString(i) for i in range(dialog.list.GetCount())])
+        if act:
+            act(dialog)
+        dialog.Destroy()
+    monkeypatch.setattr(frame, "_modal", modal)
+    frame.on_usage()
+    return seen
+
+
+def test_usage_and_context_command(frame, env, monkeypatch):
     add_transcript(env, "C:\\G\\Repo", "cli-a", [user_text("Hi"), {
         "type": "assistant", "uuid": "a1", "timestamp": "2026-10-07T03:00:00Z", "message": {
             "role": "assistant", "id": "m1", "model": "claude-opus-5-5",
@@ -3077,19 +3094,74 @@ def test_usage_and_context_command(frame, env):
     select(frame, "Quiet one")
     frame.on_open_session()
     assert pump(lambda: frame._chat_loaded and frame._reader is not None)
-    frame.on_usage()
+    spoken, feedback = len(env["spoken"]), len(env["feedback"])
+    seen = _usage_dialog(frame, monkeypatch)
+    # A list to read (#130), the first line selected; nothing spoken over it.
+    assert seen["title"] == "Usage and Context" and seen["name"] == "Usage and context"
+    assert seen["selected"] == 0 and seen["escape"] == wx.ID_CANCEL
     # The window isn't known yet: no percentage, and no warning.
-    assert env["feedback"][-1].startswith("Quiet one: Context: 171,000 tokens used; the "
-                                          "window's size isn't known")
-    assert not any("Context" in s for s in env["spoken"])
-    # A turn of ours reported this model's window: now there's a percentage,
-    # and over 80% it's said once, unasked.
+    assert seen["rows"][0].startswith("Quiet one: Context: 171,000 tokens used; the "
+                                      "window's size isn't known")
+    assert seen["rows"][1:] == ["Usage limits: not known until a Chat Place session runs a turn."]
+    assert len(env["spoken"]) == spoken and len(env["feedback"]) == feedback
+    # A turn of ours reported this model's window and the limits: now there's
+    # a percentage, a line for each limit, and over 80% it's said once, unasked.
     frame._model_windows["claude-opus-5-5"] = 200_000
-    frame.on_usage()
-    assert env["feedback"][-1].startswith("Quiet one: Context 86% full: 171,000 of 200,000")
+    frame._limits = _limits(0.34)
+    seen = _usage_dialog(frame, monkeypatch)
+    assert seen["rows"][0].startswith("Quiet one: Context 86% full: 171,000 of 200,000")
+    assert seen["rows"][1].startswith("5-hour limit 10% used, resets ")
+    assert seen["rows"][2].startswith("Weekly limit 34% used, resets ")
+    assert len(seen["rows"]) == 3
     frame._check_context()
     frame._check_context()
     assert sum("Context 86% full" in s for s in env["spoken"]) == 1
+
+
+def _key(dialog, target, code, ctrl=False):
+    event = wx.KeyEvent(wx.wxEVT_KEY_DOWN)
+    event.SetKeyCode(code)
+    event.SetControlDown(ctrl)
+    event.SetEventObject(target)
+    event.SetId(target.GetId())
+    return target.GetEventHandler().ProcessEvent(event)
+
+
+def test_usage_dialog_with_no_session_copies_and_closes_on_escape(frame, env, monkeypatch):
+    frame._limits = _limits(0.5)
+    closed = []
+
+    def act(dialog):
+        dialog.Bind(wx.EVT_BUTTON, lambda e: closed.append(e.GetId()), id=wx.ID_CANCEL)
+        _key(dialog, dialog.list, ord("C"), ctrl=True)  # Ctrl+C: the selected line
+        dialog.list.SetSelection(wx.NOT_FOUND)
+        dialog.copy_selected()  # Copy with nothing selected: every line
+        hook = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
+        hook.SetKeyCode(wx.WXK_ESCAPE)
+        hook.SetEventObject(dialog.list)
+        dialog.GetEventHandler().ProcessEvent(hook)
+    seen = _usage_dialog(frame, monkeypatch, act)
+    assert seen["rows"][0] == ("Context: no session is loaded. Load one to see how full its "
+                               "context is.")
+    assert [r.split(" used")[0] for r in seen["rows"][1:]] == ["5-hour limit 10%",
+                                                               "Weekly limit 50%"]
+    assert env["copied"][-2] == seen["rows"][0]
+    assert env["copied"][-1] == "\n".join(seen["rows"])
+    assert env["feedback"][-1] == "Copied usage and context."
+    assert closed == [wx.ID_CANCEL]  # Escape presses Close
+
+
+def test_usage_dialog_is_named_for_screen_readers(frame):
+    from thechatplace.ui.dialogs import UsageDialog
+    dialog = UsageDialog(frame, ["Context: not known."], lambda text, one: None)
+    try:
+        assert dialog.GetTitle() == "Usage and Context"
+        assert dialog.list.GetName() == "Usage and context"
+        close = dialog.FindWindow(wx.ID_CANCEL)
+        assert close is not None and close.GetLabel() == "&Close"
+        assert dialog.GetDefaultItem() is close
+    finally:
+        dialog.Destroy()
 
 
 def test_a_usage_limit_failure_is_said_plainly(frame, env):
@@ -4070,13 +4142,14 @@ def test_voiceover_menu_by_the_newer_call_and_only_for_live_lists(frame, monkeyp
 @voiceover
 def test_voiceover_reads_dialog_labels(frame):
     from thechatplace.ui.dialogs import (BugReportDialog, ChangesDialog, CommandPickerDialog,
-                                         NewSessionDialog, SettingsDialog)
+                                         NewSessionDialog, SettingsDialog, UsageDialog)
     dialogs = [
         NewSessionDialog(frame, "/tmp"),
         SettingsDialog(frame, speech.SpeechSettings(), speech.default_options()),
         BugReportDialog(frame, ["The Chat Place: 0.1.0"]),
         CommandPickerDialog(frame, FAKE_COMMANDS),
         ChangesDialog(frame, "Hub probe", [], [], str),
+        UsageDialog(frame, ["Context: not known."], lambda text, one: None),
     ]
     try:
         for dialog in dialogs:
