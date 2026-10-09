@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -337,3 +338,43 @@ def test_a_folder_inside_a_clone_is_not_the_clone(fake_gh, tmp_path):
     assert done.wait(30)
     (target / "Inner").mkdir()
     assert not workplaces.is_clone_of(GIT, target / "Inner", "me/Thing")
+
+
+def test_a_remote_branch_by_its_full_name_tracks_it(repo, tmp_path):
+    clone = tmp_path / "Clone2"
+    subprocess.run([GIT, "clone", "-q", str(repo), str(clone)], check=True, capture_output=True)
+    info = workplaces.repo_info(GIT, str(clone))
+    folder = workplaces.add_worktree(GIT, info, "origin/feature/old")
+    assert workplaces.repo_info(GIT, str(folder)).branch == "feature/old"
+    refs = subprocess.run([GIT, "for-each-ref", "--format=%(refname)", "refs/heads/"],
+                          cwd=clone, capture_output=True, text=True).stdout.split()
+    assert "refs/heads/origin/feature/old" not in refs
+
+
+@needs_git
+def test_a_clone_that_cant_be_renamed_is_kept(fake_gh, tmp_path, monkeypatch):
+    monkeypatch.setattr(workplaces.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(Path, "rename", lambda self, target: (_ for _ in ()).throw(
+        PermissionError("in use")))
+    clone, result, done = _clone(fake_gh, "me/Held", tmp_path / "Held")
+    assert done.wait(30)
+    assert result["folder"] is None and str(clone.staging) in result["error"]
+    assert (clone.staging / ".git").is_dir()  # the finished clone isn't thrown away
+
+
+def test_old_temporary_clones_are_swept(tmp_path):
+    old, new = tmp_path / ".thechatplace-clone-old", tmp_path / ".thechatplace-clone-new"
+    for folder in (old, new):
+        folder.mkdir()
+    long_ago = time.time() - workplaces._STALE_SECONDS - 60
+    os.utime(old, (long_ago, long_ago))
+    workplaces._sweep_old_clones(tmp_path)
+    assert not old.exists() and new.exists()  # a clone in progress is left alone
+
+
+def test_tool_folders_go_first_only_when_missing(monkeypatch):
+    monkeypatch.setattr(workplaces, "_TOOL_FOLDERS", [os.path.join("X", "git")])
+    path = os.pathsep.join(["A", "B"])
+    assert workplaces._tool_path(path) == os.pathsep.join([os.path.join("X", "git"), "A", "B"])
+    already = os.pathsep.join(["A", os.path.join("X", "git")])
+    assert workplaces._tool_path(already) == already

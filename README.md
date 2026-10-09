@@ -268,7 +268,7 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   `gh repo clone` clones it in the background into a temporary folder beside it, renamed only
   when the clone has worked. Cancel ends gh and the git it started, and removes only that
   temporary folder; a folder of the repository's name that isn't the repository is never
-  touched. Clones go into the GitHub folder (in your home folder, or Documents on a Mac), made if
+  touched. Clones go into the GitHub folder (in your home folder or in Documents), made if
   there isn't one. **Work in** (Alt+I) is The folder as it is (naming its branch) or A new
   worktree, which a folder outside a git repository can't have (choosing it says so). **Branch**
   (Alt+R) lists the local branches no worktree has checked out; choose one, type the name of a

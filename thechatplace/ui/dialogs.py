@@ -334,9 +334,11 @@ class NewSessionDialog(wx.Dialog):
         self._feedback("Making the worktree.")
 
         def make():
+            focus = self.branch
             try:
                 info = workplaces.repo_info(git, folder)
                 if info is None:
+                    focus = self.work_in
                     made, error = None, ("That folder isn't in a git repository, so it can't "
                                          "have a worktree. Choose The folder as it is, or "
                                          "another folder.")
@@ -346,16 +348,16 @@ class NewSessionDialog(wx.Dialog):
                 made, error = None, f"Couldn't make the worktree. {exc}"
             except Exception as exc:  # noqa: BLE001 - always come back to the dialog
                 made, error = None, f"Couldn't make the worktree: {exc}"
-            wx.CallAfter(self._worktree_made, made, error)
+            wx.CallAfter(self._worktree_made, made, error, focus)
         threading.Thread(target=make, name="worktree", daemon=True).start()
 
-    def _worktree_made(self, made, error: str):
+    def _worktree_made(self, made, error: str, focus=None):
         if not self:
             return
         self._making = False
         self.start_btn.Enable(True)
         if made is None:
-            self._warn(error, self.work_in if "git repository" in error else self.branch)
+            self._warn(error, focus or self.branch)
             return
         self._worktree = str(made)
         _end_modal(self, wx.ID_OK)

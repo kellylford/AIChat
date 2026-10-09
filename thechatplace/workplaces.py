@@ -14,6 +14,7 @@ import re
 import subprocess
 import sys
 import threading
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -81,12 +82,25 @@ def _environment() -> dict:
     so the folders git and gh were found in go first on the PATH: an app
     started from the Finder has no Homebrew folder on it."""
     env = dict(os.environ)
-    folders = [os.path.dirname(t) for t in (find_git(), find_gh()) if t]
-    if folders:
-        env["PATH"] = os.pathsep.join([*dict.fromkeys(folders), env.get("PATH", "")])
+    env["PATH"] = _tool_path(env.get("PATH", ""))
     env.update(GIT_TERMINAL_PROMPT="0", GH_PROMPT_DISABLED="1", GIT_ASKPASS="",
                SSH_ASKPASS="", GCM_INTERACTIVE="never", GH_NO_UPDATE_NOTIFIER="1")
     return env
+
+
+_TOOL_FOLDERS = None
+
+
+def _tool_path(path: str) -> str:
+    """``path`` with the folders git and gh are in added at the front, if
+    they aren't on it already. Found once: every git call asks."""
+    global _TOOL_FOLDERS
+    if _TOOL_FOLDERS is None:
+        _TOOL_FOLDERS = list(dict.fromkeys(os.path.dirname(t) for t in (find_git(), find_gh())
+                                           if t))
+    present = {os.path.normcase(p.rstrip("\/")) for p in path.split(os.pathsep) if p}
+    missing = [f for f in _TOOL_FOLDERS if os.path.normcase(f.rstrip("\/")) not in present]
+    return os.pathsep.join([*missing, path]) if missing else path
 
 
 def _run(argv: List[str], cwd: Optional[str] = None, timeout: float = 30) -> str:
@@ -221,6 +235,7 @@ class Clone:
         self.repo, self.target = repo, Path(target)
         self.staging = self.target.parent / f".thechatplace-clone-{uuid.uuid4().hex[:10]}"
         self._done = done
+        self.kept = False  # a finished clone that couldn't be renamed
         self._cancelled = threading.Event()
         self._tree = platform_paths.ProcessTree()
         self._argv = [*_gh(gh), "repo", "clone", repo, str(self.staging)]
@@ -245,11 +260,12 @@ class Clone:
         finally:
             self._tree.kill()
             self._tree.close()
-        if folder is None:
+        if folder is None and not self.kept:
             remove_tree(self.staging)
         self._done(folder, "" if self._cancelled.is_set() else error)
 
     def _clone(self):
+        _sweep_old_clones(self.target.parent)
         if self.target.exists():
             # Checked by the caller too; never clone over something that's there.
             return None, f"{self.target} already exists."
@@ -278,11 +294,34 @@ class Clone:
         if self.target.exists():
             return None, (f"{self.target} appeared while {self.repo} was cloning, so it was "
                           "left as it is.")
-        try:
-            self.staging.rename(self.target)
-        except OSError as exc:
-            return None, f"Cloned {self.repo}, but couldn't name its folder {self.target}: {exc}"
-        return self.target, ""
+        # Antivirus or the search indexer may hold a folder git has just
+        # written for a moment, so the rename is tried a few times.
+        for attempt in range(8):
+            try:
+                self.staging.rename(self.target)
+                return self.target, ""
+            except OSError as exc:
+                problem = exc
+                time.sleep(0.25 * (attempt + 1))
+        # The clone worked, so it's kept, under the name it has.
+        self.kept = True
+        return None, (f"Cloned {self.repo}, but couldn't rename its folder to {self.target} "
+                      f"({problem}). The clone is in {self.staging}.")
+
+
+#: A clone's temporary folder this old is left from one that never
+#: finished (The Chat Place closed during it): clones stop at an hour.
+_STALE_SECONDS = 3 * 60 * 60
+
+
+def _sweep_old_clones(root: Path) -> None:
+    try:
+        old = [p for p in Path(root).glob(".thechatplace-clone-*")
+               if p.is_dir() and time.time() - p.stat().st_mtime > _STALE_SECONDS]
+    except OSError:
+        return
+    for folder in old:
+        remove_tree(folder)
 
 
 def remove_tree(folder: Path) -> bool:
@@ -292,7 +331,6 @@ def remove_tree(folder: Path) -> bool:
     moment, so it tries a few times. True if the folder is gone."""
     import shutil
     import stat
-    import time
 
     def writable_then_retry(function, path, _exc):
         try:
@@ -411,11 +449,16 @@ def add_worktree(git: str, info: RepoInfo, branch: str) -> Path:
     made from what the chosen folder has checked out now. ToolError with
     git's words if it can't."""
     branch = check_branch_name(git, branch)
+    remote = ""
+    if branch in info.remotes and branch not in info.branches:
+        # origin/main, as git branch -r lists it: a local main tracking it,
+        # never a local branch called origin/main.
+        remote, branch = branch, branch.split("/", 1)[1]
     if branch in info.busy:
         raise ToolError(f"{branch} is already checked out in another folder, and a branch "
                         "can be in only one. Choose another branch, or type a new name.")
     folder = worktree_folder(info.main, branch)
-    remote = _remote_for(info, branch)
+    remote = remote or _remote_for(info, branch)
     if branch in info.branches:
         argv = ["--", str(folder), branch]
     elif remote:
