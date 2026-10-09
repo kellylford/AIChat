@@ -5157,6 +5157,52 @@ def test_session_list_columns_reorder_the_rows_at_once_and_are_remembered(frame,
     assert env["feedback"][-1] == "Session list columns unchanged."
 
 
+def _choose_columns(monkeypatch, fields):
+    from thechatplace.ui import main_frame
+
+    class Chooses:
+        def __init__(self, *a):
+            pass
+
+        def ShowModal(self):
+            return wx.ID_OK
+
+        def fields(self):
+            return list(fields)
+
+        def Destroy(self):
+            pass
+    monkeypatch.setattr(main_frame, "SessionColumnsDialog", Chooses)
+
+
+def test_moving_only_last_activity_still_rewrites_the_row_you_are_on(frame, env,
+                                                                     monkeypatch):
+    # A row differing only in its age is normally left alone (a clock tick);
+    # a change of columns is not one.
+    from thechatplace.sessions import DEFAULT_FIELDS
+    select(frame, "Blocked one")
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    _choose_columns(monkeypatch, ["activity"] + [f for f in DEFAULT_FIELDS if f != "activity"])
+    frame.on_session_columns()
+    assert frame.session_list.GetStringSelection().startswith("active ")
+    _choose_columns(monkeypatch, [f for f in DEFAULT_FIELDS if f != "activity"])
+    frame.on_session_columns()
+    assert "active " not in frame.session_list.GetStringSelection()
+
+
+def test_columns_that_cannot_be_saved_say_so_and_still_apply(frame, env, monkeypatch):
+    select(frame, "Blocked one")
+    _choose_columns(monkeypatch, ["status", "title"])
+
+    def fails(*a, **k):
+        raise OSError("disk full")
+    monkeypatch.setattr(frame.speech, "save", fails)
+    frame.on_session_columns()
+    assert frame.session_list.GetStringSelection() == "needs you: Pick a name, Blocked one"
+    assert "couldn't be saved" in env["feedback"][-1] and "disk full" in env["feedback"][-1]
+    assert not any(said.startswith("Session list columns saved") for said in env["feedback"])
+
+
 def test_session_list_columns_cancel_changes_nothing(frame, env, monkeypatch):
     from thechatplace.ui import main_frame
     before = list(frame.session_list.GetStrings())
@@ -5244,8 +5290,8 @@ def test_columns_dialog_add_remove_and_reset(frame, monkeypatch):
         _key(dialog, monkeypatch, dialog.shown, wx.WXK_DELETE)
         assert said[-1] == "Title removed. 1 column shown."
         assert dialog.fields() == ["status"] and focused[-1] == "shown"
-        dialog.remove()  # the last one stays
-        assert said[-1] == "At least one column has to be shown."
+        _key(dialog, monkeypatch, dialog.shown, wx.WXK_BACK)  # a Mac's Delete key
+        assert said[-1] == "At least one column has to be shown."  # the last one stays
         assert dialog.fields() == ["status"]
         assert dialog.available.GetString(0) == "Title"  # back in catalog order
         dialog.available.SetSelection(0)

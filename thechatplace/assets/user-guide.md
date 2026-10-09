@@ -274,13 +274,18 @@ Down, Move to Top, Move to Bottom and Reset to Default do what they say, and eac
 happened ("Status moved to top, 1 of 10"). The keys work too:
 
 - **Enter** in Available columns adds the column to the end of the line.
-- **Delete** in Shown columns removes one. At least one column is always shown.
+- **Delete** in Shown columns removes one (on a Mac, Delete or Fn+Delete). At least one column
+  is always shown.
 - **Alt+Up** and **Alt+Down** in Shown columns move the column up or down; **Alt+Home** and
   **Alt+End** move it to the top or bottom. On a Mac these use Option.
 
 You stay on the column you moved. The preview at the bottom reads the selected session's line as
 it will be. **OK** saves your choice and changes the list at once, still on the same session;
 **Escape** or Cancel leaves it as it was.
+
+With Status first, every line starts with "needs you", "working" or "idle", so typing a letter
+in the list no longer jumps to a title starting with it. **Ctrl+F** still finds a session by its
+title or folder, whichever columns you show.
 
 ### Groups
 

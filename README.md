@@ -66,10 +66,12 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   Hidden and Groups; a column with nothing to say for a session is left out of its line. The
   dialog has Available columns and Shown columns (in the order they're read), with Add, Remove,
   Move Up, Move Down, Move to Top, Move to Bottom and Reset to Default, and a preview of the
-  selected session's line. Enter in Available adds a column, Delete in Shown removes one, and
+  selected session's line. Enter in Available adds a column, Delete in Shown removes one (on a
+  Mac, Delete or Fn+Delete), and
   Alt+Up, Alt+Down, Alt+Home and Alt+End in Shown move it (Option on a Mac); each is said
   ("Status moved to top, 1 of 10") and you stay on the column you moved. OK saves the choice
-  in The Chat Place's settings and rewrites the list at once; Escape cancels.
+  in The Chat Place's settings and rewrites the list at once; Escape cancels. With Status first,
+  typing a letter no longer jumps to a title; Ctrl+F still finds a session by title or folder.
   Arrowing doesn't load anything; **Enter loads that session** into the messages list, moves you
   there, and says "Loaded Quiet one, 12 messages."
 - **Hide or delete a session.** **Delete** (File, Hide Session) takes the selected session out of

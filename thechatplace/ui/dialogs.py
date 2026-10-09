@@ -1365,7 +1365,7 @@ class SessionColumnsDialog(wx.Dialog):
     session's row. OK keeps the choice; Cancel (or Escape) leaves it.
 
     Keys as well as the buttons, since a Mac has no Alt+letter access keys:
-    Enter in Available adds, Delete in Shown removes, and Alt+Up, Alt+Down,
+    Enter in Available adds, Delete (or Backspace) in Shown removes, and Alt+Up, Alt+Down,
     Alt+Home and Alt+End in Shown move (Option on a Mac), as QuickMail's
     Alt+Up and Alt+Down do. Every action is said (``say``), and focus stays
     on the column it moved, so arrowing on reads its new neighbours."""
@@ -1450,6 +1450,11 @@ class SessionColumnsDialog(wx.Dialog):
     def _not_shown(self):
         return [f for f in FIELD_IDS if f not in self._shown]
 
+    def _show_preview(self):
+        line = self._sample.list_line(fields=self._shown) if self._sample is not None else ""
+        self.preview.ChangeValue(line)
+        self.preview.SetInsertionPoint(0)
+
     def _fill(self, shown_index=None, available_index=None):
         """Both lists again, each keeping its place (or going to the given
         row), and the preview."""
@@ -1464,9 +1469,7 @@ class SessionColumnsDialog(wx.Dialog):
         # An empty list reads as nothing at all to a screen reader.
         self.available.Set([FIELD_NAMES[f] for f in rest] or ["Every column is shown."])
         self.available.SetSelection(min(max(available_index, 0), max(len(rest), 1) - 1))
-        line = self._sample.list_line(fields=self._shown) if self._sample is not None else ""
-        self.preview.ChangeValue(line)
-        self.preview.SetInsertionPoint(0)
+        self._show_preview()
 
     def _selected_shown(self):
         index = self.shown.GetSelection()
@@ -1483,8 +1486,11 @@ class SessionColumnsDialog(wx.Dialog):
         column just added, when that was the last)."""
         rest = self._not_shown()
         index = self.available.GetSelection()
-        if not rest or not 0 <= index < len(rest):
+        if not rest:
             self._say("Every column is shown already.")
+            return
+        if not 0 <= index < len(rest):
+            self._say("No column selected.")
             return
         field = rest[index]
         self._shown.append(field)
@@ -1531,7 +1537,14 @@ class SessionColumnsDialog(wx.Dialog):
             self._say(f"{name} is already at the {end}.")
             return
         self._shown.insert(target, self._shown.pop(index))
-        self._fill(shown_index=target)
+        # Only the rows that changed, not the whole list: setting every row
+        # again would reset the list under the screen reader, and Available
+        # hasn't changed at all.
+        low, high = min(index, target), max(index, target)
+        for row in range(low, high + 1):
+            self.shown.SetString(row, FIELD_NAMES[self._shown[row]])
+        self.shown.SetSelection(target)
+        self._show_preview()
         self._say(f"{name} moved {how}, {self._position(target)}.")
 
     def reset(self):
@@ -1548,7 +1561,9 @@ class SessionColumnsDialog(wx.Dialog):
             self.add()  # Enter in Available adds, rather than pressing OK
             return
         if focus is self.shown:
-            if plain and key in (wx.WXK_DELETE, wx.WXK_NUMPAD_DELETE):
+            # Backspace too: a Mac's Delete key sends it, and it means
+            # nothing else in this list.
+            if plain and key in (wx.WXK_DELETE, wx.WXK_NUMPAD_DELETE, wx.WXK_BACK):
                 self.remove()
                 return
             if event.AltDown() and not (event.ControlDown() or event.ShiftDown()):

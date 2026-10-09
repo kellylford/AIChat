@@ -167,7 +167,7 @@ class SpeechSettings:
     remote_control: bool = False
     #: The session list's columns, in the order each row reads them (View,
     #: Session List Columns, #134): ids from ``sessions.FIELD_IDS``.
-    session_fields: List[str] = field(default_factory=lambda: _default_fields())
+    session_fields: List[str] = field(default_factory=_default_fields)
 
     @property
     def enabled(self) -> bool:

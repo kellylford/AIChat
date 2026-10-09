@@ -763,13 +763,18 @@ class MainFrame(wx.Frame):
                 self._status(text)
         self._run_pending_refresh()
 
-    def _update_session_list(self, sessions: List[SessionInfo], keep_order: bool = False):
+    def _update_session_list(self, sessions: List[SessionInfo], keep_order: bool = False,
+                             rewrite: bool = False):
         """Rewrite only what changed, keeping the selection on the same session.
 
         With ``keep_order`` the rows stay where they are (new sessions are
         added at the end, vanished ones removed), so a refresh never moves the
         row under the reader. The proper order comes back on F5, on returning
         from a session, or on a refresh while the list doesn't have focus.
+
+        ``rewrite`` rewrites the selected row even when only its age differs:
+        the columns changed (#134), so moving or removing Last activity isn't
+        a clock tick.
         """
         now = int(time.time() * 1000)
         by_key = {s.key: s for s in sessions}
@@ -788,7 +793,8 @@ class MainFrame(wx.Frame):
             for i, line in enumerate(lines):
                 if self.session_list.GetString(i) == line:
                     continue
-                if i == index and _same_but_age(self.session_list.GetString(i), line):
+                if i == index and not rewrite and _same_but_age(
+                        self.session_list.GetString(i), line):
                     continue  # don't make the reader re-read for a clock tick
                 self.session_list.SetString(i, line)
             return
@@ -802,7 +808,7 @@ class MainFrame(wx.Frame):
             for i, key in enumerate(kept):
                 line = by_key[key].list_line(now, self.speech.session_fields)
                 if self.session_list.GetString(i) != line and not (
-                        key == selected_key
+                        key == selected_key and not rewrite
                         and _same_but_age(self.session_list.GetString(i), line)):
                     self.session_list.SetString(i, line)
             if len(keys) > len(kept):
@@ -3112,8 +3118,9 @@ class MainFrame(wx.Frame):
 
     @staticmethod
     def _filter_text(info: SessionInfo) -> str:
-        """What Ctrl+F in the list searches: the words its row says, with
-        "Cowork" for a Cowork session whose folder has another name (#91)."""
+        """What Ctrl+F in the list searches: its title, folder and what it
+        needs, whichever columns its row shows (#134), with "Cowork" for a
+        Cowork session whose folder has another name (#91)."""
         kind = " Cowork" if info.cowork else ""
         return f"{info.title} {info.repo} {info.detail}{kind}".casefold()
 
@@ -3365,12 +3372,13 @@ class MainFrame(wx.Frame):
         self._build_show_menu()
         self._refresh_list_in_place()
 
-    def _refresh_list_in_place(self):
+    def _refresh_list_in_place(self, rewrite: bool = False):
         """The rows and the view again, from the sessions already read: their
-        groups changed, not the sessions."""
+        groups (or the columns, ``rewrite``) changed, not the sessions."""
         shown = self._in_current_view(list(self._snapshot.sessions))
         self._update_session_list(shown,
-                                  keep_order=wx.Window.FindFocus() is self.session_list)
+                                  keep_order=wx.Window.FindFocus() is self.session_list,
+                                  rewrite=rewrite)
         self._update_list_label(len(shown))
 
     def on_sort(self, order: str):
@@ -3404,12 +3412,14 @@ class MainFrame(wx.Frame):
             self._feedback("Session list columns unchanged.")
             return
         self.speech.session_fields = fields
+        self._refresh_list_in_place(rewrite=True)
+        names = ", ".join(field_short_name(f) for f in fields)
         try:
             self.speech.save()
         except OSError as exc:
-            self._status(f"Couldn't save the session list columns: {exc}")
-        self._refresh_list_in_place()
-        names = ", ".join(field_short_name(f) for f in fields)
+            self._feedback(f"Session list columns changed to {names}, but couldn't be "
+                           f"saved, so they last until you close The Chat Place: {exc}")
+            return
         self._feedback(f"Session list columns saved. Each session reads: {names}.")
 
     def on_settings(self, _event=None):
