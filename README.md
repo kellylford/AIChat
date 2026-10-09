@@ -256,21 +256,32 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   next turn. If that first message never reaches Claude (Claude Code not signed in, say), it goes
   back into the reply box and Send starts the session again.
 - **Where a new session works** (#154). The Folder box starts at the folder used most recently,
-  and its list (Up and Down Arrow, or Alt+Down Arrow) is every folder your sessions have used,
-  The Chat Place's and the desktop app's, newest first: a worktree counts as its repository,
-  Cowork sessions and folders that no longer exist are left out. Browse (Alt+B) still opens a
-  folder dialog. **From GitHub** (Alt+G) lists your repositories with `gh repo list` (the GitHub
-  CLI's own sign-in; The Chat Place keeps no token). Type to filter, or type owner/name or a
-  GitHub address for any repository; Enter uses it. A repository already cloned in your GitHub
-  folder (checked by its origin) is used as it is; otherwise it's cloned there with
-  `gh repo clone`, in the background, and Cancel stops the clone and removes what it had made. A
-  folder of that name that isn't the repository is never touched. **Work in** (Alt+I) is The
-  folder as it is (naming its branch) or A new worktree: choose a branch in **Branch** (Alt+R),
-  or type a new name to branch from the folder's current branch, and Start runs `git worktree
-  add` into `<repo>/.claude/worktrees/<branch>`, where Claude Code and the desktop app put
-  theirs, and starts the session there. The worktree is left in place afterwards. Continue Here
-  keeps its session's own folder, so it has none of these. git and gh are run with no shell and
-  never prompt; branch and repository names are checked before either sees them.
+  and its list (Up and Down Arrow on Windows, or open it with Alt+Down Arrow) is every folder
+  your sessions have used, The Chat Place's and the desktop app's, newest first: a worktree
+  counts as its repository, and Cowork sessions and folders that no longer exist are left out
+  (if checking takes more than a moment, as for a network drive that's gone, the list is offered
+  unchecked). Browse (Alt+B) still opens a folder dialog. **From GitHub** (Alt+G) lists your
+  repositories with `gh repo list` (the GitHub CLI's own sign-in; The Chat Place keeps no token)
+  and says how many there are, or in the list why it couldn't get them. Type to filter, or type
+  owner/name or a GitHub address for exactly that repository; Enter uses it. A repository
+  already in your GitHub folder (checked by its origin) is used as it is; otherwise
+  `gh repo clone` clones it in the background into a temporary folder beside it, renamed only
+  when the clone has worked. Cancel ends gh and the git it started, and removes only that
+  temporary folder; a folder of the repository's name that isn't the repository is never
+  touched. Clones go into the GitHub folder (in your home folder, or Documents on a Mac), made if
+  there isn't one. **Work in** (Alt+I) is The folder as it is (naming its branch) or A new
+  worktree, which a folder outside a git repository can't have (choosing it says so). **Branch**
+  (Alt+R) lists the local branches no worktree has checked out; choose one, type the name of a
+  branch only a remote has (the new branch tracks it), or type a new name to branch from what
+  the folder has checked out. Start makes the worktree in the background with `git worktree
+  add`, in `<repo>/.claude/worktrees/<branch>` where Claude Code and the desktop app put theirs
+  (beside them even when the folder is a worktree itself), and starts the session in the same
+  folder inside it as the one chosen. If git doesn't already ignore `.claude/worktrees/`, it's
+  added to the repository's own `.git/info/exclude` (never shared), so worktrees don't show as
+  new files. The worktree is left in place afterwards. Continue Here keeps its session's own
+  folder, so it has none of these. git and gh are run with no shell and never prompt; branch and
+  repository names are checked before either sees them. On a Mac without Apple's Command Line
+  Tools, `/usr/bin/git` isn't used, since running it asks to install them.
 - **Remote Control.** Settings can turn on Remote Control for The Chat Place's sessions, and
   **File, Remote Control** turns it on or off for one session (or back to the Settings
   default). A session on Remote Control can be reached from claude.ai and your other devices

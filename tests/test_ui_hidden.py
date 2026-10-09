@@ -6446,6 +6446,11 @@ def _git_repo(folder):
     return folder
 
 
+def _read(dialog):
+    """Wait for the background read of the dialog's folder."""
+    assert pump(lambda: dialog._repo_known, timeout=15)
+
+
 def test_new_session_offers_recent_folders(frame, env, fake_runner, monkeypatch):
     from thechatplace.ui import main_frame
     old, new = env["tmp"] / "old", env["tmp"] / "new"
@@ -6454,20 +6459,45 @@ def test_new_session_offers_recent_folders(frame, env, fake_runner, monkeypatch)
     frame.store.add(OwnSession("own-old", "Old", str(old), last_activity_ms=1000))
     frame.store.add(OwnSession("own-new", "New", str(new), last_activity_ms=now_ms() + 5000))
     monkeypatch.setattr(platform_paths, "default_projects_root", lambda: env["tmp"])
+    monkeypatch.setattr(platform_paths, "clone_root", lambda: env["tmp"] / "GitHub")
     seen = {}
 
     class Fills(main_frame.NewSessionDialog):
         def ShowModal(self):
             seen["choices"] = list(self.folder.GetStrings())
             seen["value"] = self.folder.GetValue()
-            seen["projects_root"] = self._projects_root
+            seen["roots"] = (self._projects_root, self._clone_root)
             return wx.ID_CANCEL
     monkeypatch.setattr(main_frame, "NewSessionDialog", Fills)
     frame.on_new_session()
     # Newest first; C:\G\Scratch (the frame's own) doesn't exist, so isn't offered.
     assert seen["choices"] == [str(new), str(old)]
     assert seen["value"] == str(new)
-    assert seen["projects_root"] == str(env["tmp"])
+    assert seen["roots"] == (str(env["tmp"]), str(env["tmp"] / "GitHub"))
+
+
+def test_recent_folders_are_offered_unchecked_if_checking_is_slow(frame, env, monkeypatch):
+    from thechatplace import workplaces
+    from thechatplace.ui import main_frame
+    real = workplaces.recent_folders
+
+    def slow(sessions, exists=None, **kwargs):
+        if exists is None:
+            time.sleep(3)  # a network drive that's gone
+            return []
+        return real(sessions, exists=exists, **kwargs)
+    monkeypatch.setattr(workplaces, "recent_folders", slow)
+    seen = {}
+
+    class Fills(main_frame.NewSessionDialog):
+        def ShowModal(self):
+            seen["choices"] = list(self.folder.GetStrings())
+            return wx.ID_CANCEL
+    monkeypatch.setattr(main_frame, "NewSessionDialog", Fills)
+    started = time.monotonic()
+    frame.on_new_session()
+    assert time.monotonic() - started < 2.5
+    assert "C:\\G\\Scratch" in seen["choices"]  # not checked, so offered
 
 
 def test_new_session_without_recent_folders_starts_at_the_root(frame):
@@ -6475,6 +6505,7 @@ def test_new_session_without_recent_folders_starts_at_the_root(frame):
     dialog = NewSessionDialog(frame, "C:\\G")
     try:
         assert dialog.folder.GetValue() == "C:\\G" and dialog.folder.GetCount() == 0
+        _read(dialog)
         assert dialog.work_in.GetSelection() == WORK_IN_FOLDER
         assert dialog.work_in.GetString(WORK_IN_FOLDER) == \
             "The folder as it is (not a git repository, so no worktree)"
@@ -6488,6 +6519,40 @@ def test_new_session_without_recent_folders_starts_at_the_root(frame):
         dialog.Destroy()
 
 
+def test_a_worktree_is_refused_at_once_outside_a_repository(frame, env):
+    from thechatplace.ui.dialogs import NewSessionDialog, WORK_IN_FOLDER, WORK_IN_WORKTREE
+    plain = env["tmp"] / "plain"
+    plain.mkdir()
+    dialog = NewSessionDialog(frame, str(plain), feedback=env["feedback"].append)
+    try:
+        _read(dialog)
+        dialog.work_in.SetSelection(WORK_IN_WORKTREE)
+        dialog._on_work_in()
+        assert dialog.work_in.GetSelection() == WORK_IN_FOLDER
+        assert not dialog.branch.IsEnabled()
+        assert env["feedback"][-1] == ("That folder isn't in a git repository, so it can't "
+                                       "have a worktree.")
+    finally:
+        dialog.Destroy()
+
+
+def test_a_stale_read_of_another_folder_is_dropped(frame, env):
+    from thechatplace.ui.dialogs import NewSessionDialog
+    from thechatplace.workplaces import RepoInfo
+    plain = env["tmp"] / "plain"
+    plain.mkdir()
+    dialog = NewSessionDialog(frame, str(plain))
+    try:
+        _read(dialog)
+        stale = RepoInfo(top="x", main="x", common="x/.git", rel="", branch="old",
+                         branches=["old"], busy=[], remotes=[])
+        dialog._repo_read("C:\\some\\other\\folder", stale)
+        assert dialog._repo is None and dialog.branch.GetCount() == 0
+    finally:
+        dialog.Destroy()
+    dialog._repo_read(str(plain), None)  # after it closed: nothing happens
+
+
 def test_new_session_in_a_new_worktree(frame, env, fake_runner, monkeypatch):
     from thechatplace.ui import main_frame
     repo = _git_repo(env["tmp"] / "Repo")
@@ -6497,19 +6562,24 @@ def test_new_session_in_a_new_worktree(frame, env, fake_runner, monkeypatch):
     class Fills(main_frame.NewSessionDialog):
         def ShowModal(self):
             self.set_folder(str(repo))
+            _read(self)
             seen["here"] = self.work_in.GetString(0)
             seen["branches"] = list(self.branch.GetStrings())
             self.work_in.SetSelection(1)
-            self._update_branch_state()
+            self._on_work_in()
             seen["branch_enabled"] = self.branch.IsEnabled()
             self.branch.SetValue("fix/the-thing")
             self.message.SetValue("Fix it")
             self._on_ok(None)
+            seen["start_while_making"] = self.start_btn.IsEnabled()
+            assert pump(lambda: self.GetReturnCode() == wx.ID_OK, timeout=30)
             return self.GetReturnCode()
     monkeypatch.setattr(main_frame, "NewSessionDialog", Fills)
     frame.on_new_session()
-    assert seen == {"here": "The folder as it is, on main", "branches": ["main", "older"],
-                    "branch_enabled": True}
+    # main is checked out in the folder itself, so only "older" is offered.
+    assert seen == {"here": "The folder as it is, on main", "branches": ["older"],
+                    "branch_enabled": True, "start_while_making": False}
+    assert env["feedback"][0] == "Making the worktree."
     worktree = repo / ".claude" / "worktrees" / "fix-the-thing"
     assert worktree.is_dir()
     runner = fake_runner.instances[-1]
@@ -6518,26 +6588,35 @@ def test_new_session_in_a_new_worktree(frame, env, fake_runner, monkeypatch):
     assert frame.store.get(session_id).cwd == str(worktree)
 
 
-def test_worktree_refused_outside_a_repository_and_for_a_bad_branch(frame, env, monkeypatch):
+def test_worktree_problems_are_said_and_cancel_waits_for_one_being_made(frame, env, monkeypatch):
     from thechatplace.ui.dialogs import NewSessionDialog
     boxes = []
     monkeypatch.setattr(wx, "MessageBox", lambda text, *a, **k: boxes.append(text) or wx.OK)
-    plain = env["tmp"] / "plain"
-    plain.mkdir()
-    dialog = NewSessionDialog(frame, str(plain))
+    repo = _git_repo(env["tmp"] / "Repo")
+    dialog = NewSessionDialog(frame, str(repo), feedback=env["feedback"].append)
     try:
+        _read(dialog)
         dialog.message.SetValue("hi")
         dialog.work_in.SetSelection(1)
-        dialog._on_ok(None)
-        assert dialog.GetReturnCode() != wx.ID_OK
-        assert "isn't in a git repository" in boxes[-1]
-        repo = _git_repo(env["tmp"] / "Repo")
-        dialog.set_folder(str(repo))
+        dialog._on_work_in()
         dialog.branch.SetValue("-bad")
         dialog._on_ok(None)
+        assert pump(lambda: boxes, timeout=15)
+        assert "can't be a branch name" in boxes[-1] and dialog.start_btn.IsEnabled()
         assert dialog.GetReturnCode() != wx.ID_OK
-        assert "can't be a branch name" in boxes[-1]
+        dialog.branch.SetValue("main")
+        dialog._on_ok(None)
+        assert pump(lambda: len(boxes) == 2, timeout=15)
+        assert "already checked out in another folder" in boxes[-1]
         assert not (repo / ".claude").exists()
+        # While one is being made, Cancel says so and stays.
+        dialog._making = True
+        event = wx.CommandEvent(wx.wxEVT_BUTTON, wx.ID_CANCEL)
+        skipped = []
+        event.Skip = lambda skip=True: skipped.append(skip)
+        dialog._on_cancel(event)
+        assert env["feedback"][-1] == "Still making the worktree." and not skipped
+        dialog._making = False
         # The folder as it is: no worktree, the folder itself.
         dialog.work_in.SetSelection(0)
         dialog._on_ok(None)
@@ -6569,29 +6648,41 @@ def test_from_github_lists_filters_and_uses_a_clone(frame, env, monkeypatch):
     from thechatplace import workplaces
     monkeypatch.setattr(workplaces, "_gh", lambda gh: [
         sys.executable, str(Path(__file__).resolve().parent / "fake_gh.py")])
-    monkeypatch.setattr(workplaces, "list_github_repos", lambda gh: [])  # loaded by hand
+    monkeypatch.setattr(workplaces, "list_github_repos", lambda gh: [])
     said = []
     dialog = _repo_dialog(frame, env["tmp"], said)
     try:
+        assert pump(lambda: said == ["0 repositories."])  # the background list
+        assert dialog.search.GetName().endswith(f"Clones go into {env['tmp']}")
         dialog._loaded = False
         dialog._filter()
         assert dialog.list.GetString(0) == "Loading your repositories…"
+        said.clear()
         dialog.loaded([workplaces.GitHubRepo("me/Alpha", "First tool"),
-                       workplaces.GitHubRepo("me/Beta", "Second", True)])
+                       workplaces.GitHubRepo("me/Beta", "Second, like me/Alpha", True)])
+        assert said == ["2 repositories."]
         assert dialog.list.GetStrings() == ["me/Alpha: First tool",
-                                            "me/Beta, private: Second"]
+                                            "me/Beta, private: Second, like me/Alpha"]
         dialog.search.SetValue("second")
-        assert dialog.list.GetStrings() == ["me/Beta, private: Second"]
+        assert dialog.list.GetStrings() == ["me/Beta, private: Second, like me/Alpha"]
         assert dialog.list_label.GetLabel() == "&Repositories (1 of 2):"
+        # owner/name is that repository, not one that mentions it.
+        dialog.search.SetValue("me/alpha")
+        assert dialog.list.GetStrings() == ["me/Alpha: First tool"]
         dialog.search.SetValue("someone/Else")
         assert dialog.list.GetString(0) == "Not one of yours: Enter uses someone/Else."
         assert dialog.chosen_repo() == "someone/Else"
+        dialog.search.SetValue("nothing here")
+        dialog.choose()
+        assert said[-1] == "Type owner/name, or choose one of your repositories."
+        said.clear()
         dialog.search.SetValue("beta")
         dialog.choose()
         assert not dialog.search.IsEnabled()  # cloning
         assert pump(lambda: dialog.folder is not None, timeout=30)
         assert dialog.folder == env["tmp"] / "Beta" and dialog.GetReturnCode() == wx.ID_OK
-        assert said == ["Cloning me/Beta.", "Cloned me/Beta."]
+        assert said == [f"Cloning me/Beta into {env['tmp'] / 'Beta'}. Cancel stops it.",
+                        "Cloned me/Beta."]
     finally:
         dialog.Destroy()
     # Again: already there, so it's used as it is.
@@ -6601,9 +6692,32 @@ def test_from_github_lists_filters_and_uses_a_clone(frame, env, monkeypatch):
         dialog.loaded([workplaces.GitHubRepo("me/Beta")])
         dialog.choose()
         assert dialog.folder == env["tmp"] / "Beta"
-        assert said == [f"me/Beta is already in {env['tmp'] / 'Beta'}."]
+        assert said[-1] == f"me/Beta is already in {env['tmp'] / 'Beta'}."
     finally:
         dialog.Destroy()
+
+
+def test_from_github_cancel_stops_the_clone(frame, env, monkeypatch):
+    import sys
+    from pathlib import Path
+    from thechatplace import workplaces
+    monkeypatch.setattr(workplaces, "_gh", lambda gh: [
+        sys.executable, str(Path(__file__).resolve().parent / "fake_gh.py")])
+    monkeypatch.setattr(workplaces, "list_github_repos", lambda gh: [])
+    monkeypatch.setenv("FAKE_GH_MODE", "hang")
+    dialog = _repo_dialog(frame, env["tmp"], [])
+    try:
+        dialog.loaded([workplaces.GitHubRepo("me/Slow")])
+        dialog.choose()
+        clone = dialog._clone
+        event = wx.CommandEvent(wx.wxEVT_BUTTON, wx.ID_CANCEL)
+        dialog._on_cancel(event)
+        assert dialog._clone is None and dialog.GetReturnCode() == wx.ID_CANCEL
+        clone.wait(15)
+        assert not clone.staging.exists() and not (env["tmp"] / "Slow").exists()
+    finally:
+        dialog.Destroy()
+    wx.GetApp().ProcessPendingEvents()  # the cancelled clone's answer, to a closed dialog
 
 
 def test_from_github_never_touches_a_folder_that_is_something_else(frame, env, monkeypatch):
@@ -6616,6 +6730,9 @@ def test_from_github_never_touches_a_folder_that_is_something_else(frame, env, m
     try:
         dialog.loaded([], "To get started with GitHub CLI, please run: gh auth login")
         assert "gh auth login" in dialog.status.GetLabel()
+        assert dialog.list.GetStrings() == [
+            "Couldn't list your repositories. To get started with GitHub CLI, please run: "
+            "gh auth login"]
         dialog.search.SetValue("me/Taken")
         dialog.choose()
         assert dialog.folder is None and "isn't a clone of me/Taken" in boxes[-1]

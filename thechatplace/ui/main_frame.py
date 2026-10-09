@@ -2679,10 +2679,17 @@ class MainFrame(wx.Frame):
         root = str(platform_paths.default_projects_root())
         # The folders sessions have used (#154): the store's too, as the
         # snapshot may not have the newest of them yet.
-        recent = workplaces.recent_folders(
-            list(self._snapshot.sessions) + [s.to_info() for s in self.store.all()])
+        sessions = list(self._snapshot.sessions) + [s.to_info() for s in self.store.all()]
+        # Whether each folder still exists is asked off the UI thread, with a
+        # limit: a folder on a network drive that's gone can take a long time
+        # to answer, and then the list is offered without that check.
+        try:
+            recent = self._pool.submit(workplaces.recent_folders, sessions).result(timeout=1.5)
+        except Exception:  # noqa: BLE001 - timed out, or the pool is closing
+            recent = workplaces.recent_folders(sessions, exists=lambda folder: True)
         dialog = NewSessionDialog(self, root, recent=recent, projects_root=root,
-                                  feedback=self._feedback)
+                                  feedback=self._feedback,
+                                  clone_root=str(platform_paths.clone_root()))
         try:
             if dialog.ShowModal() != wx.ID_OK:
                 return

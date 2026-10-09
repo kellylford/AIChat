@@ -28,6 +28,13 @@ if args[:2] == ["repo", "clone"]:
     subprocess.run(["git", "-C", folder, "remote", "add", "origin",
                     f"https://github.com/{repo}.git"], check=True)
     if mode == "hang":
+        # As the real gh: git does the cloning, as a child process holding
+        # the same output pipes, and git makes its pack files read-only.
+        pack = os.path.join(folder, ".git", "objects", "pack", "pack-1.pack")
+        with open(pack, "w") as handle:
+            handle.write("pack")
+        os.chmod(pack, 0o444)
+        subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
         time.sleep(60)
     sys.exit(0)
 sys.stderr.write(f"fake gh: unknown command {args}\n")

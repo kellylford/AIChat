@@ -51,9 +51,9 @@ def test_a_worktree_counts_as_its_repository(tmp_path):
     sessions = [info(str(worktree), 20), info(str(repo), 10)]
     assert workplaces.recent_folders(sessions) == [str(repo)]
     assert workplaces.repo_of_worktree("C:/G/Repo/.claude/worktrees/x/") == "C:/G/Repo"
-    # Only the worktree folder itself, not a folder inside one.
-    inside = "C:/G/Repo/.claude/worktrees/x/src"
-    assert workplaces.repo_of_worktree(inside) == inside
+    # A folder inside one too, as the session list reads it.
+    assert workplaces.repo_of_worktree("C:/G/Repo/.claude/worktrees/x/src") == "C:/G/Repo"
+    assert workplaces.repo_of_worktree("C:/G/.claude") == "C:/G/.claude"
 
 
 def test_recent_folders_stop_at_the_limit(tmp_path):
@@ -153,22 +153,6 @@ def test_a_failed_clone_says_why_and_leaves_nothing(fake_gh, tmp_path, monkeypat
     assert not target.exists()
 
 
-@needs_git
-def test_a_cancelled_clone_removes_its_folder(fake_gh, tmp_path, monkeypatch):
-    monkeypatch.setenv("FAKE_GH_MODE", "hang")
-    target = tmp_path / "Slow"
-    clone, result, done = _clone(fake_gh, "me/Slow", target)
-    for _ in range(300):
-        if (target / ".git").exists():
-            break
-        threading.Event().wait(0.05)
-    clone.cancel()
-    assert done.wait(30)
-    assert result == {"folder": None, "error": ""}
-    clone.wait(10)
-    assert not target.exists()
-
-
 def test_never_clones_into_an_existing_folder(fake_gh, tmp_path):
     target = tmp_path / "Mine"
     target.mkdir()
@@ -192,18 +176,23 @@ def repo(tmp_path):
     folder = tmp_path / "Repo"
     folder.mkdir()
     git("init", "-q", "-b", "main", cwd=folder)
-    git("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q",
-        "--allow-empty", "-m", "first", cwd=folder)
-    git("branch", "feature/old", cwd=folder)
     (folder / "sub").mkdir()
+    (folder / "sub" / "file.txt").write_text("x")
+    git("add", ".", cwd=folder)
+    git("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q",
+        "-m", "first", cwd=folder)
+    git("branch", "feature/old", cwd=folder)
     return folder
 
 
 def test_repo_info(repo, tmp_path):
     found = workplaces.repo_info(GIT, str(repo / "sub"))
-    assert Path(found.top) == repo
+    assert Path(found.top) == repo and Path(found.main) == repo
+    assert found.rel == "sub"
     assert found.branch == "main"
-    assert found.branches == ["main", "feature/old"]
+    # main is checked out (here), so it can't have a worktree too.
+    assert found.branches == ["feature/old"] and found.busy == ["main"]
+    assert workplaces.repo_info(GIT, str(repo)).rel == ""
     plain = tmp_path / "plain"
     plain.mkdir()
     assert workplaces.repo_info(GIT, str(plain)) is None
@@ -213,7 +202,7 @@ def test_repo_info(repo, tmp_path):
 
 @needs_git
 @pytest.mark.parametrize("name", ["", "  ", "-f", "@{-1}", "a b", "a..b", "a~1", "x.lock",
-                                  "@", "a@{b"])
+                                  "@", "a@{b", "HEAD", "refs/heads/x"])
 def test_bad_branch_names_are_refused(name):
     with pytest.raises(workplaces.ToolError):
         workplaces.check_branch_name(GIT, name)
@@ -225,22 +214,113 @@ def test_good_branch_names():
 
 
 def test_a_new_branch_gets_a_worktree(repo):
-    folder = workplaces.add_worktree(GIT, str(repo), "fix/new-thing", ["main", "feature/old"])
+    info = workplaces.repo_info(GIT, str(repo))
+    folder = workplaces.add_worktree(GIT, info, "fix/new-thing")
     assert folder == repo / ".claude" / "worktrees" / "fix-new-thing"
     assert (folder / ".git").is_file()
     assert workplaces.repo_info(GIT, str(folder)).branch == "fix/new-thing"
-    # The repository itself is still on its own branch.
+    # The repository itself is still on its own branch, and its status
+    # doesn't show the worktree.
     assert workplaces.repo_info(GIT, str(repo)).branch == "main"
+    status = subprocess.run([GIT, "status", "--porcelain"], cwd=repo, capture_output=True,
+                            text=True).stdout
+    assert ".claude" not in status
+    exclude = (repo / ".git" / "info" / "exclude").read_text()
+    assert exclude.count("/.claude/worktrees/") == 1
+    # Already ignored: not added again.
+    workplaces.add_worktree(GIT, workplaces.repo_info(GIT, str(repo)), "another")
+    assert (repo / ".git" / "info" / "exclude").read_text().count("/.claude/worktrees/") == 1
 
 
 def test_an_existing_branch_gets_a_worktree(repo):
-    folder = workplaces.add_worktree(GIT, str(repo), "feature/old", ["main", "feature/old"])
+    folder = workplaces.add_worktree(GIT, workplaces.repo_info(GIT, str(repo)), "feature/old")
     assert workplaces.repo_info(GIT, str(folder)).branch == "feature/old"
-    # A taken folder name gets a number; a branch checked out already is git's no.
+    # Now it's checked out, so it's no longer offered, and asking says why.
+    info = workplaces.repo_info(GIT, str(repo))
+    assert "feature/old" not in info.branches
+    with pytest.raises(workplaces.ToolError, match="already checked out"):
+        workplaces.add_worktree(GIT, info, "feature/old")
     (repo / ".claude" / "worktrees" / "again").mkdir()
     assert workplaces.worktree_folder(str(repo), "again").name == "again-2"
-    with pytest.raises(workplaces.ToolError):
-        workplaces.add_worktree(GIT, str(repo), "feature/old", ["main", "feature/old"])
+
+
+def test_a_subfolder_works_in_the_same_subfolder_of_the_worktree(repo):
+    info = workplaces.repo_info(GIT, str(repo / "sub"))
+    folder = workplaces.add_worktree(GIT, info, "in-sub")
+    assert folder == repo / ".claude" / "worktrees" / "in-sub" / "sub"
+    assert (folder / "file.txt").is_file()
+
+
+def test_a_worktree_from_a_worktree_goes_beside_it(repo):
+    first = workplaces.add_worktree(GIT, workplaces.repo_info(GIT, str(repo)), "first")
+    info = workplaces.repo_info(GIT, str(first))
+    assert Path(info.main) == repo and Path(info.top) == first
+    second = workplaces.add_worktree(GIT, info, "second")
+    assert second == repo / ".claude" / "worktrees" / "second"
+    # Made from what the chosen worktree had checked out.
+    assert workplaces.repo_info(GIT, str(second)).branch == "second"
+
+
+def test_a_branch_only_a_remote_has_is_tracked(repo, tmp_path):
+    clone = tmp_path / "Clone"
+    subprocess.run([GIT, "clone", "-q", str(repo), str(clone)], check=True, capture_output=True)
+    info = workplaces.repo_info(GIT, str(clone))
+    assert "origin/feature/old" in info.remotes and "feature/old" not in info.branches
+    folder = workplaces.add_worktree(GIT, info, "feature/old")
+    upstream = subprocess.run([GIT, "rev-parse", "--abbrev-ref", "@{upstream}"], cwd=folder,
+                              capture_output=True, text=True).stdout.strip()
+    assert upstream == "origin/feature/old"
+
+
+def test_remove_tree_removes_read_only_files(tmp_path):
+    folder = tmp_path / "x" / ".git" / "objects" / "pack"
+    folder.mkdir(parents=True)
+    pack = folder / "pack-1.pack"
+    pack.write_text("p")
+    os.chmod(pack, 0o444)
+    assert workplaces.remove_tree(tmp_path / "x")
+    assert not (tmp_path / "x").exists()
+    assert workplaces.remove_tree(tmp_path / "never-there")
+
+
+@needs_git
+def test_cancel_ends_the_whole_clone_and_removes_only_its_own_folder(fake_gh, tmp_path,
+                                                                     monkeypatch):
+    monkeypatch.setenv("FAKE_GH_MODE", "hang")
+    target = tmp_path / "Slow"
+    clone, result, done = _clone(fake_gh, "me/Slow", target)
+    pack = clone.staging / ".git" / "objects" / "pack" / "pack-1.pack"
+    for _ in range(300):
+        if pack.exists():
+            break
+        threading.Event().wait(0.05)
+    assert pack.exists() and not target.exists()  # cloning beside, not into, the target
+    threading.Event().wait(0.5)  # the child holding the pipes has started
+    clone.cancel()
+    # fake gh's child sleeps for a minute holding gh's output pipes; only
+    # killing the whole tree lets the clone end now.
+    assert done.wait(15)
+    assert result == {"folder": None, "error": ""}
+    clone.wait(10)
+    assert not clone.staging.exists() and not target.exists()
+
+
+@needs_git
+def test_a_target_that_appears_during_the_clone_is_left_alone(fake_gh, tmp_path, monkeypatch):
+    target = tmp_path / "Race"
+    real_popen = subprocess.Popen
+
+    def popen_then_someone_makes_the_folder(*args, **kwargs):
+        process = real_popen(*args, **kwargs)
+        target.mkdir()
+        (target / "theirs.txt").write_text("theirs")
+        return process
+    monkeypatch.setattr(workplaces.subprocess, "Popen", popen_then_someone_makes_the_folder)
+    clone, result, done = _clone(fake_gh, "me/Race", target)
+    assert done.wait(30)
+    assert result["folder"] is None and "left as it is" in result["error"]
+    assert (target / "theirs.txt").read_text() == "theirs"
+    assert not clone.staging.exists()
 
 
 @pytest.mark.skipif(sys.platform == "darwin", reason="a Mac also looks in Homebrew's folder")

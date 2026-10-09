@@ -12,7 +12,9 @@ import json
 import os
 import re
 import subprocess
+import sys
 import threading
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable, List, Optional
@@ -41,9 +43,10 @@ class ToolError(Exception):
 # -- recent folders -----------------------------------------------------------------------
 
 def repo_of_worktree(folder: str) -> str:
-    """The repository a ``<repo>/.claude/worktrees/<name>`` folder belongs
-    to, or the folder itself if it isn't one of those."""
-    match = re.search(r"[\\/]\.claude[\\/]worktrees[\\/][^\\/]+[\\/]?$", folder)
+    """The repository a folder in ``<repo>/.claude/worktrees/<name>``
+    belongs to (at any depth, as the session list reads it), or the folder
+    itself if it isn't in one of those."""
+    match = re.search(r"[\\/]\.claude[\\/]worktrees[\\/][^\\/]+", folder)
     return folder[:match.start()] if match and match.start() > 0 else folder
 
 
@@ -74,8 +77,13 @@ def recent_folders(sessions: Iterable, limit: int = RECENT_LIMIT,
 
 def _environment() -> dict:
     """Never stop to ask for a password or a passphrase: there is no
-    terminal to answer it in, and the call would hang."""
+    terminal to answer it in, and the call would hang. gh runs git itself,
+    so the folders git and gh were found in go first on the PATH: an app
+    started from the Finder has no Homebrew folder on it."""
     env = dict(os.environ)
+    folders = [os.path.dirname(t) for t in (find_git(), find_gh()) if t]
+    if folders:
+        env["PATH"] = os.pathsep.join([*dict.fromkeys(folders), env.get("PATH", "")])
     env.update(GIT_TERMINAL_PROMPT="0", GH_PROMPT_DISABLED="1", GIT_ASKPASS="",
                SSH_ASKPASS="", GCM_INTERACTIVE="never", GH_NO_UPDATE_NOTIFIER="1")
     return env
@@ -196,18 +204,26 @@ def is_clone_of(git: str, folder: Path, repo: str) -> bool:
 class Clone:
     """``gh repo clone`` running in the background, which can be cancelled.
 
+    It clones into a folder of its own beside the target (``.thechatplace-
+    clone-<random>``) and renames that to the target only once the clone
+    has worked, so nothing it cleans up can be anyone else's: cancelled or
+    failed, it removes only that folder. gh runs git as a child process, so
+    gh and git run as one process tree (a Windows job, a process group
+    elsewhere) and Cancel ends them both.
+
     ``done(folder, error)`` is called on the clone's own thread, once: the
-    folder and "" when it worked, or None and why not. A cancelled clone
-    removes the folder it had started, which it made itself.
+    folder and "" when it worked, None and why not when it failed, or None
+    and "" when it was cancelled.
     """
 
     def __init__(self, gh: str, repo: str, target: Path,
                  done: Callable[[Optional[Path], str], None]) -> None:
         self.repo, self.target = repo, Path(target)
+        self.staging = self.target.parent / f".thechatplace-clone-{uuid.uuid4().hex[:10]}"
         self._done = done
         self._cancelled = threading.Event()
-        self._process: Optional[subprocess.Popen] = None
-        self._argv = [*_gh(gh), "repo", "clone", repo, str(self.target)]
+        self._tree = platform_paths.ProcessTree()
+        self._argv = [*_gh(gh), "repo", "clone", repo, str(self.staging)]
         self._thread = threading.Thread(target=self._run, name="clone", daemon=True)
 
     def start(self) -> "Clone":
@@ -216,54 +232,100 @@ class Clone:
 
     def cancel(self) -> None:
         self._cancelled.set()
-        process = self._process
-        if process is not None and process.poll() is None:
-            try:
-                process.kill()
-            except OSError:
-                pass
+        self._tree.kill()
 
     def wait(self, timeout: Optional[float] = None) -> None:
         self._thread.join(timeout)
 
     def _run(self) -> None:
-        if self.target.exists():
-            # Checked by the caller too; never clone into something that's there.
-            self._done(None, f"{self.target} already exists.")
-            return
         try:
-            self._process = subprocess.Popen(
-                self._argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
-                env=_environment(), creationflags=platform_paths.hidden_window_flags())
-            if self._cancelled.is_set():
-                self._process.kill()
-            _out, err = self._process.communicate(timeout=60 * 60)
-        except (OSError, subprocess.SubprocessError) as exc:
-            self._finish(None, f"Couldn't clone {self.repo}: {exc}")
-            return
-        if self._cancelled.is_set():
-            self._finish(None, "")
-        elif self._process.returncode != 0:
-            said = " ".join((err or "").split())
-            self._finish(None, f"Couldn't clone {self.repo}. {said}".strip())
-        else:
-            self._done(self.target, "")
+            folder, error = self._clone()
+        except Exception as exc:  # noqa: BLE001 - always answer, always clean up
+            folder, error = None, f"Couldn't clone {self.repo}: {exc}"
+        finally:
+            self._tree.kill()
+            self._tree.close()
+        if folder is None:
+            remove_tree(self.staging)
+        self._done(folder, "" if self._cancelled.is_set() else error)
 
-    def _finish(self, folder, error: str) -> None:
-        if self.target.is_dir():
-            import shutil
-            shutil.rmtree(self.target, ignore_errors=True)
-        self._done(folder, error)
+    def _clone(self):
+        if self.target.exists():
+            # Checked by the caller too; never clone over something that's there.
+            return None, f"{self.target} already exists."
+        try:
+            self.target.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            return None, f"Couldn't make {self.target.parent}: {exc}"
+        process = subprocess.Popen(
+            self._argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
+            env=_environment(), **platform_paths.ProcessTree.popen_kwargs())
+        self._tree.attach(process)
+        if self._cancelled.is_set():
+            self._tree.kill()
+        try:
+            _out, err = process.communicate(timeout=60 * 60)
+        except subprocess.TimeoutExpired:
+            self._tree.kill()
+            process.communicate()
+            return None, f"Cloning {self.repo} took more than an hour, so it was stopped."
+        if self._cancelled.is_set():
+            return None, ""
+        if process.returncode != 0:
+            said = " ".join((err or "").split())
+            return None, f"Couldn't clone {self.repo}. {said}".strip()
+        if self.target.exists():
+            return None, (f"{self.target} appeared while {self.repo} was cloning, so it was "
+                          "left as it is.")
+        try:
+            self.staging.rename(self.target)
+        except OSError as exc:
+            return None, f"Cloned {self.repo}, but couldn't name its folder {self.target}: {exc}"
+        return self.target, ""
+
+
+def remove_tree(folder: Path) -> bool:
+    """Delete ``folder`` (a clone this app started), read-only files too:
+    git makes its pack files read-only, which Windows won't delete as they
+    are. A process that has just been killed may still hold a file for a
+    moment, so it tries a few times. True if the folder is gone."""
+    import shutil
+    import stat
+    import time
+
+    def writable_then_retry(function, path, _exc):
+        try:
+            os.chmod(path, stat.S_IWRITE)
+            function(path)
+        except OSError:
+            pass
+
+    for attempt in range(10):
+        if not os.path.lexists(folder):
+            return True
+        if sys.version_info >= (3, 12):
+            shutil.rmtree(folder, onexc=writable_then_retry)
+        else:  # pragma: no cover - 3.12 is what's built and tested
+            shutil.rmtree(folder, onerror=writable_then_retry)
+        if not os.path.lexists(folder):
+            return True
+        time.sleep(0.2 * (attempt + 1))
+    return False
 
 
 # -- branches and worktrees ---------------------------------------------------------------
 
 @dataclass
 class RepoInfo:
-    top: str                 # the repository's own folder
+    top: str                 # the worktree the folder is in
+    main: str                # the repository's main worktree, where new ones go
+    common: str              # its .git folder
+    rel: str                 # the folder, relative to ``top`` ("" at the top)
     branch: str              # checked out now ("" when detached)
-    branches: List[str]      # local branches
+    branches: List[str]      # local branches no worktree has checked out
+    busy: List[str]          # local branches some worktree has checked out
+    remotes: List[str]       # remote branches, "origin/name"
 
 
 def repo_info(git: str, folder: str) -> Optional[RepoInfo]:
@@ -272,28 +334,47 @@ def repo_info(git: str, folder: str) -> Optional[RepoInfo]:
         return None
     try:
         top = _run([git, "-C", folder, "rev-parse", "--show-toplevel"], timeout=10).strip()
+        common = _run([git, "-C", folder, "rev-parse", "--path-format=absolute",
+                       "--git-common-dir"], timeout=10).strip()
         branch = _run([git, "-C", folder, "branch", "--show-current"], timeout=10).strip()
-        listed = _run([git, "-C", folder, "for-each-ref", "--format=%(refname:short)",
-                       "refs/heads/"], timeout=10)
+        refs = _run([git, "-C", folder, "for-each-ref", "--format=%(refname)",
+                     "refs/heads/", "refs/remotes/"], timeout=10)
+        listed = _run([git, "-C", folder, "worktree", "list", "--porcelain"], timeout=10)
     except ToolError:
         return None
-    if not top:
+    if not top or not common:
         return None
-    branches = [line.strip() for line in listed.splitlines() if line.strip()]
-    if branch in branches:  # the current one first
-        branches.remove(branch)
-        branches.insert(0, branch)
-    return RepoInfo(str(Path(top)), branch, branches)
+    top, common = str(Path(top)), str(Path(common))
+    # A worktree's common folder is the main one's .git; new worktrees go
+    # beside the others, never inside this one.
+    main = str(Path(common).parent) if Path(common).name == ".git" else top
+    busy = [line[len("branch refs/heads/"):] for line in listed.splitlines()
+            if line.startswith("branch refs/heads/")]
+    local, remotes = [], []
+    for ref in (r.strip() for r in refs.splitlines()):
+        if ref.startswith("refs/heads/"):
+            local.append(ref[len("refs/heads/"):])
+        elif ref.startswith("refs/remotes/") and not ref.endswith("/HEAD"):
+            remotes.append(ref[len("refs/remotes/"):])
+    try:
+        rel = os.path.relpath(os.path.realpath(folder), os.path.realpath(top))
+    except ValueError:
+        rel = ""
+    if rel == "." or rel.startswith(".."):
+        rel = ""
+    return RepoInfo(top=top, main=main, common=common, rel=rel, branch=branch,
+                    branches=[b for b in local if b not in busy], busy=busy, remotes=remotes)
 
 
 def check_branch_name(git: str, name: str) -> str:
     """``name`` if git accepts it as a branch name, else ToolError. Names
-    that git would read as an option or as ``@{-1}`` shorthand are refused
-    before git sees them."""
+    that git would read as an option, as ``@{-1}`` shorthand or as a full
+    ref are refused before git sees them."""
     name = (name or "").strip()
     if not name:
         raise ToolError("Type a branch name, or choose one.")
-    if name.startswith(("-", "@")) or "@{" in name or any(c.isspace() for c in name):
+    if name.startswith(("-", "@", "refs/")) or name == "HEAD" or "@{" in name \
+            or any(c.isspace() for c in name):
         raise ToolError(f"{name} can't be a branch name.")
     try:
         _run([git, "check-ref-format", "--branch", name], timeout=10)
@@ -302,11 +383,11 @@ def check_branch_name(git: str, name: str) -> str:
     return name
 
 
-def worktree_folder(top: str, branch: str) -> Path:
+def worktree_folder(main: str, branch: str) -> Path:
     """``<repo>/.claude/worktrees/<branch>``, where Claude Code and the
     desktop app put theirs; "/" in a branch name becomes "-", and a number
     is added if the folder is taken."""
-    base = Path(top) / ".claude" / "worktrees"
+    base = Path(main) / ".claude" / "worktrees"
     name = re.sub(r"[^A-Za-z0-9._-]", "-", branch).strip(".-") or "worktree"
     folder, number = base / name, 2
     while folder.exists():
@@ -314,16 +395,60 @@ def worktree_folder(top: str, branch: str) -> Path:
     return folder
 
 
-def add_worktree(git: str, top: str, branch: str, branches: Iterable[str]) -> Path:
-    """Make a worktree for ``branch`` and return its folder: an existing
-    branch is checked out there, a new one is made from what the repository
-    has checked out now. ToolError with git's words if it can't (the branch
-    is already checked out somewhere else, say)."""
+def _remote_for(info: RepoInfo, branch: str) -> str:
+    """``origin/<branch>`` (or another remote's) when only a remote has it."""
+    candidates = [r for r in info.remotes if r.split("/", 1)[-1] == branch]
+    for remote in candidates:
+        if remote.startswith("origin/"):
+            return remote
+    return candidates[0] if candidates else ""
+
+
+def add_worktree(git: str, info: RepoInfo, branch: str) -> Path:
+    """Make a worktree for ``branch`` and return the folder to work in: the
+    same folder inside it as the one chosen. An existing branch is checked
+    out there; a branch only a remote has is made to track it; a new one is
+    made from what the chosen folder has checked out now. ToolError with
+    git's words if it can't."""
     branch = check_branch_name(git, branch)
-    folder = worktree_folder(top, branch)
-    if branch in set(branches):
-        argv = [git, "-C", top, "worktree", "add", "--", str(folder), branch]
+    if branch in info.busy:
+        raise ToolError(f"{branch} is already checked out in another folder, and a branch "
+                        "can be in only one. Choose another branch, or type a new name.")
+    folder = worktree_folder(info.main, branch)
+    remote = _remote_for(info, branch)
+    if branch in info.branches:
+        argv = ["--", str(folder), branch]
+    elif remote:
+        argv = ["--track", "-b", branch, "--", str(folder), remote]
     else:
-        argv = [git, "-C", top, "worktree", "add", "-b", branch, "--", str(folder)]
-    _run(argv, timeout=300)
-    return folder
+        argv = ["-b", branch, "--", str(folder)]
+    try:
+        _run([git, "-C", info.top, "worktree", "add", *argv], timeout=600)
+    except ToolError as exc:
+        said = re.sub(r"^Preparing worktree \([^)]*\)\s*", "", str(exc))
+        raise ToolError(said) from None
+    _exclude_worktrees(git, info)
+    inside = folder / info.rel if info.rel else folder
+    return inside if inside.is_dir() else folder
+
+
+def _exclude_worktrees(git: str, info: RepoInfo) -> None:
+    """Keep the worktrees out of the repository's git status unless they're
+    ignored already: otherwise .claude shows as new, and a worktree could
+    be committed into the repository by mistake. Written to the
+    repository's .git/info/exclude, which is never shared."""
+    try:
+        _run([git, "-C", info.main, "check-ignore", "-q", ".claude/worktrees/x"], timeout=10)
+        return  # already ignored
+    except ToolError:
+        pass
+    exclude = Path(info.common) / "info" / "exclude"
+    try:
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        existing = exclude.read_text(encoding="utf-8") if exclude.exists() else ""
+        with open(exclude, "a", encoding="utf-8") as handle:
+            if existing and not existing.endswith("\n"):
+                handle.write("\n")
+            handle.write("# The Chat Place's and Claude Code's worktrees\n/.claude/worktrees/\n")
+    except OSError:
+        pass  # only tidiness: the worktree is made either way
