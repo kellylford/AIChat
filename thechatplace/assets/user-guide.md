@@ -166,8 +166,8 @@ A Cowork session can't be continued here: Cowork keeps its conversation inside t
 own files and its tools were run by the desktop app, so Continue Here isn't offered for it (on
 the session menu it's unavailable). Whether The Chat Place can tell that a Cowork session is
 working, and so announce when it answers, depends on the version of Claude Code the desktop app
-runs it with; older versions don't record it. The desktop app's Chat conversations are kept on Anthropic's servers rather than on your
-computer, so they aren't listed.
+runs it with; older versions don't record it. The desktop app's Chat conversations are kept on
+Anthropic's servers rather than on your computer, so they aren't listed.
 
 ## Starting a session and replying
 

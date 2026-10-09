@@ -20,6 +20,7 @@ app (none of this is documented, so every caller treats it as best effort):
 """
 from __future__ import annotations
 
+import ntpath
 import os
 import re
 import sys
@@ -121,7 +122,7 @@ def long_path(path: Path) -> Path:
     if text.startswith(("\\\\?\\", "\\\\.\\")) or not path.is_absolute():
         return path
     # The long form takes ``..`` literally, so it's resolved first.
-    text = os.path.abspath(text)
+    text = ntpath.normpath(text)
     if text.startswith("\\\\"):
         return Path("\\\\?\\UNC\\" + text[2:])
     return Path("\\\\?\\" + text)

@@ -338,8 +338,9 @@ _STARTED_AT_SLACK_MS = 30_000
 
 
 def _same_process(recorded, actual: Optional[int], started_at=None) -> bool:
-    """Whether the pid file's ``procStart`` is the running process's start.
-    True when either isn't known: then the pid is all there is to go on. A
+    """Whether the pid file's ``procStart`` (or, when that's on another
+    clock, its ``startedAt``) is the running process's start. True when
+    neither can be compared: then the pid is all there is to go on. A
     process that isn't yours can't be the Claude Code that wrote the file."""
     recorded, started_ms = _number(recorded), _number(started_at)
     if (recorded is None and started_ms is None) or actual is None:

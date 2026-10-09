@@ -214,8 +214,6 @@ def test_long_path_form_on_windows_only(monkeypatch):
     assert long(P("relative")) == P("relative")
     # A device path stays one, and ".." is resolved (the long form takes it literally).
     assert long(P(r"\\.\pipe\x")) == P(r"\\.\pipe\x")
-    monkeypatch.setattr(platform_paths.os.path, "abspath",
-                        lambda text: text.replace("\\a\\..", ""))
     assert str(long(P(r"C:\a\..\b"))) == r"\\?\C:\b"
     monkeypatch.setattr(platform_paths.sys, "platform", "darwin")
     assert long(P(r"C:\A")) == P(r"C:\A")
