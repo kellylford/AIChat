@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import dataclasses
 import os
+from typing import Optional
 
 import wx
 
@@ -11,8 +12,10 @@ from ..claude_cli import DEFAULT_PERMISSION_MODE, MODELS, PERMISSION_MODES
 from ..sessions import DEFAULT_FIELDS, FIELD_IDS, FIELD_NAMES, clean_fields, field_short_name
 from ..speech import (ANNOUNCE_LABELS, ANNOUNCE_LEVELS, NOTIFY_LABELS, NOTIFY_LEVELS, RATE_PRESET_LABELS,
                       SpeechSettings)
+from ..prompts import MAX_NAME as PROMPT_NAME_MAX
 from ..ui_text import shortcuts_text
-from .a11y import set_accessible_name
+from . import mac_a11y
+from .a11y import set_accessible_name, set_list_items_accessible
 from .notify import SETTING_LABEL as NOTIFY_SETTING_LABEL, SETTING_NAME as NOTIFY_SETTING_NAME
 
 
@@ -1574,3 +1577,276 @@ class SessionColumnsDialog(wx.Dialog):
                     moves[key]()
                     return
         event.Skip()
+
+
+class PromptEditDialog(wx.Dialog):
+    """New Prompt and Edit Prompt (#131): a one-line name and the text,
+    which can have line breaks (Enter starts a new line; Ctrl+Enter saves,
+    as it sends in the reply box)."""
+
+    def __init__(self, parent, title: str, name: str = "", text: str = "",
+                 focus_name: Optional[bool] = None):
+        super().__init__(parent, title=title, size=(620, 460),
+                         style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer.Add(wx.StaticText(self, label="&Name:"), 0, wx.LEFT | wx.TOP, 8)
+        self.name = wx.TextCtrl(self, value=name)
+        self.name.SetMaxLength(PROMPT_NAME_MAX)  # as Rename does: no silent cut
+        set_accessible_name(self.name, "Prompt name")
+        sizer.Add(self.name, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        sizer.Add(wx.StaticText(self, label="&Text:"), 0, wx.LEFT | wx.TOP, 8)
+        self.text = wx.TextCtrl(self, value=text, style=wx.TE_MULTILINE | wx.TE_RICH2)
+        set_accessible_name(self.text, "Prompt text")
+        self.text.SetMinSize((-1, 200))
+        sizer.Add(self.text, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        row = wx.BoxSizer(wx.HORIZONTAL)
+        save = wx.Button(self, wx.ID_OK, "&Save")
+        save.SetDefault()
+        row.Add(save, 0, wx.RIGHT, 6)
+        row.Add(wx.Button(self, wx.ID_CANCEL, "Cancel"), 0)
+        sizer.Add(row, 0, wx.ALIGN_RIGHT | wx.ALL, 8)
+        self.SetSizer(sizer)
+        self.SetEscapeId(wx.ID_CANCEL)
+        self.Bind(wx.EVT_CHAR_HOOK, self._on_key)
+        # A new prompt starts at its name; an existing one at its text,
+        # which is more often what's being changed. Asked again after a
+        # problem, it starts at the field that has it.
+        if focus_name is None:
+            focus_name = not name
+        wx.CallAfter((self.name if focus_name else self.text).SetFocus)
+
+    def _on_key(self, event):
+        if (event.GetKeyCode() in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER)
+                and event.ControlDown() and not event.AltDown()):
+            self.EndModal(wx.ID_OK)
+            return
+        if press_focused_button_on_a_mac(event):
+            return
+        event.Skip()
+
+    def values(self):
+        return self.name.GetValue(), self.text.GetValue()
+
+
+def press_focused_button_on_a_mac(event) -> bool:
+    """A Mac presses a focused button only with Space, so Return did
+    nothing on one; press it, as Windows does itself. True if pressed."""
+    focus = wx.Window.FindFocus()
+    if (wx.Platform == "__WXMAC__" and isinstance(focus, wx.Button)
+            and event.GetKeyCode() in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER)
+            and not event.HasAnyModifiers()):
+        click = wx.CommandEvent(wx.wxEVT_BUTTON, focus.GetId())
+        click.SetEventObject(focus)
+        focus.GetEventHandler().ProcessEvent(click)
+        return True
+    return False
+
+
+class PromptsDialog(wx.Dialog):
+    """File, Prompts (#131): your saved prompts by name, the selected one's
+    text to read, and Use, New, Edit, Delete, Move Up and Move Down. Use
+    (or Enter on a prompt) closes the dialog and puts the prompt in the
+    reply box. Changes are saved as they're made; Close or Escape closes.
+
+    ``say`` speaks what each action did, as the main window's answers to
+    what you do are spoken. ``use_refused`` is why Use can't put a prompt
+    in a reply box right now ("" when it can): the dialog still opens, to
+    look after your prompts, and Use says why."""
+
+    def __init__(self, parent, store, say, use_refused: str = ""):
+        super().__init__(parent, title="Prompts", size=(680, 560),
+                         style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+        self.store = store
+        self._say = say
+        self._use_refused = use_refused
+        #: The prompt to put in the reply box, once Use is chosen.
+        self.chosen = None
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer.Add(wx.StaticText(self, label="&Prompts:"), 0, wx.LEFT | wx.TOP, 8)
+        self.list = wx.ListBox(self, style=wx.LB_SINGLE)
+        self.list.SetMinSize((-1, 150))
+        sizer.Add(self.list, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        sizer.Add(wx.StaticText(self, label="Te&xt:"), 0, wx.LEFT | wx.TOP, 8)
+        self.text = _read_only_text(self, "", "Prompt text", min_height=140)
+        sizer.Add(self.text, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        row = wx.BoxSizer(wx.HORIZONTAL)
+        self.use_btn = wx.Button(self, wx.ID_OK, "&Use")
+        self.use_btn.SetDefault()
+        self.new_btn = wx.Button(self, label="&New...")
+        self.edit_btn = wx.Button(self, label="&Edit...")
+        self.delete_btn = wx.Button(self, label="&Delete...")
+        self.up_btn = wx.Button(self, label="Mo&ve Up")
+        self.down_btn = wx.Button(self, label="Move Do&wn")
+        for button in (self.use_btn, self.new_btn, self.edit_btn, self.delete_btn,
+                       self.up_btn, self.down_btn):
+            row.Add(button, 0, wx.RIGHT, 6)
+        row.AddStretchSpacer()
+        row.Add(wx.Button(self, wx.ID_CANCEL, "&Close"), 0)
+        sizer.Add(row, 0, wx.EXPAND | wx.ALL, 8)
+        self.SetSizer(sizer)
+        self.SetEscapeId(wx.ID_CANCEL)
+        self.use_btn.Bind(wx.EVT_BUTTON, lambda e: self.on_use())
+        self.new_btn.Bind(wx.EVT_BUTTON, lambda e: self.on_new())
+        self.edit_btn.Bind(wx.EVT_BUTTON, lambda e: self.on_edit())
+        self.delete_btn.Bind(wx.EVT_BUTTON, lambda e: self.on_delete())
+        self.up_btn.Bind(wx.EVT_BUTTON, lambda e: self.on_move(-1))
+        self.down_btn.Bind(wx.EVT_BUTTON, lambda e: self.on_move(1))
+        self.list.Bind(wx.EVT_LISTBOX, lambda e: self._show())
+        self.list.Bind(wx.EVT_LISTBOX_DCLICK, lambda e: self.on_use())
+        self.list.Bind(wx.EVT_KEY_DOWN, self._on_list_key)
+        self.Bind(wx.EVT_CHAR_HOOK, self._on_key)
+        set_list_items_accessible(self.list, self._list_name, lambda index: None)
+        self._fill(0)
+        wx.CallAfter(self.list.SetFocus)
+
+    # -- the list -------------------------------------------------------------
+
+    def _list_name(self) -> str:
+        return f"Prompts, {len(self.store)}"
+
+    def _fill(self, select: int = 0):
+        count = len(self.store)
+        if count:
+            self.list.Set(self.store.names())
+            self.list.SetSelection(max(0, min(select, count - 1)))
+        else:
+            self.list.Set(["No prompts yet. New makes one."])
+            self.list.SetSelection(0)
+        # The count is in the name, so arriving in the list says how many:
+        # for MSAA through the list's accessible (set up once, asked each
+        # time), which SetName doesn't reach; for VoiceOver on the view.
+        self.list.SetName(self._list_name())
+        mac_a11y.set_label(self.list, self._list_name())
+        # Always enabled, so the Tab order doesn't change; they say if
+        # there's nothing to act on.
+        self._show()
+
+    def _show(self):
+        index = self._selected()
+        self.text.ChangeValue("" if index is None else self.store.get(index).text)
+        self.text.SetInsertionPoint(0)
+
+    def _selected(self):
+        index = self.list.GetSelection()
+        return index if 0 <= index < len(self.store) else None
+
+    def _none(self, doing: str) -> bool:
+        """Say there's no prompt to act on; True when there isn't one."""
+        if self._selected() is not None:
+            return False
+        wx.MessageBox(f"There's no prompt to {doing}. New makes one.", self.GetTitle(),
+                      wx.OK | wx.ICON_INFORMATION, self)
+        self.list.SetFocus()
+        return True
+
+    def _on_list_key(self, event):
+        key = event.GetKeyCode()
+        if key in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER) and not event.HasAnyModifiers():
+            self.on_use()
+            return
+        if key == wx.WXK_DELETE and not event.HasAnyModifiers():
+            self.on_delete()
+            return
+        event.Skip()
+
+    def _on_key(self, event):
+        if press_focused_button_on_a_mac(event):
+            return
+        event.Skip()
+
+    # -- actions --------------------------------------------------------------
+
+    def _edit(self, title: str, name: str, text: str, save):
+        """Ask for a name and text until they can be saved, or Cancel.
+        ``save(name, text)`` saves them and returns the prompt's index."""
+        focus_name = None
+        while True:
+            dialog = PromptEditDialog(self, title, name, text, focus_name=focus_name)
+            try:
+                if dialog.ShowModal() != wx.ID_OK:
+                    return None
+                name, text = dialog.values()
+            finally:
+                dialog.Destroy()
+            # Either way it's asked again with what was typed, never lost:
+            # only Cancel throws it away.
+            try:
+                return save(name, text)
+            except ValueError as exc:
+                wx.MessageBox(str(exc), title, wx.OK | wx.ICON_WARNING, self)
+                # A missing name, or one already taken, is the name's
+                # problem; only "needs some text" is the text's.
+                focus_name = "text" not in str(exc)
+            except OSError as exc:
+                wx.MessageBox(f"Couldn't save your prompts: {exc}\n\nWhat you typed is "
+                              "still there, to try again or copy.", title,
+                              wx.OK | wx.ICON_WARNING, self)
+                focus_name = False
+
+    def on_new(self):
+        index = self._edit("New Prompt", "", "", self.store.add)
+        if index is not None:
+            self._fill(index)
+            self._say(f"Prompt saved: {self.store.get(index).name}.")
+        self.list.SetFocus()
+
+    def on_edit(self):
+        if self._none("edit"):
+            return
+        index = self._selected()
+        prompt = self.store.get(index)
+        saved = self._edit("Edit Prompt", prompt.name, prompt.text,
+                           lambda name, text: self.store.update(index, name, text))
+        if saved is not None:
+            self._fill(saved)
+            self._say(f"Prompt saved: {self.store.get(saved).name}.")
+        self.list.SetFocus()
+
+    def on_delete(self):
+        if self._none("delete"):
+            return
+        index = self._selected()
+        name = self.store.get(index).name
+        if wx.MessageBox(f"Delete the prompt {name}?", self.GetTitle(),
+                         wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION, self) == wx.YES:
+            try:
+                self.store.delete(index)
+            except (ValueError, OSError) as exc:
+                wx.MessageBox(f"Couldn't delete the prompt: {exc}", self.GetTitle(),
+                              wx.OK | wx.ICON_WARNING, self)
+            else:
+                # The next one takes its place (the one before, if it was last).
+                self._fill(index)
+                self._say(f"Prompt deleted: {name}.")
+        self.list.SetFocus()
+
+    def on_move(self, step: int):
+        if self._none("move"):
+            return
+        index = self._selected()
+        try:
+            moved = self.store.move(index, step)
+        except (ValueError, OSError) as exc:
+            wx.MessageBox(f"Couldn't move the prompt: {exc}", self.GetTitle(),
+                          wx.OK | wx.ICON_WARNING, self)
+            self.list.SetFocus()
+            return
+        name = self.store.get(moved).name
+        if moved == index:
+            self._say(f"{name} is already {'first' if step < 0 else 'last'}.")
+        else:
+            self._fill(moved)
+            self._say(f"Moved {'up' if step < 0 else 'down'}: {name}, "
+                      f"{moved + 1} of {len(self.store)}.")
+        self.list.SetFocus()
+
+    def on_use(self):
+        if self._none("use"):
+            return
+        if self._use_refused:
+            wx.MessageBox(self._use_refused, self.GetTitle(),
+                          wx.OK | wx.ICON_INFORMATION, self)
+            self.list.SetFocus()
+            return
+        self.chosen = self.store.get(self._selected())
+        self.EndModal(wx.ID_OK)

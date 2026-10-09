@@ -167,6 +167,19 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   folder, asked for in the background when the session loads (no turn, no cost) and kept
   current by each turn. If it isn't there yet, you hear "Commands are ready" when it is; the list
   never opens by itself.
+- **Prompts** (Ctrl+Shift+P, File, Prompts): a library of messages you send often, each with a
+  name. The dialog lists them by name, with the selected one's text below to read (Alt+X). **Use**
+  (or Enter on a prompt) closes it and puts the prompt in the reply box of the loaded Chat Place
+  session: in place of an empty reply, or at the cursor in what you've typed (replacing any text
+  you've selected), ready to change and send. **New** and **Edit** ask for a name and the text (Enter starts a new line in the text;
+  Ctrl+Enter saves), **Delete** (or Delete on a prompt) asks first, and **Move Up** and **Move
+  Down** put them in the order you want. Each change is saved at once and spoken ("Prompt saved:
+  Review", "Prompt deleted: Review"); Close or Escape closes. To save something as you send it,
+  press **Ctrl+Shift+Enter** in the reply box (File, Send and Save as Prompt): it asks for a name,
+  starting with the message's first few words, saves the prompt and then sends the message as
+  Ctrl+Enter does. Escape at the name does neither, and leaves your message in the reply box.
+  Prompts are kept in `%APPDATA%\TheChatPlace\prompts.json`. The Chat Place doesn't read Claude
+  Code's own history of what you've typed.
 - **Attachments**, in The Chat Place's own sessions: **Attach Files** (Alt+T, after Commands;
   Ctrl+Shift+F) adds files and images to your next message, and **Ctrl+V** in the reply box
   attaches a picture on the clipboard, such as a screenshot from Win+Shift+S. They're listed
@@ -509,6 +522,7 @@ shows it as plain text instead.
 | Messages | Ctrl+F, F3, Shift+F3 | Find a message by its text; next; previous |
 | Anywhere | Ctrl+E | Export the session to a file |
 | Reply box | Ctrl+/ | Insert a slash command or skill |
+| Anywhere | Ctrl+Shift+P | Prompts: use, add, edit, reorder or delete your saved prompts |
 | Anywhere | Ctrl+Shift+F | Attach files or images to the next message |
 | Anywhere | Ctrl+Shift+M | Other machines: list your sessions on other computers and message one |
 | Anywhere | Ctrl+Shift+D | Changed files, and each change to read by line |
@@ -526,6 +540,7 @@ shows it as plain text instead.
 | Messages | Ctrl+T | Show or hide tool activity |
 | Messages | Ctrl+O | Open this session in the Claude desktop app |
 | Reply box | Ctrl+Enter | Send (Chat Place sessions only); you stay in the reply box |
+| Reply box | Ctrl+Shift+Enter | Send, and save the message as a prompt (asks for its name first) |
 | Reply box | Ctrl+Period | Stop the running turn |
 | Reply box | Ctrl+Shift+T | Turn status: how long it has been working, and on what |
 | Anywhere | Ctrl+Shift+A | Answer Claude: a permission request, a question or a plan |
@@ -553,6 +568,7 @@ Everything it reads is on your own PC, so reading costs nothing.
 | Whether a session is working | `%USERPROFILE%\.claude\sessions\<pid>.json`, which says busy or idle while Claude Code runs it. Files whose process has gone are ignored. |
 | The conversation | `%USERPROFILE%\.claude\projects\<folder>\<session>.jsonl`, where `<folder>` is the session's folder with every character that isn't a letter or digit turned into `-`. This was checked against every transcript on Kelly's PC; if it ever misses, the app searches all the project folders for the session id instead. |
 | The Chat Place's own sessions | `%APPDATA%\TheChatPlace\sessions.json` (and `speech.json` for settings). If `sessions.json` can't be read, it's renamed to `sessions.json.bad-<date>` rather than overwritten, and the app says so. |
+| Your saved prompts | `%APPDATA%\TheChatPlace\prompts.json`. If it can't be understood, it's renamed to `prompts.json.bad-<date>` rather than overwritten, and the app says so. |
 | Errors | `%APPDATA%\TheChatPlace\error.log`: anything that went wrong unexpectedly, with its traceback |
 
 None of these formats is documented, and Claude Code says the transcript format changes between
@@ -681,6 +697,7 @@ Checked with Claude Code 2.1.286 (issues #187 and #188):
 | `thechatplace/sessions.py` | Desktop metadata, live state, sorting, the list wording |
 | `thechatplace/own_store.py` | The Chat Place's own sessions |
 | `thechatplace/titles.py` | Names you've given desktop app sessions |
+| `thechatplace/prompts.py` | Your saved prompts |
 | `thechatplace/about_you.py` | Finding what Claude knows about you |
 | `thechatplace/claude_cli.py` | `claude` commands, the `--resume` guard, the environment, stream-json events, running a turn |
 | `thechatplace/hub.py` | Gathering the list, noticing finished turns |

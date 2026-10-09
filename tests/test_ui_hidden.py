@@ -5346,3 +5346,381 @@ def test_columns_preview_has_a_sample_when_nothing_is_selected(frame, env, monke
     frame.on_session_columns()
     assert seen["line"].startswith("Example session, Example, needs you: Choose a version "
                                    "number, new reply, active 2 minutes ago")
+
+
+# -- saved prompts (#131) -------------------------------------------------------------
+
+
+class _FakePromptEdit:
+    """Stands in for the New/Edit Prompt dialog: answers come from ``answers``
+    in turn, None meaning Cancel."""
+    answers = []
+    asked = []
+
+    def __init__(self, parent, title, name="", text="", focus_name=None):
+        _FakePromptEdit.asked.append((title, name, text))
+        _FakePromptEdit.focus_name = focus_name
+
+    def ShowModal(self):
+        self._answer = _FakePromptEdit.answers.pop(0)
+        return wx.ID_CANCEL if self._answer is None else wx.ID_OK
+
+    def values(self):
+        return self._answer
+
+    def Destroy(self):
+        pass
+
+
+class _FakeNameEntry:
+    """wx.TextEntryDialog for Send and Save as Prompt: ``answers`` in turn,
+    None meaning Cancel; what it was offered is kept in ``offered``."""
+    answers = []
+    offered = []
+
+    def __init__(self, parent, prompt, title, value=""):
+        _FakeNameEntry.offered.append(value)
+
+    def SetMaxLength(self, n):
+        _FakeNameEntry.max_length = n
+
+    def ShowModal(self):
+        self._answer = _FakeNameEntry.answers.pop(0)
+        return wx.ID_CANCEL if self._answer is None else wx.ID_OK
+
+    def GetValue(self):
+        return self._answer
+
+    def Destroy(self):
+        pass
+
+
+@pytest.fixture
+def name_entry(monkeypatch):
+    from thechatplace.ui import main_frame
+    _FakeNameEntry.answers, _FakeNameEntry.offered = [], []
+    monkeypatch.setattr(main_frame.wx, "TextEntryDialog", _FakeNameEntry)
+    return _FakeNameEntry
+
+
+def _press_enter(frame, monkeypatch, focus, ctrl=True, shift=False):
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: focus))
+    event = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
+    event.SetKeyCode(wx.WXK_RETURN)
+    event.SetControlDown(ctrl)
+    event.SetShiftDown(shift)
+    frame._on_char_hook(event)
+
+
+def test_prompts_are_kept_in_the_apps_own_folder(frame, env):
+    assert frame.prompts.path == env["tmp"] / "appdata" / "prompts.json"
+
+
+def test_prompts_dialog_new_edit_move_delete_and_use(frame, env, monkeypatch):
+    from thechatplace.ui import dialogs
+    monkeypatch.setattr(dialogs, "PromptEditDialog", _FakePromptEdit)
+    _FakePromptEdit.asked = []
+    said = []
+    dialog = dialogs.PromptsDialog(frame, frame.prompts, said.append)
+    try:
+        assert list(dialog.list.GetStrings()) == ["No prompts yet. New makes one."]
+        assert dialog.list.GetName() == "Prompts, 0"
+        dialog.on_delete()  # nothing to delete: says so, changes nothing
+        assert "no prompt to delete" in env["boxes"][-1]
+
+        # New, refused for an empty name, asked again keeping the text.
+        _FakePromptEdit.answers = [("", "Review the change"), ("Review", "Review the change")]
+        dialog.on_new()
+        assert "needs a name" in env["boxes"][-1]
+        assert _FakePromptEdit.asked[-1] == ("New Prompt", "", "Review the change")
+        assert _FakePromptEdit.focus_name is True  # asked again at the field at fault
+        assert frame.prompts.names() == ["Review"]
+        assert said[-1] == "Prompt saved: Review."
+        assert dialog.list.GetName() == "Prompts, 1"
+        assert dialog.text.GetValue() == "Review the change"
+
+        _FakePromptEdit.answers = [("Tests", "Run the tests\nand fix them")]
+        dialog.on_new()
+        _FakePromptEdit.answers = [("Plan", "Make a plan")]
+        dialog.on_new()
+        assert frame.prompts.names() == ["Review", "Tests", "Plan"]
+        assert dialog.list.GetSelection() == 2  # the new one is selected
+
+        # Cancel in New changes nothing.
+        _FakePromptEdit.answers = [None]
+        dialog.on_new()
+        assert frame.prompts.names() == ["Review", "Tests", "Plan"]
+
+        # Edit starts from the selected prompt, and keeps its place.
+        dialog.list.SetSelection(1)
+        _FakePromptEdit.answers = [("Tests", "Run all the tests")]
+        dialog.on_edit()
+        assert _FakePromptEdit.asked[-1] == ("Edit Prompt", "Tests",
+                                             "Run the tests\nand fix them")
+        assert frame.prompts.get(1).text == "Run all the tests"
+        assert dialog.list.GetSelection() == 1
+
+        # Move Up, and already first.
+        dialog.on_move(-1)
+        assert frame.prompts.names() == ["Tests", "Review", "Plan"]
+        assert said[-1] == "Moved up: Tests, 1 of 3."
+        assert dialog.list.GetSelection() == 0
+        dialog.on_move(-1)
+        assert said[-1] == "Tests is already first."
+
+        # Delete asks first (No keeps it), and the next prompt takes its place.
+        monkeypatch.setattr(wx, "MessageBox",
+                            lambda *a, **k: env["boxes"].append(a[0]) or wx.NO)
+        dialog.on_delete()
+        assert env["boxes"][-1] == "Delete the prompt Tests?"
+        assert len(frame.prompts) == 3
+        monkeypatch.setattr(wx, "MessageBox", lambda *a, **k: wx.YES)
+        dialog.on_delete()
+        assert frame.prompts.names() == ["Review", "Plan"]
+        assert said[-1] == "Prompt deleted: Tests."
+        assert dialog.list.GetStringSelection() == "Review"
+        dialog.list.SetSelection(1)
+        dialog.on_delete()  # the last one: the one before it is selected
+        assert dialog.list.GetStringSelection() == "Review"
+
+        # Use chooses the selected prompt and closes.
+        ended = []
+        monkeypatch.setattr(dialog, "EndModal", ended.append)
+        dialog.on_use()
+        assert ended == [wx.ID_OK] and dialog.chosen.name == "Review"
+        # Saved as they're made.
+        from thechatplace.prompts import PromptStore
+        assert PromptStore(frame.prompts.path).names() == ["Review"]
+    finally:
+        dialog.Destroy()
+
+
+def test_prompts_dialog_keys(frame, monkeypatch):
+    from thechatplace.ui import dialogs
+    frame.prompts.add("Review", "Review it")
+    dialog = dialogs.PromptsDialog(frame, frame.prompts, lambda text: None)
+    try:
+        assert dialog.GetEscapeId() == wx.ID_CANCEL
+        assert dialog.use_btn.GetId() == wx.ID_OK  # the default: Enter is Use
+        assert dialog.text.GetName() == "Prompt text" and not dialog.text.IsEditable()
+        calls = []
+        monkeypatch.setattr(dialog, "on_use", lambda: calls.append("use"))
+        monkeypatch.setattr(dialog, "on_delete", lambda: calls.append("delete"))
+        for key in (wx.WXK_RETURN, wx.WXK_DELETE):
+            event = wx.KeyEvent(wx.wxEVT_KEY_DOWN)
+            event.SetKeyCode(key)
+            dialog._on_list_key(event)
+        assert calls == ["use", "delete"]
+    finally:
+        dialog.Destroy()
+
+
+def test_prompt_edit_dialog_is_named_and_ctrl_enter_saves(frame, monkeypatch):
+    from thechatplace.ui.dialogs import PromptEditDialog
+    dialog = PromptEditDialog(frame, "Edit Prompt", "Review", "Line one\nLine two")
+    try:
+        assert dialog.name.GetName() == "Prompt name"
+        assert dialog.text.GetName() == "Prompt text"
+        assert dialog.values() == ("Review", "Line one\nLine two")
+        ended = []
+        monkeypatch.setattr(dialog, "EndModal", ended.append)
+        event = wx.KeyEvent(wx.wxEVT_CHAR_HOOK)
+        event.SetKeyCode(wx.WXK_RETURN)
+        event.SetControlDown(True)
+        dialog._on_key(event)
+        assert ended == [wx.ID_OK]
+    finally:
+        dialog.Destroy()
+
+
+class _UsesPrompt:
+    """PromptsDialog that picks the first prompt, as Use would."""
+    use_refused = None
+
+    def __init__(self, parent, store, say, use_refused=""):
+        _UsesPrompt.use_refused = use_refused
+        self.chosen = store.get(0)
+
+    def ShowModal(self):
+        return wx.ID_OK
+
+    def Destroy(self):
+        pass
+
+
+def test_use_puts_the_prompt_in_the_reply_box(frame, env, monkeypatch):
+    from thechatplace.ui import main_frame
+    monkeypatch.setattr(main_frame, "PromptsDialog", _UsesPrompt)
+    frame.prompts.add("Review", "Review the change.")
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame.on_prompts()
+    assert _UsesPrompt.use_refused == ""
+    assert frame.reply_text.GetValue() == "Review the change."
+    assert frame.reply_text.GetInsertionPoint() == len("Review the change.")
+    assert env["feedback"][-1] == "Inserted the prompt Review."
+    # With something typed, it goes in at the cursor.
+    frame.reply_text.SetValue("Hi. Thanks.")
+    frame.reply_text.SetInsertionPoint(4)
+    frame.on_prompts()
+    assert frame.reply_text.GetValue() == "Hi. Review the change.Thanks."
+
+
+def test_use_says_why_not_without_one_of_our_sessions(frame, env, monkeypatch):
+    from thechatplace.ui import main_frame
+    monkeypatch.setattr(main_frame, "PromptsDialog", _UsesPrompt)
+    frame.prompts.add("Review", "Review the change.")
+    frame.on_prompts()  # nothing loaded
+    assert "Load one of The Chat Place's own sessions" in _UsesPrompt.use_refused
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    frame.on_prompts()
+    assert "only reads" in _UsesPrompt.use_refused
+    assert "only reads" in env["feedback"][-1]  # and nothing was put anywhere
+
+
+def test_ctrl_shift_enter_saves_the_message_as_a_prompt_and_sends_it(
+        frame, env, fake_runner, monkeypatch, name_entry):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame.reply_text.SetValue("Please review the tests and fix what fails\nThanks")
+    name_entry.answers = ["Fix tests"]
+    _press_enter(frame, monkeypatch, frame.reply_text, shift=True)
+    assert name_entry.offered == ["Please review the tests and fix"]  # its first words
+    assert frame.prompts.names() == ["Fix tests"]
+    assert frame.prompts.get(0).text == "Please review the tests and fix what fails\nThanks"
+    runner = fake_runner.instances[0]
+    assert runner.prompt == "Please review the tests and fix what fails\nThanks"
+    assert frame.reply_text.GetValue() == ""
+    assert env["feedback"][-2] == "Prompt saved: Fix tests."
+    assert env["feedback"][-1].startswith("Sent to Hub probe:")
+
+
+def test_ctrl_shift_enter_cancelled_neither_saves_nor_sends(
+        frame, env, fake_runner, monkeypatch, name_entry):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame.reply_text.SetValue("Keep me")
+    name_entry.answers = [None]
+    _press_enter(frame, monkeypatch, frame.reply_text, shift=True)
+    assert fake_runner.instances == [] and len(frame.prompts) == 0
+    assert frame.reply_text.GetValue() == "Keep me"
+    assert env["feedback"][-1] == "Not saved or sent."
+
+
+def test_ctrl_shift_enter_asks_again_for_a_taken_name(
+        frame, env, fake_runner, monkeypatch, name_entry):
+    frame.prompts.add("Review", "Older")
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame.reply_text.SetValue("Review")
+    name_entry.answers = ["review", "Review again"]
+    frame.on_send_and_save()
+    assert name_entry.offered == ["Review (2)", "review"]  # unique first, then what you typed
+    assert "already a prompt called Review" in env["boxes"][-1]
+    assert frame.prompts.names() == ["Review", "Review again"]
+    assert fake_runner.instances[0].prompt == "Review"
+
+
+def test_ctrl_shift_enter_that_cannot_save_does_not_send(
+        frame, env, fake_runner, monkeypatch, name_entry):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame.reply_text.SetValue("Important")
+
+    def fail():
+        raise OSError("disk full")
+    monkeypatch.setattr(frame.prompts, "save", fail)
+    name_entry.answers = ["Important"]
+    frame.on_send_and_save()
+    assert fake_runner.instances == [] and frame.reply_text.GetValue() == "Important"
+    assert "disk full" in env["boxes"][-1] and "wasn't sent" in env["boxes"][-1]
+
+
+def test_ctrl_shift_enter_with_nothing_typed_is_send(frame, env, fake_runner, monkeypatch,
+                                                     name_entry):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame.on_send_and_save()
+    assert name_entry.offered == []  # not asked
+    assert env["feedback"][-1] == "Type a message first."
+
+
+def test_ctrl_enter_still_just_sends(frame, env, fake_runner, monkeypatch, name_entry):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame.reply_text.SetValue("Plain send")
+    _press_enter(frame, monkeypatch, frame.reply_text)
+    assert name_entry.offered == [] and len(frame.prompts) == 0
+    assert fake_runner.instances[0].prompt == "Plain send"
+
+
+@msaa
+def test_prompts_list_says_how_many_to_jaws_and_nvda(frame):
+    from thechatplace.ui import dialogs
+    frame.prompts.add("Review", "Review it")
+    dialog = dialogs.PromptsDialog(frame, frame.prompts, lambda text: None)
+    try:
+        assert dialog.list.GetAccessible().GetName(0) == (wx.ACC_OK, "Prompts, 1")
+        frame.prompts.add("Plan", "Plan it")
+        dialog._fill(1)
+        assert dialog.list.GetAccessible().GetName(0) == (wx.ACC_OK, "Prompts, 2")
+    finally:
+        dialog.Destroy()
+
+
+def test_prompt_editor_keeps_what_was_typed_when_the_save_fails(frame, env, monkeypatch):
+    from thechatplace.ui import dialogs
+    monkeypatch.setattr(dialogs, "PromptEditDialog", _FakePromptEdit)
+    _FakePromptEdit.asked = []
+    dialog = dialogs.PromptsDialog(frame, frame.prompts, lambda text: None)
+    try:
+        def fail():
+            raise OSError("disk full")
+        monkeypatch.setattr(frame.prompts, "save", fail)
+        _FakePromptEdit.answers = [("Long", "A long prompt"), None]
+        dialog.on_new()
+        assert "disk full" in env["boxes"][-1]
+        assert _FakePromptEdit.asked[-1] == ("New Prompt", "Long", "A long prompt")
+        assert len(frame.prompts) == 0
+    finally:
+        dialog.Destroy()
+
+
+def test_ctrl_shift_enter_whose_send_fails_says_the_prompt_is_saved(
+        frame, env, fake_runner, monkeypatch, name_entry):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    monkeypatch.setattr(platform_paths, "find_claude",
+                        lambda: platform_paths.ClaudeLookup(None, reason="No Claude Code."))
+    frame.reply_text.SetValue("Important")
+    name_entry.answers = ["Important"]
+    frame.on_send_and_save()
+    assert fake_runner.instances == [] and frame.prompts.names() == ["Important"]
+    assert "No Claude Code." in env["boxes"][-1]
+    assert env["feedback"][-1] == "The prompt Important is saved; press Ctrl+Enter to send."
+
+
+def test_ctrl_shift_enter_when_the_reply_changes_meanwhile(
+        frame, env, fake_runner, monkeypatch, name_entry):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame.reply_text.SetValue("Mine")
+
+    class GivesBack(_FakeNameEntry):
+        def ShowModal(self):
+            frame.reply_text.SetValue("Queued one\n\nMine")  # a queued send given back
+            return super().ShowModal()
+    from thechatplace.ui import main_frame
+    monkeypatch.setattr(main_frame.wx, "TextEntryDialog", GivesBack)
+    name_entry.answers = ["Mine"]
+    frame.on_send_and_save()
+    assert fake_runner.instances == [] and len(frame.prompts) == 0
+    assert "changed" in env["boxes"][-1]
+
+
+def test_prompts_are_on_the_file_menu(frame):
+    labels = [item.GetItemLabel() for item in frame.GetMenuBar().GetMenu(0).GetMenuItems()]
+    assert "Prompts...\tCtrl+Shift+P" in labels
+    keys = "Cmd+Shift+Return" if wx.Platform == "__WXMAC__" else "Ctrl+Shift+Enter"
+    assert f"Send and Save as Prompt... ({keys})" in labels

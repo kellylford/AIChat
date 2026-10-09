@@ -82,6 +82,9 @@ SHORTCUTS = [
     ("Reply box", [
         ("Ctrl+Enter", "Send (Chat Place sessions only); you stay in the reply box. "
                        "During a turn it queues the message and sends it when the turn ends"),
+        ("Ctrl+Shift+Enter", "Send and save as a prompt: asks for the prompt's name (its "
+                             "first words to start with), saves it, then sends as Ctrl+Enter "
+                             "does; Escape at the name neither saves nor sends"),
         ("Ctrl+Period", "Stop the running turn; a queued message goes back in the reply box"),
         ("Ctrl+/", "Insert a slash command or one of your skills (type to search); it goes at "
                    "the start of the reply box"),
@@ -107,6 +110,8 @@ SHORTCUTS = [
         ("Ctrl+Shift+K", "What Claude knows about you: your instructions, memories, "
                          "skills, subagents, commands and settings, to read or open in "
                          "your editor"),
+        ("Ctrl+Shift+P", "Prompts: your saved prompts, to use (Enter puts one in the reply "
+                         "box), add, edit, reorder or delete"),
         ("F1", "This list of shortcuts"),
         ("Alt+H, G", "The user guide, read by heading"),
         ("Ctrl+Comma", "Settings (announcements and speech)"),

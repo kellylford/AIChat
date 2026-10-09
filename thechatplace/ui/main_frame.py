@@ -63,6 +63,8 @@ from ..claude_cli import (MODELS, PERMISSION_MODES, PermissionRequest, ResumeRef
 from ..hub import Snapshot, collect, finished_turns, last_reply_from_tail
 from ..own_store import OwnSession, OwnSessionStore
 from ..groups import GroupStore
+from ..prompts import (MAX_NAME as PROMPT_NAME_MAX, PromptStore, clean_text as clean_prompt_text,
+                       suggested_name)
 from ..hidden import HiddenStore
 from ..titles import MAX_TITLE, TitleStore, clean_title
 from ..sessions import (GROUP_VIEW_PREFIX, IDLE, NEEDS_YOU, OWN, SORT_ORDERS,
@@ -80,9 +82,9 @@ from ..rendering import html_page, message_page
 from ..ui_text import markdown_as_text, shortcuts_html
 from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, AboutYouDialog, ChangesDialog, CodeBlocksDialog, FormattedMessageDialog,
                       BugReportDialog, CommandPickerDialog, MessageDialog, NewSessionDialog, PermissionDialog, PlanDialog,
-                      ManageGroupsDialog, QuestionDialog, SessionColumnsDialog, SettingsDialog,
-                      ShortcutsDialog, UsageDialog,
-                      formatted_view_available)
+                      ManageGroupsDialog, PromptsDialog, QuestionDialog, SessionColumnsDialog,
+                      SettingsDialog, ShortcutsDialog, UsageDialog,
+                      formatted_view_available, press_focused_button_on_a_mac)
 
 APP_NAME = "The Chat Place"
 LIST_REFRESH_MS = 5000
@@ -131,6 +133,7 @@ class MainFrame(wx.Frame):
         super().__init__(None, title=APP_NAME, size=_fitting_size(1000, 720))
         self.store = store or OwnSessionStore()
         self.groups = GroupStore()
+        self.prompts = PromptStore()  # saved prompts (#131)
         self.hidden = HiddenStore()
         self.titles = TitleStore()  # names given to desktop app sessions (#93)
         self.updates = updates or UpdateService(__version__)
@@ -228,6 +231,9 @@ class MainFrame(wx.Frame):
         if self.titles.load_error:
             wx.CallAfter(wx.MessageBox, self.titles.load_error, APP_NAME,
                          wx.OK | wx.ICON_WARNING, self)
+        if self.prompts.load_error:
+            wx.CallAfter(wx.MessageBox, self.prompts.load_error, APP_NAME,
+                         wx.OK | wx.ICON_WARNING, self)
         self.refresh_sessions()
         self._check_claude_version()
         # After the session list has been read, like the update check.
@@ -274,6 +280,15 @@ class MainFrame(wx.Frame):
         self._item(session, "Insert Command or S&kill...\tCtrl+/",
                    lambda e: self.on_insert_command())
         self._item(session, "Attac&h Files...\tCtrl+Shift+F", lambda e: self.on_attach_files())
+        # Saved prompts (#131). Every free letter would be an odd one, so,
+        # as with Other Machines, the keys are the way in. Ctrl+Shift+Enter
+        # belongs to the reply box (a menu accelerator for Enter would be
+        # window-wide), so it's in the label without a tab, still read out.
+        self._item(session, "Prompts...\tCtrl+Shift+P", lambda e: self.on_prompts())
+        # wx turns Ctrl into Cmd only in a tab accelerator, so say it here.
+        keys = "Cmd+Shift+Return" if wx.Platform == "__WXMAC__" else "Ctrl+Shift+Enter"
+        self._item(session, f"Send and Save as Prompt... ({keys})",
+                   lambda e: self.on_send_and_save())
         session.AppendSeparator()
         self._item(session, "Add to &Group...\tCtrl+G", lambda e: self.on_add_to_group())
         self._item(session, "Remove from Gro&up...", lambda e: self.on_remove_from_group())
@@ -3659,6 +3674,115 @@ class MainFrame(wx.Frame):
         self.reply_text.SetInsertionPoint(len(command))
         self._feedback(f"Inserted /{name}.")
 
+    # ------------------------------------------------------------ prompts
+
+    def _prompt_refused(self) -> str:
+        """Why a prompt can't go into a reply box now, or ""."""
+        if self._open is None:
+            return ("Load one of The Chat Place's own sessions first: a prompt goes into "
+                    "its reply box.")
+        if not self._open.is_own:
+            return ("This is a Claude desktop app session, which The Chat Place only reads. "
+                    "Load one of The Chat Place's own sessions to use a prompt in its reply "
+                    "box.")
+        return ""
+
+    def on_prompts(self):
+        """File, Prompts (#131): look after your saved prompts, and Use one
+        to put it in the reply box."""
+        returning_to = wx.Window.FindFocus()
+        dialog = PromptsDialog(self, self.prompts, self._feedback, self._prompt_refused())
+        try:
+            chosen = dialog.chosen if dialog.ShowModal() == wx.ID_OK else None
+        finally:
+            dialog.Destroy()
+        if chosen is None:
+            if returning_to:
+                returning_to.SetFocus()
+            return
+        self._insert_prompt(chosen)
+
+    def _insert_prompt(self, prompt):
+        """Put a prompt's text in the reply box: in place of nothing, or at
+        the cursor in what's already typed, and the cursor after it."""
+        refused = self._prompt_refused()
+        if refused:
+            self._feedback(refused)
+            return
+        reply = self.reply_text
+        if not reply.GetValue().strip():
+            reply.SetValue(prompt.text)
+            reply.SetInsertionPointEnd()
+        else:
+            # WriteText goes in at the cursor and leaves it after the text,
+            # in the control's own positions (a line break isn't always one
+            # position on Windows, so no slicing of GetValue here).
+            reply.WriteText(prompt.text)
+        reply.SetFocus()
+        self._feedback(f"Inserted the prompt {prompt.name}.")
+
+    def on_send_and_save(self):
+        """Ctrl+Shift+Enter in the reply box (#131): ask for a name, save
+        the message as a prompt, then send it as Ctrl+Enter does. Cancel
+        (Escape) at the name does neither and leaves the text where it was,
+        so a slip onto Shift never sends something you meant to look at."""
+        refused = self._prompt_refused()
+        if refused:
+            self._feedback(refused)
+            return
+        session_id = self._open.cli_session_id
+        text = clean_prompt_text(self.reply_text.GetValue())
+        runner = self._runners.get(session_id)
+        if not text or (runner is not None and runner.cancelled):
+            # Nothing to save, or it can't go now: Send says why, as ever
+            # (with only attachments they're sent; there's no text to keep).
+            self.on_send()
+            return
+        name = self.prompts.unique_name(suggested_name(text))
+        while True:
+            dialog = wx.TextEntryDialog(
+                self, "Save this message as a prompt, then send it. Prompt name:",
+                "Send and Save as Prompt", name)
+            dialog.SetMaxLength(PROMPT_NAME_MAX)
+            try:
+                if dialog.ShowModal() != wx.ID_OK:
+                    self._feedback("Not saved or sent.")
+                    self.reply_text.SetFocus()
+                    return
+                name = dialog.GetValue()
+            finally:
+                dialog.Destroy()
+            if clean_prompt_text(self.reply_text.GetValue()) != text:
+                # Something came into the reply box while the name was asked
+                # (a queued message given back when its send failed): what
+                # would be sent is no longer what would be saved.
+                wx.MessageBox("The reply box changed while the name was being asked, so "
+                              "nothing was saved or sent. Check it, then press "
+                              "Ctrl+Shift+Enter again.", "Send and Save as Prompt",
+                              wx.OK | wx.ICON_INFORMATION, self)
+                self.reply_text.SetFocus()
+                return
+            try:
+                index = self.prompts.add(name, text)
+                break
+            except ValueError as exc:
+                # Asked again, with the name that was refused to change.
+                wx.MessageBox(str(exc), "Send and Save as Prompt",
+                              wx.OK | wx.ICON_WARNING, self)
+            except OSError as exc:
+                wx.MessageBox(f"Couldn't save your prompts: {exc}\n\nThe message wasn't "
+                              "sent either; it's still in the reply box.",
+                              "Send and Save as Prompt", wx.OK | wx.ICON_WARNING, self)
+                self.reply_text.SetFocus()
+                return
+        saved = self.prompts.get(index).name
+        self._feedback(f"Prompt saved: {saved}.")
+        self.on_send()
+        if clean_prompt_text(self.reply_text.GetValue()) == text:
+            # Send refused (it said why) and left the text: pressing
+            # Ctrl+Shift+Enter again would save the prompt twice.
+            self._feedback(f"The prompt {saved} is saved; press Ctrl+Enter to send.")
+
     def on_report_bug(self):
         """Help, Report a Bug (#28): what happened, plus non-sensitive facts
         about the app, to a GitHub issue (see bugreport.py)."""
@@ -3851,7 +3975,10 @@ class MainFrame(wx.Frame):
 
         if key in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER):
             if ctrl and focus is self.reply_text:
-                self.on_send()
+                if event.ShiftDown():
+                    self.on_send_and_save()  # #131
+                else:
+                    self.on_send()
                 return
             if ctrl and focus is self.chat_list and self._selected_queued() is not None:
                 self.send_queued_now()  # Send Now on a queued message
@@ -3862,13 +3989,8 @@ class MainFrame(wx.Frame):
             if not ctrl and focus is self.chat_list:
                 self.on_read_message()
                 return
-            if (wx.Platform == "__WXMAC__" and isinstance(focus, wx.Button)
-                    and not event.HasAnyModifiers()):
-                # A Mac presses a focused button only with Space; Return did
-                # nothing on Send and the rest. Windows presses it itself.
-                click = wx.CommandEvent(wx.wxEVT_BUTTON, focus.GetId())
-                click.SetEventObject(focus)
-                focus.GetEventHandler().ProcessEvent(click)
+            if press_focused_button_on_a_mac(event):
+                # Return did nothing on Send and the rest on a Mac.
                 return
         if (key == wx.WXK_INSERT and event.ShiftDown() and not ctrl
                 and focus is self.reply_text):
