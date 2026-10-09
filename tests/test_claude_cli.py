@@ -1198,3 +1198,233 @@ def test_send_now_refused_while_stopping(tmp_path):
     runner._stdin_open = True
     runner._cancelled = True
     assert runner.send_now("now") is False
+
+
+# -- Send Now: which result answers which message (#83) ---------------------------------
+
+
+class FakeTimers:
+    """Stands in for threading.Timer: nothing fires by itself; a test fires
+    the live ones when it likes, so no test waits out a real ceiling."""
+
+    def __init__(self):
+        self.made = []
+        self.ceiling_armed = threading.Event()
+
+    def __call__(self, interval, function):
+        timers = self
+
+        class Timer:
+            daemon = False
+
+            def __init__(self):
+                self.interval, self.function = interval, function
+                self.started = self.cancelled = False
+
+            def start(self):
+                self.started = True
+                if self.interval == cli.IDLE_AFTER_RESULT_WAIT:
+                    timers.ceiling_armed.set()
+
+            def cancel(self):
+                self.cancelled = True
+        timer = Timer()
+        self.made.append(timer)
+        return timer
+
+    def live_ceilings(self):
+        return [t for t in self.made if t.started and not t.cancelled
+                and t.interval == cli.IDLE_AFTER_RESULT_WAIT]
+
+    def fire_ceilings(self):
+        """What 600 s of silence would do."""
+        for timer in self.live_ceilings():
+            timer.cancelled = True
+            timer.function()
+
+
+class LiveProcess(FakeProcess):
+    """Like the real CLI: stdout stays open until stdin is closed. A
+    threading.Event among the lines holds stdout there until it's set."""
+
+    def __init__(self, lines):
+        super().__init__([])
+        self.stdin_closed = threading.Event()
+        self.reading = threading.Event()
+        queue = [x if isinstance(x, threading.Event) else (x + "\n").encode("utf-8")
+                 for x in lines]
+        close = self.stdin.close
+
+        def close_and_signal():
+            close()
+            self.stdin_closed.set()
+        self.stdin.close = close_and_signal
+        process = self
+
+        class Out:
+            def readline(self, *args):
+                process.reading.set()
+                while queue:
+                    item = queue.pop(0)
+                    if isinstance(item, threading.Event):
+                        assert item.wait(5)
+                        continue
+                    return item
+                process.stdin_closed.wait(5)
+                return b""
+        self.stdout = Out()
+
+    def sent(self):
+        data = self.written if self.written is not None else self.stdin.getvalue()
+        return [json.loads(line) for line in data.decode("utf-8").splitlines()]
+
+
+def _live_send_now_turn(tmp_path, lines, when="started", on_text=None):
+    """A turn against a LiveProcess with fake timers. Sends a message now at
+    the first ``when`` event, answers any permission (recording whether the
+    answer got through) and calls ``on_text(box)`` at each text event."""
+    process = LiveProcess(lines)
+    timers = FakeTimers()
+    events, done, box = [], threading.Event(), {}
+
+    def on_event(event):
+        events.append(event)
+        if event.kind == when and "sent" not in box:
+            box["sent"] = box["runner"].send_now("Instead, say hi")
+        if event.kind == "text" and on_text:
+            on_text(box)
+        if event.kind == "permission":
+            box["answered"] = box["runner"].respond(
+                event.request.request_id, {"behavior": "allow", "updatedInput": {}})
+        if event.kind in ("finished", "failed"):
+            done.set()
+    runner = TurnRunner(["claude", "-p"], str(tmp_path), "Write an essay", on_event,
+                        popen=lambda cmd, **k: process, env={"PATH": "x"}, timer=timers)
+    box["runner"], box["timers"], box["done"] = runner, timers, done
+    runner.start()
+    return events, box, process
+
+
+RUNNING = ev(type="system", subtype="session_state_changed", state="running")
+IDLE = ev(type="system", subtype="session_state_changed", state="idle")
+INIT = ev(type="system", subtype="init", session_id="s1", apiKeySource="none")
+STOPPED = ev(type="result", subtype="error_during_execution", is_error=True, result="")
+ASK = ev(type="control_request", request_id="q1", request={
+    "subtype": "can_use_tool", "tool_name": "Bash", "input": {"command": "ls"},
+    "tool_use_id": "t1"})
+
+
+def test_an_error_answering_the_send_now_message_is_shown_and_ends_the_turn(tmp_path):
+    # #83 item 1: the new message's own result is error_during_execution too.
+    events, box, _ = _live_send_now_turn(tmp_path, [
+        RUNNING, INIT, STOPPED, RUNNING,
+        ev(type="result", subtype="error_during_execution", is_error=True,
+           result="It broke"),
+        IDLE])
+    assert box["done"].wait(5), "the turn waited for the idle ceiling"
+    assert box["sent"] is True
+    assert events[-1].kind == "finished" and events[-1].is_error
+
+
+def test_a_long_answer_to_send_now_keeps_stdin_open(tmp_path):
+    # #83 item 2: no 600 s ceiling while Claude works on the new message.
+    def on_text(box):
+        box["live"] = len(box["timers"].live_ceilings())
+        box["timers"].fire_ceilings()
+    events, box, _ = _live_send_now_turn(tmp_path, [
+        RUNNING, INIT, STOPPED, RUNNING,
+        ev(type="assistant", message={"content": [{"type": "text", "text": "Hi, so"}]}),
+        ASK, ev(type="result", subtype="success", result="hi"), IDLE], on_text=on_text)
+    assert box["done"].wait(5)
+    assert box["live"] == 0
+    assert box["answered"] is True
+    assert events[-1].kind == "finished" and events[-1].text == "hi"
+    assert not events[-1].is_error
+
+
+def test_a_ceiling_armed_before_send_now_doesnt_cut_the_new_answer(tmp_path):
+    def on_text(box):
+        if "fired" not in box:
+            box["fired"] = True
+            box["timers"].fire_ceilings()
+    events, box, _ = _live_send_now_turn(tmp_path, [
+        RUNNING, INIT,
+        ev(type="result", subtype="success", result="first"),
+        # Still running after the result (a hook, say): the ceiling is armed.
+        ev(type="assistant", message={"content": [{"type": "text", "text": "more"}]}),
+        ASK, ev(type="result", subtype="success", result="second"), IDLE],
+        when="text", on_text=on_text)
+    assert box["done"].wait(5)
+    assert box["sent"] is True and box["answered"] is True
+    assert events[-1].text == "second"
+
+
+def test_the_stopped_works_late_success_doesnt_count_as_the_answer(tmp_path):
+    # #83 item 3: the old work finished just as Send Now went, with a success
+    # result of its own; the turn must still wait for the new message's.
+    events, box, _ = _live_send_now_turn(tmp_path, [
+        RUNNING, INIT,
+        ev(type="result", subtype="success", result="old answer"),
+        IDLE, RUNNING, ASK,
+        ev(type="result", subtype="success", result="new answer"), IDLE])
+    assert box["done"].wait(5)
+    assert box["sent"] is True
+    assert box["answered"] is True
+    assert events[-1].kind == "finished" and events[-1].text == "new answer"
+
+
+def test_send_now_before_the_prompt_goes_after_it(tmp_path):
+    # #83 item 4: pressed while initialize's answer is awaited.
+    from thechatplace.claude_cli import INIT_REQUEST_ID
+    gate = threading.Event()
+    answer = ev(type="control_response", response={
+        "subtype": "success", "request_id": INIT_REQUEST_ID,
+        "response": {"commands": [], "models": [
+            {"value": "default", "resolvedModel": "claude-opus-5-5"}]}})
+    events, box, process = _live_send_now_turn(tmp_path, [
+        gate, answer, RUNNING, INIT, STOPPED,
+        ev(type="result", subtype="success", result="hi"), IDLE], when="never")
+    assert process.reading.wait(5)
+    assert box["runner"].send_now("Instead, say hi") is True
+    assert [m["type"] for m in process.sent()] == ["control_request"]  # initialize only
+    gate.set()
+    assert box["done"].wait(5)
+    sent = process.sent()
+    assert [m.get("request", {}).get("subtype") or m["message"]["content"] for m in sent] \
+        == ["initialize", "Write an essay", "interrupt", "Instead, say hi"]
+    assert events[-1].kind == "finished" and events[-1].text == "hi"
+    assert not events[-1].is_error
+
+
+def test_idle_with_the_send_now_message_unanswered_still_ends_at_the_ceiling(tmp_path):
+    # Claude Code went idle and never answered: the ceiling still ends the
+    # turn, as it always did, rather than leaving it open for ever.
+    events, box, process = _live_send_now_turn(tmp_path, [RUNNING, INIT, STOPPED, IDLE])
+    assert box["timers"].ceiling_armed.wait(5)
+    assert not process.stdin_closed.is_set()
+    box["timers"].fire_ceilings()
+    assert box["done"].wait(5)
+    assert events[-1].kind == "finished"
+
+
+def test_two_send_nows_in_a_row_wait_for_the_second_answer(tmp_path):
+    def twice(box):
+        if "second" not in box:
+            box["second"] = box["runner"].send_now("No, say bye")
+    events, box, _ = _live_send_now_turn(tmp_path, [
+        RUNNING, INIT, STOPPED,
+        ev(type="assistant", message={"content": [{"type": "text", "text": "h"}]}),
+        STOPPED, IDLE, RUNNING, ASK,
+        ev(type="result", subtype="success", result="bye"), IDLE], on_text=twice)
+    assert box["done"].wait(5)
+    assert box["sent"] is True and box["second"] is True
+    assert box["answered"] is True
+    assert events[-1].text == "bye" and not events[-1].is_error
+
+
+def test_send_now_after_the_turn_ended_is_refused(tmp_path):
+    events, box, _ = _live_send_now_turn(tmp_path, [
+        RUNNING, INIT, ev(type="result", subtype="success", result="done"), IDLE],
+        when="never")
+    assert box["done"].wait(5)
+    assert box["runner"].send_now("too late") is False
