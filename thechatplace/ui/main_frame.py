@@ -250,7 +250,7 @@ class MainFrame(wx.Frame):
         link_timer = wx.Timer()
 
         def link_tick(_event):
-            if not self:
+            if self._gone():
                 link_timer.Stop()
                 return
             self._check_link_inbox()
@@ -655,7 +655,7 @@ class MainFrame(wx.Frame):
         Windows notification, which screen readers read from their own
         notification handling even when they can't be reached this way.
         """
-        if not self:
+        if self._gone():
             return  # the window closed before this ran
         message = f"Speech: {reason[0].upper()}{reason[1:]}."
         # Beside whatever the status bar says now, which is what was just
@@ -739,7 +739,7 @@ class MainFrame(wx.Frame):
 
     def _apply_snapshot(self, snap: Snapshot, ended, replies, force, resort=False):
         self._snapshot_busy = False
-        if not self:
+        if self._gone():
             return
         previous_desktop_groups = self._snapshot.desktop_groups
         self._snapshot = snap
@@ -1409,7 +1409,7 @@ class MainFrame(wx.Frame):
             self._activity_timer = wx.CallLater(ACTIVITY_DELAY_MS, self._flush_activity)
 
     def _flush_activity(self):
-        if not self:
+        if self._gone():
             return
         self._activity_timer = None
         items, self._activity = self._activity, []
@@ -1903,7 +1903,7 @@ class MainFrame(wx.Frame):
         self._pool.submit(work)
 
     def _export_done(self, title: str, path: str, count: int, error):
-        if not self:
+        if self._gone():
             return
         if error is not None:
             wx.MessageBox(f"Couldn't export {title} to {path}: {error}", APP_NAME,
@@ -2093,7 +2093,7 @@ class MainFrame(wx.Frame):
         """A notification was chosen: The Chat Place comes forward with that
         session loaded. With one of its dialogs open, the dialog comes
         forward instead, and the session is left as it is."""
-        if not self:
+        if self._gone():
             return
         modal = self._come_forward()
         if modal is not None or key is None:
@@ -2945,7 +2945,7 @@ class MainFrame(wx.Frame):
                           last_activity_ms=int(time.time() * 1000))
 
     def _on_turn_event(self, holder, title, event: TurnEvent):
-        if not self:
+        if self._gone():
             return
         session_id = holder["id"]
         if event.kind == "started":
@@ -3670,7 +3670,7 @@ class MainFrame(wx.Frame):
 
     def _on_update_result(self, result: CheckResult, manual: bool):
         self._update_busy = False
-        if not self:
+        if self._gone():
             return
         text = result.describe()
         if result.status != AVAILABLE:
@@ -3824,7 +3824,7 @@ class MainFrame(wx.Frame):
 
     def _on_update_downloaded(self, result: CheckResult, ok: bool):
         self._update_busy = False
-        if not self:
+        if self._gone():
             return
         if not ok:
             self._say(f"Couldn't download The Chat Place {result.version}. Try Help, "
@@ -3863,7 +3863,7 @@ class MainFrame(wx.Frame):
             self._chat_timer.Start(CHAT_REFRESH_MS)
 
     def _apply_update_when_quiet(self, deadline: float, result: CheckResult):
-        if not self:
+        if self._gone():
             return
         if speaker.busy() and time.monotonic() < deadline:
             wx.CallLater(200, self._apply_update_when_quiet, deadline, result)
@@ -3904,7 +3904,7 @@ class MainFrame(wx.Frame):
 
     def _commands_fetched(self, key: str, commands: List[dict]):
         self._commands_fetching.discard(key)
-        if not self:
+        if self._gone():
             return
         if commands:
             self._commands[key] = commands
@@ -4130,7 +4130,7 @@ class MainFrame(wx.Frame):
         self._check_sign_in(manual=True)
 
     def _check_sign_in(self, manual: bool):
-        if not self:
+        if self._gone():
             return
 
         def work():
@@ -4145,7 +4145,7 @@ class MainFrame(wx.Frame):
             pass  # closing
 
     def _on_sign_in_result(self, status, manual: bool):
-        if not self:
+        if self._gone():
             return
         text = signin.describe(status)
         if not manual:
@@ -4433,25 +4433,35 @@ class MainFrame(wx.Frame):
         self._closing = True
         for runner in list(self._runners.values()):
             runner.cancel()
-        self._clear_activity()
-        self._list_timer.Stop()
-        self._chat_timer.Stop()
-        self._link_timer.Stop()
-        startup_sign_in = getattr(self, "_startup_sign_in", None)
-        if startup_sign_in is not None:
-            startup_sign_in.Stop()
-        startup_check = getattr(self, "_startup_update_check", None)
-        if startup_check is not None:
-            startup_check.Stop()
-        for name in ("_startup_update_notice", "_update_notice_wait"):
-            timer = getattr(self, name, None)
-            if timer is not None:
-                timer.Stop()
+        self.stop_timers()
         speaker.stop()
         speaker.on_problem = None
         self._notifier.close()  # its icon would keep the app running
         self._pool.shutdown(wait=False, cancel_futures=True)
         event.Skip()
+
+    def _gone(self) -> bool:
+        """True once the window is destroyed or being destroyed. A Mac
+        destroys a window later, at idle time: until then it still looks
+        alive, and a queued call or timer tick that reaches it crashes wx."""
+        try:
+            return not self or self.IsBeingDeleted()
+        except RuntimeError:
+            return True
+
+    def stop_timers(self):
+        """Every timer and delayed call the window has, stopped: none may
+        fire once it's gone. A Mac destroys a window later, at idle time,
+        and a call that reaches it then can crash the app."""
+        self._clear_activity()
+        self._list_timer.Stop()
+        self._chat_timer.Stop()
+        self._link_timer.Stop()
+        for name in ("_startup_sign_in", "_startup_update_check",
+                     "_startup_update_notice", "_update_notice_wait"):
+            timer = getattr(self, name, None)
+            if timer is not None:
+                timer.Stop()
 
 
 def _folder_key(cwd: str) -> str:
