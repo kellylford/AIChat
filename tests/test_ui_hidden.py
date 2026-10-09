@@ -6343,24 +6343,23 @@ def test_a_new_last_message_on_your_row_waits_while_it_works(frame, env, monkeyp
     monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
     frame._refresh_list_in_place(rewrite=True)
     assert frame.session_list.GetStringSelection().startswith("Quiet one, idle, Claude: one,")
-    writes = []
-    real = frame.session_list.SetString
-    monkeypatch.setattr(frame.session_list, "SetString",
-                        lambda i, s: writes.append(s) or real(i, s))
+    # No patching of the list itself: an attribute put on a wx control can
+    # outlive the window, and the row's text shows whether it was rewritten
+    # (each change below also changes its age, so a rewrite would show).
 
     def row():
         return frame.session_list.GetStringSelection()
     quiet.state = WORKING
     frame._refresh_list_in_place()
     assert row().startswith("Quiet one, working, Claude: one,")  # a status change
-    writes.clear()
+    before = row()
     quiet.last_message = "Claude: two"
     blocked.last_message = "You: b"
     quiet.last_activity_ms -= 3 * 60_000
     frame._refresh_list_in_place()
-    assert row().startswith("Quiet one, working, Claude: one,")  # left alone
-    assert writes and all(not w.startswith("Quiet one") for w in writes)
-    assert any("You: b" in r for r in frame.session_list.GetStrings())
+    assert row() == before  # left alone, age and all
+    assert any(r.startswith("Blocked one") and "You: b" in r
+               for r in frame.session_list.GetStrings())  # another row: at once
     quiet.state = IDLE
     frame._refresh_list_in_place()
     assert row().startswith("Quiet one, idle, Claude: two,")
@@ -6368,7 +6367,7 @@ def test_a_new_last_message_on_your_row_waits_while_it_works(frame, env, monkeyp
     quiet.last_message = "You: three"
     frame._refresh_list_in_place()
     assert row().startswith("Quiet one, idle, You: three,")
-    writes.clear()
+    before = row()
     quiet.last_activity_ms -= 3 * 60_000  # a clock tick alone: left alone
     frame._refresh_list_in_place()
-    assert not any(w.startswith("Quiet one") for w in writes)
+    assert row() == before
