@@ -63,8 +63,8 @@ Versions below 1.0 publish as pre-releases. Both platforms update through Velopa
   file. Internal changes (tests, CI, refactors) need no entry. `__version__` is bumped only in
   the release commit, so the notes file can wait on main ahead of it.
 - The order: a short intro (what it updates, pre-release or not, that it offers itself as an
-  update), then **Changed**, **Fixed** and **Added** as needed (what shipped is what people came to
-  read), then the footers, copied from the last release: **Reporting Issues**, **Downloads**,
+  update), then **Added**, **Changed** and **Fixed** as needed (what's new is what most people
+  came to read), then the footers, copied from the last release: **Reporting Issues**, **Downloads**,
   **Requirements**, and the independence line.
 - Write for users: say what they'll notice, in plain words, with the menu path and the key. Don't
   name a screen reader unless the change is specific to one; say "screen readers".
