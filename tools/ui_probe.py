@@ -308,6 +308,13 @@ def build_world(root: Path, patch=setattr, empty: bool = False, formatted_view: 
     env = fake_env.install(root, patch, formatted_view=formatted_view)
     patch(main_frame, "TurnRunner", fake_env.FakeRunner)
     patch(platform_paths, "find_claude", lambda: platform_paths.ClaudeLookup("claude.exe"))
+    # Nor the real gh, for New Session's From GitHub (#154).
+    from thechatplace import workplaces
+    patch(workplaces, "find_gh", lambda: "gh.exe")
+    patch(workplaces, "list_github_repos", lambda gh, limit=0: [
+        workplaces.GitHubRepo("probe/AIChat", "The Chat Place: a reader for Claude Code sessions"),
+        workplaces.GitHubRepo("probe/website", "The Idea Place website"),
+        workplaces.GitHubRepo("probe/notes", "Private notes", private=True)])
     projects = root / "Projects"
     env["folders"] = {}
     for name in ("AIChat", "Website", "Scratch"):
@@ -518,6 +525,13 @@ def d_new_session(frame, env):
     return frame.on_new_session
 
 
+def d_github_repos(frame, env):
+    """New Session, From GitHub: opened from inside New Session, so built
+    here directly, as New Session builds it."""
+    from thechatplace.ui.dialogs import GitHubRepoDialog
+    return lambda: frame._modal(GitHubRepoDialog(frame, "gh.exe", env["folders"]["AIChat"]))
+
+
 def d_continue_here(frame, env):
     _open(frame, "Fix the flaky upload test")
     return frame.on_continue_here
@@ -646,6 +660,7 @@ SURFACES = {
     "message-plain": ("dialog", d_message_plain, "The same message as plain text"),
     "settings": ("dialog", d_settings, "Settings"),
     "new-session": ("dialog", d_new_session, "File, New Session"),
+    "github-repos": ("dialog", d_github_repos, "New Session, From GitHub: your repositories"),
     "continue-here": ("dialog", d_continue_here, "Continue Here (a desktop session)"),
     "update-installed": ("dialog", d_update_installed, "After an update is installed"),
     "permission": ("dialog", d_permission, "Claude asks permission to run a command"),
@@ -682,6 +697,7 @@ DIALOG_CLASSES = {
     "message-plain": "MessageDialog",
     "settings": "SettingsDialog",
     "new-session": "NewSessionDialog",
+    "github-repos": "GitHubRepoDialog",
     "continue-here": "NewSessionDialog",
     "update-installed": "UpdateInstalledDialog",
     "permission": "PermissionDialog",
