@@ -1,4 +1,4 @@
-﻿"""The visual probe (#155): open each of The Chat Place's screens on made-up
+"""The visual probe (#155): open each of The Chat Place's screens on made-up
 data, and save a picture of it and a JSON description of its controls.
 
     python tools/ui_probe.py --out probe-run [--tag light-100] [--surface main-own ...]
