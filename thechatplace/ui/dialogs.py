@@ -106,7 +106,6 @@ class NewSessionDialog(wx.Dialog):
         grid.AddGrowableCol(1, 1)
 
         grid.Add(wx.StaticText(self, label="&Folder:"), 0, wx.ALIGN_CENTER_VERTICAL)
-        folder_row = wx.BoxSizer(wx.HORIZONTAL)
         if continue_from:
             self.folder = wx.TextCtrl(self, value=default_folder, style=wx.TE_READONLY)
         else:
@@ -119,14 +118,21 @@ class NewSessionDialog(wx.Dialog):
                 # chooses the folder that's already there.
                 self.folder.SetSelection(0)
         set_accessible_name(self.folder, "Folder")
-        folder_row.Add(self.folder, 1, wx.EXPAND | wx.RIGHT, 6)
+        grid.Add(self.folder, 1, wx.EXPAND)
+        # The buttons on a row of their own under the box, which then has
+        # the width the other fields have: beside it, they left it a third
+        # narrower, showing only the end of a path (#178). Tab still goes
+        # from the box to them, as they're made in that order.
         browse = wx.Button(self, label="&Browse...")
-        folder_row.Add(browse, 0, wx.RIGHT, 6)
         self.github_btn = wx.Button(self, label="From &GitHub...")
-        folder_row.Add(self.github_btn, 0)
         browse.Show(not continue_from)
         self.github_btn.Show(not continue_from)
-        grid.Add(folder_row, 1, wx.EXPAND)
+        if not continue_from:
+            folder_buttons = wx.BoxSizer(wx.HORIZONTAL)
+            folder_buttons.Add(browse, 0, wx.RIGHT, 6)
+            folder_buttons.Add(self.github_btn, 0)
+            grid.Add((0, 0))
+            grid.Add(folder_buttons, 0)
 
         self.work_in_label = wx.StaticText(self, label="Work &in:")
         grid.Add(self.work_in_label, 0, wx.ALIGN_CENTER_VERTICAL)
@@ -179,8 +185,7 @@ class NewSessionDialog(wx.Dialog):
                            value=(CONTINUE_NOTE + "\n\n" + PERMISSION_NOTE) if continue_from
                            else PERMISSION_NOTE)
         set_accessible_name(note, about)
-        # Four lines: the note about permissions and effort, whole (#189).
-        note.SetMinSize((-1, self.GetCharHeight() * 4 + 12))
+        self.note = note  # sized to its text once it has its width, below
         outer.Add(note, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
 
         outer.Add(wx.StaticText(self, label="First &message:"), 0, wx.LEFT | wx.TOP, 10)
@@ -196,6 +201,12 @@ class NewSessionDialog(wx.Dialog):
         buttons.Realize()
         outer.Add(buttons, 0, wx.EXPAND | wx.ALL, 8)
         self.SetSizer(outer)
+        # Laid out now, before it's shown: the title box was still its small
+        # first size (110 pixels) when its text was set, so Continue Here
+        # showed only the title's end, "ad test (continued)", though the
+        # whole title fits the 540-pixel box (#178).
+        self.Layout()
+        self._fit_note()
 
         browse.Bind(wx.EVT_BUTTON, self._on_browse)
         self.github_btn.Bind(wx.EVT_BUTTON, lambda e: self.on_github())
@@ -214,6 +225,29 @@ class NewSessionDialog(wx.Dialog):
     def _focus_first(self):
         if self:
             (self.message if self.continuing else self.folder).SetFocus()
+            # A backstop for the title's start being in view (#178): the
+            # layout before showing is what puts it there.
+            self.title_text.SetInsertionPoint(0)
+            self.title_text.ShowPosition(0)
+
+    def _fit_note(self):
+        """The About box tall enough for its whole note at its width (#178:
+        Continue Here's note is two paragraphs, and a fixed four lines cut
+        its third line through the middle). Measured, not counted, so a
+        bigger font or a narrower window still fits it."""
+        from wx.lib.wordwrap import wordwrap
+        self.Layout()
+        # A little narrower than the box draws text, so it never counts a
+        # line short (at some widths it counts one more than there is).
+        width = self.note.GetClientSize().width - 10
+        if width <= 40:
+            return
+        dc = wx.ClientDC(self.note)
+        dc.SetFont(self.note.GetFont())
+        lines = sum(len(wordwrap(paragraph, width, dc).rstrip("\n").split("\n"))
+                    for paragraph in self.note.GetValue().split("\n"))
+        self.note.SetMinSize((-1, self.note.GetCharHeight() * lines + 12))
+        self.Layout()
 
     def _on_char_hook(self, event):
         # Ctrl+Enter starts the session from anywhere, as Send does elsewhere.
