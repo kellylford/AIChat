@@ -194,13 +194,9 @@ heard. See Following a session as it works.
 ### The Chat Place's own sessions
 
 These are the sessions you start here, with File, New Session (Ctrl+N) or Continue Here. You read
-and reply to them entirely in The Chat Place, and they don't appear in the desktop app. Claude
-runs only while it's answering you: each message you send starts Claude, and it stops when the
-turn ends. So if Claude starts something in the background, such as a long build or a watch on a
-pull request's checks, and ends its turn to wait for it, the session won't carry on by itself when
-that work finishes: it waits for your next message. On Windows the background work itself also
-stops when the turn ends. Ask Claude to wait for such work before it finishes its turn, or run
-long jobs in a terminal session instead.
+and reply to them entirely in The Chat Place, and they don't appear in the desktop app. If Claude
+starts something in the background, such as a build or a wait for GitHub checks, the session keeps
+running while it does, and Claude carries on by itself when it finishes (see Replying).
 
 ### Continue Here
 
