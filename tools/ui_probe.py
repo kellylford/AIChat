@@ -1,4 +1,4 @@
-"""The visual probe (#155): open each of The Chat Place's screens on made-up
+﻿"""The visual probe (#155): open each of The Chat Place's screens on made-up
 data, and save a picture of it and a JSON description of its controls.
 
     python tools/ui_probe.py --out probe-run [--tag light-100] [--surface main-own ...]
@@ -766,17 +766,24 @@ def _webviews(window):
     return found
 
 
-def _page_ready(view) -> bool:
-    """The page has loaded and has text: IsBusy goes false before WebView2
-    has drawn anything, which gave a blank picture of the shortcuts page."""
-    if view.IsBusy():
-        return False
-    try:
-        ok, length = view.RunScript(
-            "document.readyState === 'complete' ? String(document.body.innerText.length) : '0'")
-    except Exception:  # noqa: BLE001 - an older wx without RunScript's result
+def _pages_drawn(dialog, views) -> bool:
+    """Every web view in ``dialog`` shows more than one colour. WebView2
+    draws in its own process after IsBusy has gone false, and asking the page
+    (RunScript) from inside this timer can wait forever, so the picture
+    itself is the test: a page that hasn't drawn yet is one flat colour."""
+    if not IS_WINDOWS:
         return True
-    return bool(ok) and str(length).strip('"').isdigit() and int(str(length).strip('"')) > 0
+    bitmap, _method = _capture_windows(dialog)
+    frame = dialog.GetScreenRect()
+    scale = bitmap.GetWidth() / max(1, frame.width)
+    for view in views:
+        rect = view.GetScreenRect()
+        x, y = int((rect.x - frame.x) * scale) + 8, int((rect.y - frame.y) * scale) + 8
+        w, h = int(rect.width * scale) - 16, int(rect.height * scale) - 16
+        area = wx.Rect(x, y, w, h).Intersect(wx.Rect(0, 0, bitmap.GetWidth(), bitmap.GetHeight()))
+        if area.width < 4 or area.height < 4 or _one_colour(bitmap.GetSubBitmap(area)):
+            return False
+    return True
 
 
 def photograph_dialog(opener, out: Path, stem: str) -> dict:
@@ -786,7 +793,7 @@ def photograph_dialog(opener, out: Path, stem: str) -> dict:
     state = {"seen": None, "since": 0.0, "done": False, "started": time.time()}
 
     def tick(_event=None):
-        # RunScript pumps messages, so the timer can fire again inside it.
+        # Taking a picture can pump messages, so the timer could fire inside it.
         if state["done"] or state.get("ticking"):
             return
         state["ticking"] = True
@@ -810,7 +817,7 @@ def photograph_dialog(opener, out: Path, stem: str) -> dict:
         waited = now - state["since"]
         if waited < (WEBVIEW_SETTLE_SECONDS if views else SETTLE_SECONDS):
             return
-        if not all(_page_ready(v) for v in views) and waited < DIALOG_TIMEOUT_SECONDS:
+        if views and waited < DIALOG_TIMEOUT_SECONDS and not _pages_drawn(dialog, views):
             return
         state["done"] = True
         try:
