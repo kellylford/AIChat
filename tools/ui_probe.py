@@ -166,6 +166,8 @@ def _capture_windows(window: wx.TopLevelWindow) -> tuple[wx.Bitmap, str]:
             wl, wt, wr, wb = _work_area()
             bl, bt = max(bounds[0], wl), max(bounds[1], wt)
             br, bb = min(bounds[2], wr), min(bounds[3], wb)
+            if br <= bl or bb <= bt:
+                raise RuntimeError("the window is outside the screen's work area")
             return _screen_copy(bl, bt, br - bl, bb - bt), "screen copy (stretched by Windows)"
     left, top, right, bottom = physical
     width, height = right - left, bottom - top
@@ -1011,7 +1013,14 @@ def run(out: Path, tag: str, names, size) -> int:
     # show as a change against the baseline.
     tmp = Path(tempfile.gettempdir()) / "tcp-probe"
     shutil.rmtree(tmp, ignore_errors=True)
-    tmp.mkdir(parents=True, exist_ok=True)
+    if tmp.exists():
+        # Something still holds it: an earlier probe, or its msedgewebview2.
+        # Reusing a live WebView2 profile, or an old world's files, would
+        # show as failures or as changes that aren't the app's.
+        print(f"{tmp} couldn't be cleared: an earlier probe (or its msedgewebview2) is still "
+              "running. End it and run again.")
+        return 3
+    tmp.mkdir(parents=True)
     # One WebView2 profile for the run (the runtime keeps using the first
     # one it was given), and none of it in the real local app data.
     os.environ["WEBVIEW2_USER_DATA_FOLDER"] = str(tmp / "webview2")
@@ -1024,6 +1033,7 @@ def run(out: Path, tag: str, names, size) -> int:
             # ("WebViewCreated ... Operation aborted"); a new window
             # usually does. Still blank twice is reported.
             print(f"  {stem} (again: its page never drew)", flush=True)
+            # A formatted page shows no folder, so a file left here is harmless.
             shutil.rmtree(tmp / name, ignore_errors=True)
             entry = photograph(name, out, stem, size, tmp / name)
             entry["retried"] = True

@@ -64,8 +64,16 @@ picture, with a short note on how the other variants differ. For each:
 Plain sentences. Don't explain why something helps a screen reader user; say what it looks
 like.
 
-## 3. Comparing with the baseline (later phases)
+## 3. Comparing with the baseline
 
-For a surface whose picture or JSON changed against `testing/visual/baseline/`, say what
-changed in words ("the Send button moved below the reply box; the reply box is 40 pixels
-shorter"), then give the checklist verdict for the new picture.
+`tools/ui_compare.py` writes `compare.md` in the run folder. It lists the screens that changed
+against `testing/visual/baseline/windows/`, with what it measured, and puts a `diff\<screen>.png`
+beside each, marking the changed pixels in red. For each changed screen:
+
+1. Open the new picture, the baseline's, and the diff.
+2. Say what changed in words ("the Send button moved below the reply box; the reply box is
+   40 pixels shorter").
+3. Give the checklist verdict for the new picture.
+
+A screen listed under "Failed in this run" wasn't compared: it needs running again, not
+reviewing.
