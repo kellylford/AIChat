@@ -18,3 +18,9 @@ voiceover = pytest.mark.skipif(sys.platform != "darwin", reason="VoiceOver names
 #: JAWS and NVDA called from the app's own process (screen_readers.py, #98).
 windows_screen_readers = pytest.mark.skipif(
     sys.platform != "win32", reason="JAWS and NVDA are reached from the app on Windows only")
+
+#: Layout measured against Windows' own controls and fonts (Segoe UI at 96
+#: DPI on CI), where the visual probe's baseline is taken (#155). A Mac's
+#: controls and fonts are other sizes, so what's cut off there differs.
+windows_layout = pytest.mark.skipif(
+    sys.platform != "win32", reason="layout is measured with Windows' controls and fonts")

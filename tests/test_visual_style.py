@@ -42,7 +42,10 @@ def test_contrast_matches_known_values():
 
 
 def _rules(css: str) -> dict:
-    """selector -> {property: value}, for rules not inside an @media block."""
+    """selector -> {property: value}, for rules not inside an @media block.
+    Enough for ``_STYLE`` as it is: no comments, no nesting beyond one @media
+    and no ";" inside a value. Anything else fails loudly (a KeyError or an
+    assertion), never quietly."""
     rules = {}
     for selectors, body in re.findall(r"([^{}@]+)\{([^{}]*)\}", css):
         props = dict((k.strip(), v.strip()) for k, v in
@@ -67,7 +70,7 @@ def _top_level(css: str) -> str:
 
 
 def _colour(value: str) -> str:
-    match = re.search(r"#[0-9a-fA-F]{3,6}\b", value)
+    match = re.search(r"#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b", value)
     assert match, value
     return match.group(0).lower()
 
@@ -108,15 +111,15 @@ def test_code_blocks_keep_an_edge_in_high_contrast():
 
 
 def test_the_page_says_it_has_a_dark_style():
-    # Without color-scheme, WebView2 draws its scroll bars and focus rings
-    # for a light page even when the page is dark.
+    # Without color-scheme, the browser draws its scroll bars for a light
+    # page even when the page is dark.
     assert _rules(_top_level(rendering._STYLE))[":root"]["color-scheme"] == "light dark"
 
 
 #: A literal colour in the window's code, which would look the same in every
 #: theme. A line may keep one with a comment saying why: "# colour: ...".
 _LITERAL_COLOUR = re.compile(
-    r"wx\.Colour\(|Set(Background|Foreground)Colour\(|SetTextForeground\(|SetTextBackground\("
+    r"wx\.Colour\(|Set(Own)?(Background|Foreground)Colour\(|SetTextForeground\(|SetTextBackground\("
     r"|wx\.(RED|GREEN|BLUE|WHITE|BLACK|LIGHT_GREY|CYAN|YELLOW)\b|[\"']#[0-9a-fA-F]{3,8}[\"']")
 
 

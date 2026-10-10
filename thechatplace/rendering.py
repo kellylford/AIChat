@@ -49,8 +49,7 @@ LANGUAGE_NAMES = {
 #: paths wrap; not overflow-wrap: anywhere, which squeezes table columns),
 #: a focus ring that shows on every link, and dark-mode links, visited ones
 #: too, at 6.6:1 or better (the browser's default visited purple was 1.6:1).
-#: color-scheme lets WebView2 draw its scroll bars and focus rings dark on a
-#: dark page; under High Contrast a code block, which only a background marks,
+#: color-scheme lets the browser draw its scroll bars dark on a dark page; under High Contrast a code block, which only a background marks,
 #: gets a border in the theme's text colour (#155). tests/test_visual_style.py
 #: measures all of it.
 _STYLE = """
