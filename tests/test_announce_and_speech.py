@@ -273,3 +273,13 @@ def test_update_notice_settings_round_trip_and_default(tmp_path):
     odd = SpeechSettings.load(path)
     assert odd.update_installed_notice is True
     assert odd.last_run_version == ""
+
+
+def test_what_is_still_running_in_the_background():
+    from thechatplace.announce import background_text
+    assert background_text(["Windows build"]) == \
+        "Still running in the background: Windows build."
+    assert background_text(["Build", " Watch\nCI "]) == \
+        "Still running in the background: Build; Watch CI."
+    assert background_text([]) == "Still running in the background."
+    assert background_text(["", " "]) == "Still running in the background."

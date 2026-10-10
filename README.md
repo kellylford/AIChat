@@ -743,8 +743,18 @@ whether a reply went to the screen reader at all when you didn't hear it.
 
 A turn runs `claude` in a Windows job object, so Stop, or quitting the app, ends `claude` and every
 program it started (a build or test run, say), not just `claude` itself. The same happens when a
-turn finishes normally: anything Claude started and left running, such as a development server,
-ends with the turn. (Ask Claude to start long-running servers in a terminal of your own instead.)
+turn finishes. Background commands are the exception: while Claude Code reports a command it ran
+in the background still running (a build, or `gh pr checks --watch`, say), the turn stays open
+even after Claude answers, because Claude Code starts a turn of its own when the command finishes,
+and ending the turn would kill it and leave nothing to pick it up (#161). The answer is announced
+at once with what is still running ("Still running in the background: Windows build"), the
+session's row says "answered, background work running", and the turn ends when Claude goes idle
+with nothing left running. While it waits, Send goes straight to Claude as the next message rather
+than queuing, and anything already queued goes in then; Turn Status (Ctrl+Shift+T) names the work
+still running. (A background agent is different: Claude Code keeps working until the agent is done,
+so the turn simply runs until then and its answer is said at the end, as with any turn.)
+Something meant to run indefinitely, such as a development server, would keep the turn open until
+you press Stop, so ask Claude to start long-running servers in a terminal of your own.
 `claude` is started suspended and only let run once it's in the job, so nothing it starts can
 slip out first.
 

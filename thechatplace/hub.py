@@ -68,9 +68,12 @@ def collect(own: Iterable[OwnSession], running_own_ids: Set[str],
             waiting: Optional[Dict[str, str]] = None,
             started=platform_paths.process_start,
             order: str = SORT_STATUS,
-            last_messages: bool = False) -> Snapshot:
+            last_messages: bool = False,
+            background: Optional[Set[str]] = None) -> Snapshot:
     """``waiting`` maps a running own session to what Claude is waiting for
     (a permission request, question or plan): it needs you, not working.
+    ``background``: running own sessions where Claude has answered and the
+    turn is open only for background work (#161).
     ``order`` is how the list is sorted (see ``sessions.SORT_ORDERS``).
     ``last_messages`` fills in each session's Last message column (#146):
     only while that column is shown, since it reads every transcript."""
@@ -88,7 +91,9 @@ def collect(own: Iterable[OwnSession], running_own_ids: Set[str],
         if item.cli_session_id in running_own_ids and waiting.get(item.cli_session_id):
             info.state, info.detail = NEEDS_YOU, waiting[item.cli_session_id]
         elif item.cli_session_id in running_own_ids:
-            info.state, info.detail = WORKING, ""
+            info.state, info.detail = WORKING, (
+                "answered, background work running"
+                if item.cli_session_id in (background or ()) else "")
         elif (live.get(item.cli_session_id) is not None
               and live[item.cli_session_id].status == "busy"):
             # Someone resumed it elsewhere (a terminal); it is busy there.
