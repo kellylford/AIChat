@@ -9,6 +9,7 @@ the browser, so it runs in its own window.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from dataclasses import dataclass
 from typing import List, Optional
@@ -58,12 +59,9 @@ def check(executable: Optional[str] = None, run=subprocess.run) -> SignIn:
         return SignIn(False, problem=f"Claude Code ({executable}) didn't answer in 20 seconds")
     except (OSError, subprocess.SubprocessError) as exc:
         return SignIn(False, problem=f"Claude Code ({executable}) couldn't be started: {exc}")
-    try:
-        data = json.loads(out.stdout or "")
-    except ValueError:
+    data = _json_in(out.stdout or "")
+    if data is None:
         return SignIn(False, problem=_no_answer(executable, out))
-    if not isinstance(data, dict):
-        return SignIn(False, problem="Claude Code's answer wasn't understood")
     return SignIn(True, signed_in=bool(data.get("loggedIn")),
                   method=str(data.get("authMethod") or ""),
                   provider=str(data.get("apiProvider") or ""),
@@ -71,14 +69,41 @@ def check(executable: Optional[str] = None, run=subprocess.run) -> SignIn:
                   email=str(data.get("email") or ""))
 
 
+def _json_in(text: str) -> Optional[dict]:
+    """The answer in what ``claude auth status`` printed, or None.
+    Some installs print a notice along with it, such as a warning about the
+    npm install, and the answer was taken as unreadable when they did. A
+    notice may hold braces or JSON of its own, so the answer is the first
+    object starting a line that says whether Claude Code is signed in; an
+    object inside something else isn't the answer."""
+    decoder = json.JSONDecoder()
+    for start in _LINE_STARTS.finditer(text):
+        try:
+            data = decoder.raw_decode(text, start.end() - 1)[0]
+        except ValueError:
+            continue
+        if isinstance(data, dict) and "loggedIn" in data:
+            return data
+    return None
+
+
+_LINE_STARTS = re.compile(r"^[\ufeff \t]*\{", re.MULTILINE)
+
+
 def _no_answer(executable: str, out) -> str:
-    """Why ``claude auth status`` gave no JSON, from what it printed.
-    A version from before ``auth status`` existed says "unknown command"."""
-    said = next((line.strip() for line in (out.stderr or out.stdout or "").splitlines()
-                 if line.strip()), "")
+    """Why ``claude auth status`` gave no answer we could use, from what it
+    printed. A version from before ``auth status`` existed says "unknown
+    command". An answer in JSON is spread over lines whose first is just
+    "{", so when the JSON couldn't be read, quoting it would say nothing."""
+    # A byte-order mark isn't whitespace to strip(), and looks like nothing.
+    lines = (out.stderr or out.stdout or "").replace("\ufeff", "").splitlines()
+    said = next((line.strip() for line in lines if line.strip()), "")
     if "unknown" in said.lower() and ("command" in said.lower() or "option" in said.lower()):
         return (f"Claude Code ({executable}) is too old to say. Update it by running "
                 "claude update in a terminal, then try again")
+    if "{" in (out.stdout or ""):
+        return (f"Claude Code ({executable}) gave an answer The Chat Place couldn't read "
+                f"(exit code {out.returncode}). Run claude auth status in a terminal to see it")
     if said:
         return f"Claude Code ({executable}) said \"{said[:200]}\""
     return f"Claude Code ({executable}) gave no answer (exit code {out.returncode})"
