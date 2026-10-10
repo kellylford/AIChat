@@ -643,6 +643,15 @@ def d_links(frame, env):
     return frame.on_links
 
 
+def d_find_all(frame, env):
+    """Find in All Sessions' results, for a word the made-up sessions use."""
+    from thechatplace.search import Target, search_sessions
+    targets = [Target(info.key, info.title, info.transcript_path)
+               for info in (frame._current_info(key) for key in frame._list_keys) if info]
+    results = search_sessions(targets, "the")
+    return lambda: frame._open_find_results(results)
+
+
 def d_changes(frame, env):
     _open(frame, "Visual probe")
     return frame.on_changes
@@ -719,6 +728,7 @@ SURFACES = {
     "bug-report": ("dialog", d_bug_report, "Help, Report a Bug"),
     "code-blocks": ("dialog", d_code_blocks, "A message's code blocks"),
     "links": ("dialog", d_links, "View, Links"),
+    "find-all": ("dialog", d_find_all, "View, Find in All Sessions: the results"),
     "changes": ("dialog", d_changes, "View, Changed Files"),
     "usage": ("dialog", d_usage, "View, Usage and Context"),
     "about-you": ("dialog", d_about_you, "View, What Claude Knows About You"),
@@ -757,6 +767,7 @@ DIALOG_CLASSES = {
     "bug-report": "BugReportDialog",
     "code-blocks": "CodeBlocksDialog",
     "links": "LinksDialog",
+    "find-all": "FindResultsDialog",
     "changes": "ChangesDialog",
     "usage": "UsageDialog",
     "about-you": "AboutYouDialog",

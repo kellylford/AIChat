@@ -7428,3 +7428,112 @@ def test_a_link_the_system_refuses_is_said_not_raised(frame, env, monkeypatch):
     _links_dialog(monkeypatch, lambda d: d.open_selected())
     frame.on_links()
     assert "Couldn't open the link: embedded null character" in env["boxes"][-1]
+# -- Find in All Sessions (#109) ------------------------------------------------------------------
+
+
+def _find_all(frame, monkeypatch, text, act=None):
+    """Run Find in All Sessions for ``text``; ``act(dialog)`` stands in for
+    the results dialog (closing it if it doesn't choose)."""
+    from thechatplace.ui import dialogs, main_frame
+    seen = {}
+
+    class Shown(dialogs.FindResultsDialog):
+        def ShowModal(self):
+            seen["title"] = self.GetTitle()
+            seen["rows"] = list(self.list.GetStrings())
+            seen["summary"] = self.summary.GetValue()
+            if act:
+                act(self)
+            return self.GetReturnCode()
+    monkeypatch.setattr(main_frame, "FindResultsDialog", Shown)
+    monkeypatch.setattr(frame, "_ask_text", lambda *a: text)
+    frame.on_find_all()
+    assert pump(lambda: not frame._find_all_busy)
+    if frame._find_all_waiting is not None:
+        # A hidden window isn't active, so the results wait for Ctrl+Shift+S.
+        assert env_said(frame).endswith("Press Ctrl+Shift+S to see them.")
+        frame.on_find_all()
+    return seen
+
+
+def env_said(frame):
+    return frame._last_announcement
+
+
+def test_find_in_all_sessions_lists_matches_and_goes_to_one(frame, env, monkeypatch):
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [
+        user_text("Start the database migration"),
+        assistant_block(text_block("Done."), "m1"),
+        user_text("thanks")])
+    add_transcript(env, "C:\\G\\Scratch", "own-1", [user_text("no match here")])
+    seen = _find_all(frame, monkeypatch, "database MIGRATION", lambda d: d.go())
+    assert seen["title"] == 'Find in All Sessions: "database MIGRATION"'
+    assert len(seen["rows"]) == 1 and seen["rows"][0].startswith("Quiet one, You, ")
+    assert seen["rows"][0].endswith(": Start the database migration")
+    assert 'contains "database MIGRATION". Searched ' in seen["summary"]
+    assert "had no transcript to read" in seen["summary"]  # not on disk
+    assert pump(lambda: frame._chat_loaded and frame._open.title == "Quiet one")
+    assert frame.chat_list.GetSelection() == 0
+    assert env["feedback"][-1] == ("Loaded Quiet one. Message 1 of 3: You: Start the "
+                                   "database migration")
+    # Already loaded: it moves to the message without loading again.
+    frame.chat_list.SetSelection(2)
+    _find_all(frame, monkeypatch, "migration", lambda d: d.go())
+    assert frame.chat_list.GetSelection() == 0
+
+
+def test_find_in_all_sessions_with_no_match_says_so_without_a_dialog(frame, env, monkeypatch):
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [user_text("hello")])
+    monkeypatch.setattr("thechatplace.ui.main_frame.FindResultsDialog",
+                        lambda *a, **k: pytest.fail("no dialog"))
+    monkeypatch.setattr(frame, "_ask_text", lambda *a: "zebra")
+    frame.on_find_all()
+    assert env["feedback"][-1].startswith('Searching ')
+    assert pump(lambda: not frame._find_all_busy)
+    assert frame._last_announcement.startswith('No messages contain "zebra". Searched 1 session.')
+
+
+def test_find_in_all_sessions_searches_only_the_listed_view(frame, env, monkeypatch):
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [user_text("needle in a desktop session")])
+    add_transcript(env, "C:\\G\\Scratch", "own-1", [user_text("needle in my own")])
+    frame._set_session_filter("Hub probe")  # only that one listed
+    seen = _find_all(frame, monkeypatch, "needle")
+    assert [row.split(",")[0] for row in seen["rows"]] == ["Hub probe"]
+
+
+def test_find_in_all_sessions_cancelled_or_busy(frame, env, monkeypatch):
+    monkeypatch.setattr(frame, "_ask_text", lambda *a: None)
+    before = list(env["feedback"])
+    frame.on_find_all()
+    assert env["feedback"] == before and not frame._find_all_busy
+    frame._find_all_busy = True
+    frame.on_find_all()  # pressed again while searching: it stops
+    assert frame._find_all_cancel and env["feedback"][-1] == "Stopped searching."
+
+
+def test_a_match_after_a_tool_call_in_the_same_reply_is_the_one_selected(frame, env,
+                                                                         monkeypatch):
+    """Text either side of a tool call is one reply, with one key: the
+    result is found by its place, not its key (#109 review)."""
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [
+        user_text("go"),
+        assistant_block(text_block("before the tool"), "m2"),
+        assistant_block(tool_use_block("Bash", {"command": "ls"}, "t1"), "m2"),
+        assistant_block(text_block("after: the needle"), "m2")])
+    _find_all(frame, monkeypatch, "needle", lambda d: d.go())
+    assert pump(lambda: frame._chat_loaded and frame._open.title == "Quiet one")
+    assert frame.chat_list.GetStringSelection().startswith("Claude: after: the needle")
+
+
+def test_results_that_arrive_while_you_are_elsewhere_wait(frame, env, monkeypatch):
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [user_text("the needle")])
+    monkeypatch.setattr("thechatplace.ui.main_frame.FindResultsDialog",
+                        lambda *a, **k: pytest.fail("not until asked"))
+    monkeypatch.setattr(frame, "IsActive", lambda: False)  # gone to another app
+    monkeypatch.setattr(frame, "_ask_text", lambda *a: "needle")
+    frame.on_find_all()
+    assert pump(lambda: not frame._find_all_busy)
+    assert frame._find_all_waiting is not None
+    assert frame._last_announcement == ('1 message in 1 session contains "needle". Searched 1 '
+                                        "session. 2 had no transcript to read. Press "
+                                        "Ctrl+Shift+S to see them.")

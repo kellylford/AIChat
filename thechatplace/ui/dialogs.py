@@ -2445,3 +2445,52 @@ class LinksDialog(wx.Dialog):
             self.filter.AppendText(chr(key))
             return
         event.Skip()
+
+
+class FindResultsDialog(wx.Dialog):
+    """Find in All Sessions' results (#109): what was searched, then each
+    message found ("Build, Claude, yesterday 10:42: …the migration ran…").
+    Enter or Go to Message loads that session on that message."""
+
+    def __init__(self, parent, results, now=None):
+        super().__init__(parent, title=f'Find in All Sessions: "{results.text}"',
+                         size=(820, 520), style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+        self._matches = list(results.matches)
+        #: The match to go to once the dialog has closed, or None.
+        self.chosen = None
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer.Add(wx.StaticText(self, label="&Results:"), 0, wx.LEFT | wx.TOP, 8)
+        self.list = wx.ListBox(self, style=wx.LB_SINGLE,
+                               choices=[m.row(now) for m in self._matches])
+        # The summary is the list's name, so it's heard on arriving.
+        set_accessible_name(self.list, f"Results. {results.summary()}")
+        sizer.Add(self.list, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        sizer.Add(wx.StaticText(self, label="&Searched:"), 0, wx.LEFT | wx.TOP, 8)
+        self.summary = _read_only_text(self, results.summary(), "Searched", min_height=40)
+        sizer.Add(self.summary, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        row = wx.BoxSizer(wx.HORIZONTAL)
+        self.go_btn = wx.Button(self, label="&Go to Message")
+        self.go_btn.SetDefault()
+        row.Add(self.go_btn, 0, wx.RIGHT, 6)
+        row.Add(wx.Button(self, wx.ID_CANCEL, "C&lose"), 0)
+        sizer.Add(row, 0, wx.ALIGN_RIGHT | wx.ALL, 8)
+        self.SetSizer(sizer)
+        self.SetEscapeId(wx.ID_CANCEL)
+        self.go_btn.Bind(wx.EVT_BUTTON, lambda e: self.go())
+        self.list.Bind(wx.EVT_LISTBOX_DCLICK, lambda e: self.go())
+        self.list.Bind(wx.EVT_KEY_DOWN, self._on_list_key)
+        if self._matches:
+            self.list.SetSelection(0)
+        wx.CallAfter(lambda: self and self.list.SetFocus())
+
+    def _on_list_key(self, event):
+        if event.GetKeyCode() in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER):
+            self.go()
+            return
+        event.Skip()
+
+    def go(self):
+        index = self.list.GetSelection()
+        if 0 <= index < len(self._matches):
+            self.chosen = self._matches[index]
+            _end_modal(self, wx.ID_OK)

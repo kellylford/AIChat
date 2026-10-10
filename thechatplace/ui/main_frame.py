@@ -67,6 +67,7 @@ from ..hub import (Snapshot, collect, fill_last_message, finished_turns,
                    forget_last_messages, last_reply_from_tail)
 from ..message_links import find_links
 from ..own_store import OwnSession, OwnSessionStore
+from ..search import Target, search_sessions
 from ..groups import GroupStore
 from ..prompts import (MAX_NAME as PROMPT_NAME_MAX, PromptStore, clean_text as clean_prompt_text,
                        suggested_name)
@@ -88,7 +89,8 @@ from .notify import Notifier
 from .statusbar import StatusParts
 from ..rendering import html_page, message_page
 from ..ui_text import markdown_as_text, shortcuts_html, update_item_label, update_item_spoken
-from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, AboutYouDialog, ChangesDialog, CodeBlocksDialog, FormattedMessageDialog, LinksDialog,
+from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, AboutYouDialog, ChangesDialog, CodeBlocksDialog, FindResultsDialog,
+                      FormattedMessageDialog, LinksDialog,
                       BugReportDialog, CommandPickerDialog, MessageDialog, NewSessionDialog, PermissionDialog, PlanDialog,
                       ManageGroupsDialog, PromptsDialog, QuestionDialog, SessionColumnsDialog,
                       SettingsDialog, ShortcutsDialog, UpdateInstalledDialog, UsageDialog,
@@ -109,6 +111,8 @@ APPLY_SPEECH_WAIT_S = 4.0
 CHAT_REFRESH_MS = 2000
 #: Tool calls and in-between text are gathered this long, then said together (#12).
 ACTIVITY_DELAY_MS = 1200
+#: How often a long Find in All Sessions says how far it's got (#109).
+FIND_ALL_PROGRESS_MS = 10_000
 
 _REPLY_KINDS = (ASSISTANT, QUESTION, PLAN, ERROR)
 
@@ -230,6 +234,15 @@ class MainFrame(wx.Frame):
         # text looked for in the messages.
         self._session_filter = ""
         self._find_text = ""
+        # Find in All Sessions (#109): the last text, whether a search is
+        # running, and the message to select once a session it chose loads.
+        self._find_all_text = ""
+        self._find_all_busy = False
+        self._find_all_cancel = False
+        self._find_all_done = 0
+        self._find_all_focus = None
+        self._find_all_waiting = None  # results said but not yet shown
+        self._select_on_load = None  # a search result, until its session loads
         # Usage limits and context (#19): the latest limits any turn reported
         # (they're the account's), each own session's context window, and
         # what's been warned about already, so it's said once.
@@ -416,6 +429,7 @@ class MainFrame(wx.Frame):
         # Every letter of "Links" is another item's access key already, so
         # its shortcut is the way in (#190).
         self._item(view, "Links...\tCtrl+L", lambda e: self.on_links())
+        self._item(view, "Find in &All Sessions...\tCtrl+Shift+S", lambda e: self.on_find_all())
         self.activity_item = view.AppendCheckItem(wx.ID_ANY, "Show &Tool Activity\tCtrl+T")
         self.Bind(wx.EVT_MENU, self.on_toggle_activity_menu, self.activity_item)
         self._item(view, "Sto&p Running Turn\tCtrl+.", self.on_stop)
@@ -1285,6 +1299,7 @@ class MainFrame(wx.Frame):
         self._chat_timer.Stop()
         self._clear_activity()
         self._spoken.clear()
+        self._select_on_load = None
         self._open = None
         self._sync_activity_controls(False)
         self._open_generation += 1
@@ -1411,6 +1426,7 @@ class MainFrame(wx.Frame):
     def _show_missing_transcript(self, info: SessionInfo):
         if self._chat_loaded:
             return
+        self._select_on_load = None  # nothing to find a message in
         self._chat_loaded = True
         own = self.store.get(info.cli_session_id) if info.is_own else None
         if info.is_own and (info.cli_session_id in self._runners
@@ -1450,6 +1466,7 @@ class MainFrame(wx.Frame):
             self._refresh_chat()
             return
         if error is not None:
+            self._select_on_load = None
             if not self._chat_loaded:
                 self.chat_list.Set([f"Couldn't read this transcript: {error}"])
                 self._chat_keys = []
@@ -1473,6 +1490,12 @@ class MainFrame(wx.Frame):
         if self._changes_due and not first_load:
             wx.CallAfter(self._say_changes, generation)  # after the reply
         if first_load:
+            target, self._select_on_load = self._select_on_load, None
+            if target is not None and target.key == self._open.key:
+                # Loaded from Find in All Sessions (#109): on the message found.
+                self._announce_load = False
+                self._select_match(target, loaded=True)
+                return
             note = f" Couldn't read {unreadable} lines." if unreadable else ""
             count = sum(1 for m in self._visible_messages() if m.kind != QUEUED)
             if self._announce_load:
@@ -3815,6 +3838,148 @@ class MainFrame(wx.Frame):
             return
         self._find_text = text
         self.find_again(True, starting=True)
+
+    def on_find_all(self):
+        """View, Find in All Sessions (Ctrl+Shift+S, #109): search every
+        session the list shows (its Show Sessions view and any Ctrl+F text)
+        in the background, then list the messages found; Enter loads that
+        session on that message. Pressed while searching, it stops; pressed
+        when results are waiting, it shows them."""
+        if self._find_all_busy:
+            self._find_all_cancel = True
+            self._feedback("Stopped searching.")
+            return
+        if self._find_all_waiting is not None:
+            results, self._find_all_waiting = self._find_all_waiting, None
+            self._open_find_results(results)
+            return
+        returning_to = wx.Window.FindFocus()
+        text = self._ask_text("Find in All Sessions",
+                              "Find messages, in every session in the list, containing:",
+                              self._find_all_text)
+        if returning_to:
+            returning_to.SetFocus()
+        if not text:
+            return
+        self._find_all_text = text
+        targets = []
+        for key in self._list_keys:
+            info = self._current_info(key)
+            if info is not None:
+                targets.append(Target(info.key, info.title, info.transcript_path,
+                                      info.key in self.tool_activity))
+        if not targets:
+            self._feedback("No sessions in the list to search.")
+            return
+        self._find_all_busy = True
+        self._find_all_cancel = False
+        self._find_all_done = 0
+        # Where you were: the results open there only if you still are.
+        self._find_all_focus = returning_to
+        count = len(targets)
+        self._feedback(f'Searching {count} session{"s" if count != 1 else ""} for "{text}". '
+                       "Ctrl+Shift+S again stops.")
+        wx.CallLater(FIND_ALL_PROGRESS_MS, self._say_find_all_progress, count)
+
+        def progress(done):
+            self._find_all_done = done  # an int, read on the window's thread
+
+        def work():
+            try:
+                results = search_sessions(
+                    targets, text, progress=progress,
+                    cancelled=lambda: self._closing or self._find_all_cancel)
+            except Exception as exc:  # noqa: BLE001 - said, not raised
+                wx.CallAfter(self._find_all_failed, exc)
+                return
+            wx.CallAfter(self._find_all_finished, results)
+        self._pool.submit(work)
+
+    def _say_find_all_progress(self, count: int):
+        """A long search says how far it's got, now and then, so it isn't
+        silent."""
+        if self._gone() or not self._find_all_busy or self._find_all_cancel:
+            return
+        self._feedback(f"Searched {self._find_all_done} of {count} sessions.")
+        wx.CallLater(FIND_ALL_PROGRESS_MS, self._say_find_all_progress, count)
+
+    def _find_all_failed(self, exc):
+        self._find_all_busy = False
+        if not self._gone():
+            self._say(f"Couldn't search the sessions: {exc}")
+
+    def _find_all_finished(self, results):
+        """The search ended. Its results open at once only if you're where
+        you were when it began, with nothing else open; otherwise they're
+        said and wait for Ctrl+Shift+S, so a list never jumps in front of
+        what you've gone on to do."""
+        self._find_all_busy = False
+        if self._gone() or self._find_all_cancel:
+            return
+        if not results.matches:
+            self._say(results.summary())
+            return
+        here = (self.IsActive() and self.IsEnabled() and not self._modal_open()
+                and self._find_all_focus is not None
+                and wx.Window.FindFocus() is self._find_all_focus)
+        if here:
+            self._open_find_results(results)
+            return
+        self._find_all_waiting = results
+        self._say(f"{results.summary()} Press Ctrl+Shift+S to see them.")
+
+    def _open_find_results(self, results):
+        returning_to = wx.Window.FindFocus()
+        dialog = FindResultsDialog(self, results)
+        try:
+            dialog.ShowModal()
+            chosen = dialog.chosen
+        finally:
+            dialog.Destroy()
+        if chosen is None:
+            if returning_to:
+                returning_to.SetFocus()
+            return
+        self._go_to_match(chosen)
+
+    def _go_to_match(self, match):
+        """Load the session a Find in All Sessions result is in, on that
+        message."""
+        info = self._current_info(match.key)
+        if info is None:
+            self._feedback(f"{match.title} isn't in the session list any more.")
+            return
+        if self._open is not None and self._open.key == info.key and self._chat_loaded:
+            self._select_match(match, loaded=False)
+            return
+        self._select_on_load = match
+        self.open_session(info)
+
+    def _select_match(self, match, loaded: bool) -> bool:
+        """Select the message a result found, and say which it is (and, just
+        loaded, which session). Found by its place among the session's
+        messages, as a key can be shared (text either side of a tool call
+        is one reply's)."""
+        visible = self._visible_messages()
+        row = None
+        if 0 <= match.index < len(self._chat_messages):
+            message = self._chat_messages[match.index]
+            if message.key == match.message_key:
+                row = next((i for i, m in enumerate(visible) if m is message), None)
+        if row is None and match.message_key and \
+                [m.key for m in visible].count(match.message_key) == 1:
+            row = [m.key for m in visible].index(match.message_key)
+        where = f"Loaded {match.title}. " if loaded else ""
+        if row is None or row >= self.chat_list.GetCount():
+            count = sum(1 for m in visible if m.kind != QUEUED)
+            self._feedback(f"{where}{count} messages. The message found isn't in the list now; "
+                           "if it was a tool call, Ctrl+T shows them.")
+            return False
+        self.chat_list.SetSelection(row)
+        self.chat_list.SetFocus()
+        self._feedback(f"{where}Message {row + 1} of {self.chat_list.GetCount()}: "
+                       f"{visible[row].list_line()}")
+        return True
 
     def find_again(self, forward: bool = True, starting: bool = False):
         """F3 and Shift+F3: the next or previous message containing the text,

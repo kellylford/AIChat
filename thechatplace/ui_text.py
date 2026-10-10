@@ -116,6 +116,9 @@ SHORTCUTS = [
                          "is queued"),
     ]),
     ("Anywhere", [
+        ("Ctrl+Shift+S", "Find in All Sessions: search the messages of every session in the "
+                         "list; Enter on a result loads that session on that message. Pressed "
+                         "again while it searches, it stops"),
         ("Ctrl+Shift+A", "Answer Claude: approve or deny a tool, answer its questions, or "
                          "approve its plan (the loaded session first, then the one that has "
                          "waited longest). Escape in the dialog answers later"),
