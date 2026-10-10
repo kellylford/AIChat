@@ -948,22 +948,25 @@ ID_ALLOW_SESSION = wx.NewIdRef()
 ID_DENY = wx.NewIdRef()
 
 
-def _fit_height(dialog, content: Optional[int] = None) -> None:
-    """Shrink ``dialog`` to the height its controls need, keeping its width
-    and never growing past the height it was made with (#176: Settings and
-    Question had large empty bands). ``content`` is the height of a part
-    that scrolls, which its sizer can't know."""
+def _screen_area(window) -> wx.Rect:
+    """The work area of the monitor ``window`` is on (the main one if it
+    isn't on any yet)."""
+    index = wx.Display.GetFromWindow(window)
+    return wx.Display(index if index != wx.NOT_FOUND else 0).GetClientArea()
+
+
+def _fit_height(dialog, max_height: Optional[int] = None) -> None:
+    """Make ``dialog`` the height its controls need, keeping its width: no
+    band of empty space (#176: Settings and Question had them), and no
+    controls cut off, up to ``max_height`` (the screen's height by
+    default)."""
     dialog.Layout()
     width, height = dialog.GetSize()
-    need = dialog.GetSizer().GetMinSize().height
-    if content is not None:
-        scrolled = [item for item in dialog.GetSizer().GetChildren()
-                    if isinstance(item.GetWindow(), wx.ScrolledWindow)]
-        if scrolled:
-            need += content - scrolled[0].GetWindow().GetMinSize().height
     chrome = height - dialog.GetClientSize().height
-    if need + chrome < height:
-        dialog.SetSize((width, need + chrome))
+    limit = max_height if max_height is not None else _screen_area(dialog).height
+    target = min(dialog.GetSizer().GetMinSize().height + chrome, limit)
+    if target != height:
+        dialog.SetSize((width, target))
         dialog.Layout()
 
 
@@ -978,7 +981,10 @@ def _wrapped(window, text: str, width: int) -> str:
     from wx.lib.wordwrap import wordwrap
     dc = wx.ClientDC(window)
     dc.SetFont(window.GetFont())
-    return wordwrap(text, width, dc).rstrip("\n")
+    # Without the space wordwrap leaves at each line's end, which a braille
+    # display would show.
+    lines = wordwrap(text, width, dc).rstrip("\n").split("\n")
+    return "\n".join(line.rstrip() for line in lines)
 
 
 class WrappingText(wx.StaticText):
@@ -1004,13 +1010,13 @@ class WrappingText(wx.StaticText):
             self._width = 0
             self._rewrap(self.GetSize().width)
 
-    def text(self) -> str:
-        return self._text
-
     # The label as written, without the line breaks: what callers compare.
     # Set it with set_text.
     def GetLabel(self):
         return self._text
+
+    def SetLabel(self, label):
+        self.set_text(label)
 
     def _on_size(self, event):
         event.Skip()
@@ -1018,12 +1024,13 @@ class WrappingText(wx.StaticText):
 
     def _rewrap(self, width: int):
         # Nothing to lay out in a window that's going.
-        if width <= 40 or width == self._width or self.IsBeingDeleted()                 or self.GetParent().IsBeingDeleted():
+        if (width <= 40 or width == self._width or self.IsBeingDeleted()
+                or self.GetParent().IsBeingDeleted()):
             return
         self._width = width
-        # Measured with the control's own font in its own pixels: wx's Wrap
-        # measures differently when Windows scales the app (#185), and left
-        # a heading 50 pixels too wide unwrapped.
+        # Measured with the control's own font in its own pixels: on a PC at
+        # 150% (the app isn't DPI aware, #185), wx's Wrap left a heading 50
+        # pixels too wide unwrapped.
         wx.StaticText.SetLabel(self, _wrapped(self, self._text, width))
         # Measured with no minimum, which would hold the old height.
         self.SetMinSize((1, -1))
@@ -1191,8 +1198,15 @@ class QuestionDialog(wx.Dialog):
         # As tall as the questions need, up to the size it was given; past
         # that the questions scroll (#176: two short questions left a band
         # of empty space above the buttons).
+        # The questions' own height, up to the size it was given; past that
+        # they scroll. The panel's minimum is the questions' height only
+        # while fitting: left in place it would push the buttons out of a
+        # dialog too short for it.
+        panel.SetMinSize((-1, sizer.GetMinSize().height))
+        _fit_height(self, max_height=self.GetSize().height)
+        panel.SetMinSize((-1, -1))
+        self.Layout()
         panel.FitInside()
-        _fit_height(self, content=panel.GetVirtualSize().height + 8)
         self.SetEscapeId(wx.ID_CANCEL)
         self.declined = False
         send.Bind(wx.EVT_BUTTON, self._on_send)
@@ -1744,7 +1758,7 @@ class UsageDialog(wx.Dialog):
         # A list's rows don't wrap, so the dialog is as wide as its longest
         # line, within the screen (#176: the context line was cut off).
         longest = max((self.GetTextExtent(line).width for line in self._lines), default=0)
-        screen = wx.Display(0).GetClientArea().width
+        screen = _screen_area(parent).width
         width = min(max(640, longest + 60), screen - 40)
         if width != 640:
             self.SetSize((width, 360))

@@ -7717,3 +7717,68 @@ def test_settings_is_no_taller_than_its_controls(frame):
         assert 0 <= spare <= 2
     finally:
         dialog.Destroy()
+
+
+def _questions(count):
+    from thechatplace.claude_cli import PermissionRequest
+    return PermissionRequest("q1", "AskUserQuestion", {"questions": [
+        {"header": f"Q{n}", "question": f"Question number {n}?",
+         "options": [{"label": "Yes"}, {"label": "No"}]} for n in range(count)]},
+        suggestions=[])
+
+
+def test_a_few_questions_leave_no_empty_band(frame):
+    from thechatplace.ui.dialogs import QuestionDialog
+    dialog = QuestionDialog(frame, "Probe", _questions(2))
+    try:
+        dialog.Layout()
+        panel = dialog.GetChildren()[0]
+        content = panel.GetSizer().GetMinSize().height
+        # The panel is as tall as its questions (with the sizer's border).
+        assert 0 <= panel.GetSize().height - content <= 10
+        assert dialog.GetSize().height < 560
+    finally:
+        dialog.Destroy()
+
+
+def test_many_questions_keep_the_size_and_scroll(frame):
+    from thechatplace.ui.dialogs import QuestionDialog
+    dialog = QuestionDialog(frame, "Probe", _questions(12))
+    try:
+        dialog.Layout()
+        panel = dialog.GetChildren()[0]
+        assert dialog.GetSize().height == 560
+        assert panel.GetVirtualSize().height > panel.GetClientSize().height  # it scrolls
+        buttons = [c for c in dialog.GetChildren() if isinstance(c, wx.Button)]
+        assert all(b.GetRect().GetBottom() <= dialog.GetClientSize().height for b in buttons)
+    finally:
+        dialog.Destroy()
+
+
+def test_the_messages_label_keeps_its_whole_text_and_key(env):
+    from thechatplace.ui.main_frame import MainFrame
+    long_title = "A session whose title goes on and on " * 6
+    add_desktop(env, "local_a", "cli-a", long_title)
+    window = MainFrame(store=OwnSessionStore(env["tmp"] / "own.json"),
+                       check_updates_at_start=False)
+    try:
+        assert pump(lambda: window.session_list.GetCount() == 1)
+        select(window, "A session")
+        window.on_open_session()
+        assert pump(lambda: window._chat_loaded)
+        label = window.messages_label.GetLabel()
+        # Shown with "..." when it doesn't fit, but the label (what screen
+        # readers read, and the Alt+M key) is whole.
+        assert label.startswith("&Messages in " + long_title.strip())
+        assert window.messages_label.HasFlag(wx.ST_ELLIPSIZE_END)
+        heading = window.session_heading
+        assert heading.GetLabel().startswith(long_title.strip())
+        window.SetSize((1000, 720))
+        window.Layout()
+        assert heading.GetSize().width <= window.GetClientSize().width
+    finally:
+        window.stop_timers()
+        window._pool.shutdown(wait=True)
+        wx.GetApp().ProcessPendingEvents()
+        window.Destroy()
+        wx.GetApp().ProcessPendingEvents()
