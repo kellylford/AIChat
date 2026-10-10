@@ -28,7 +28,7 @@ runs in the ClaudeTesting VM, never on a PC someone is using. From the repo:
 ```
 vmtest begin
 powershell -File tools\ui_probe_vm.ps1                       # every variant
-powershell -File tools\ui_probe_vm.ps1 -Variant light-100 -Surface settings,permission
+powershell -File tools\ui_probe_vm.ps1 -Variant light-100,dark-100 -Surface settings,permission
 vmtest save                                                  # when done for now
 ```
 
@@ -37,8 +37,13 @@ apps, and High Contrast Aquatic and Desert. `tools/ui_probe_guest.ps1` sets each
 inside the VM, runs the probe, and puts the display back. It refuses to run outside a
 virtual machine.
 
-The first run installs Python 3.12 and the app's packages in the VM, which takes a few
-minutes. The pictures come back to a new folder under `%TEMP%\tcp-ui-probe`.
+The first run installs Python 3.12, the Visual C++ runtime and the app's packages in the
+VM, which takes a few minutes. The 200% variant needs a VM screen big enough for Windows to
+offer 200% (about 1920 by 1080 or more); the guest script says so if it isn't. The pictures come back to a new folder under `%TEMP%\tcp-ui-probe`.
+
+At 150% and 200% the pictures are screen copies in real pixels, because the app isn't DPI
+aware: Windows draws it at 100% and stretches it, and the pictures show that, as a person
+would see it.
 
 ## macOS: by hand
 
@@ -49,7 +54,8 @@ terminal (System Settings, Privacy & Security, Screen Recording):
 .venv/bin/python tools/ui_probe.py --out ~/Desktop/tcp-probe --tag mac-light
 ```
 
-Switch to Dark appearance and run it again with `--tag mac-dark`.
+Switch to Dark appearance and run it again with `--tag mac-dark`. A Mac has no WebView2,
+so the formatted-page surfaces show the plain-text dialogs there, as the app does.
 
 ## Reviewing a run
 

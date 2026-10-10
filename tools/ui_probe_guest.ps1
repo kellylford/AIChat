@@ -155,6 +155,7 @@ function Set-AppsTheme([bool]$Dark) {
 }
 
 function Find-HcThemeFile([string]$Name) {
+    $Name = $Name -replace '-', ' '  # night-sky: vmtest run can't pass a quoted space
     # Windows 11 names its High Contrast themes Aquatic, Desert, Dusk and
     # Night sky; the files are hc1/hc2/hcblack/hcwhite, so match the name inside.
     $folder = Join-Path $env:WINDIR 'Resources\Ease of Access Themes'

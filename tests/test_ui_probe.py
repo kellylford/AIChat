@@ -22,20 +22,76 @@ def app():
     yield instance
 
 
+#: wx's own dialogs the probe photographs, which aren't classes of ours.
+WX_DIALOGS = {"TextEntryDialog"}
+
+
 def test_every_dialog_is_photographed_or_says_why_not():
     from thechatplace.ui import dialogs
     classes = {name for name, cls in inspect.getmembers(dialogs, inspect.isclass)
                if issubclass(cls, wx.Dialog) and cls.__module__ == dialogs.__name__}
     covered = set(ui_probe.DIALOG_CLASSES.values()) | set(ui_probe.NOT_PHOTOGRAPHED)
     assert classes - covered == set(), "add a surface to tools/ui_probe.py for these dialogs"
-    assert covered - classes == set(), "the probe names dialogs that no longer exist"
+    assert covered - classes == WX_DIALOGS, "the probe names dialogs that no longer exist"
 
 
 def test_each_dialog_surface_says_which_dialog_it_shows():
     dialog_surfaces = {name for name, (kind, _f, _a) in ui_probe.SURFACES.items()
                        if kind == "dialog"}
-    # The plain message box is wx's own, so it has no class of ours to check.
-    assert dialog_surfaces - set(ui_probe.DIALOG_CLASSES) == {"rename", "message-box"}
+    assert dialog_surfaces == set(ui_probe.DIALOG_CLASSES)
+
+
+@pytest.fixture
+def opened(tmp_path, monkeypatch, app):
+    """Each surface's setup run on a hidden window, with ShowModal recording
+    which dialog would have opened instead of opening it."""
+    shown = []
+
+    def record(self):
+        shown.append(type(self).__name__)
+        return wx.ID_CANCEL
+    for cls in (wx.Dialog, wx.TextEntryDialog):
+        monkeypatch.setattr(cls, "ShowModal", record)
+    return shown
+
+
+@pytest.mark.parametrize("name", list(ui_probe.SURFACES))
+def test_each_surface_opens_what_it_says_on_made_up_data(name, opened, tmp_path, monkeypatch):
+    import fake_env
+    kind, function, _about = ui_probe.SURFACES[name]
+    empty = name in ui_probe.EMPTY_WORLD
+    # No web view in the tests: the formatted surfaces expect their plain
+    # stand-ins, as on a Mac.
+    env = ui_probe.build_world(tmp_path, monkeypatch.setattr, empty=empty, formatted_view=False)
+    frame = ui_probe.build_frame(env, empty=empty)
+    try:
+        if kind == "window":
+            assert function(frame, env) is None
+            return
+        opener = function(frame, env)
+        opener()
+        assert fake_env.pump(lambda: opened, timeout=10), f"{name} opened no dialog"
+        assert opened == [ui_probe.expected_class(name)]
+    finally:
+        ui_probe.close_frame(frame)
+
+
+def test_surfaces_start_from_fresh_data(opened, tmp_path, monkeypatch):
+    # The working surface leaves a turn running and messages queued; the
+    # next surface's window and data are new, so none of that shows there.
+    env = ui_probe.build_world(tmp_path / "one", monkeypatch.setattr, formatted_view=False)
+    frame = ui_probe.build_frame(env)
+    try:
+        ui_probe.s_main_own_working(frame, env)
+        assert frame._queued
+    finally:
+        ui_probe.close_frame(frame)
+    env = ui_probe.build_world(tmp_path / "two", monkeypatch.setattr, formatted_view=False)
+    frame = ui_probe.build_frame(env)
+    try:
+        assert not frame._queued and not frame._runners
+    finally:
+        ui_probe.close_frame(frame)
 
 
 def test_the_plan_names_real_surfaces_and_well_formed_variants():
@@ -45,7 +101,7 @@ def test_the_plan_names_real_surfaces_and_well_formed_variants():
     for variant in plan["windows"]:
         assert variant["theme"] in ("light", "dark", "high-contrast")
         assert variant["scale"] in (100, 125, 150, 175, 200)
-        assert set(variant.get("surfaces", ui_probe.ALL_NAMES)) <= set(ui_probe.ALL_NAMES)
+        assert set(variant.get("surfaces", list(ui_probe.SURFACES))) <= set(list(ui_probe.SURFACES))
     for variant in plan["macos"]:
         assert variant["theme"] in ("light", "dark")
 

@@ -7,20 +7,28 @@ data, and save a picture of it and a JSON description of its controls.
 It shows real windows, so on Windows run it in the test VM (``tools/ui_probe_vm.ps1``
 does that, for every variant in ``tools/ui_probe_plan.json``), never on a PC
 someone is using with a screen reader. The data is the hidden-window tests'
-(``tests/fake_env.py``): no real sessions, %APPDATA%, claude, speech or web.
+(``tests/fake_env.py``): no real sessions, %APPDATA%, claude, speech or web
+profile.
 
-Each surface is opened the way a person opens it, through the frame's own
-menu handler, wherever made-up data can get it there. A modal dialog is
-caught by a timer while it is open, photographed, then cancelled.
+Each surface gets a new window on fresh data, so no surface's state reaches
+the next, and one surface photographed alone looks as it does in a full run.
+It's opened the way a person opens it, through the frame's own menu handler,
+wherever made-up data can get it there. A modal dialog is caught by a timer
+while it is open, photographed, then cancelled.
 
 The JSON beside each picture lists every control with its class, label,
-rectangle and best size, and flags text that doesn't fit and controls
-outside the window. ``tests/test_ui_probe.py`` checks the surfaces still
-cover every dialog, so a new dialog can't go unphotographed.
+rectangle and best size, and flags text that doesn't fit, controls on top of
+each other and controls outside the window. ``tests/test_ui_probe.py`` opens
+every surface on a hidden window to check each still shows its dialog, and
+that every dialog has a surface.
+
+Ages ("active 1 hour ago") are relative to when the probe runs, so they read
+the same in every run; the clock itself isn't fixed.
 """
 from __future__ import annotations
 
 import argparse
+import contextlib
 import ctypes
 import json
 import os
@@ -42,18 +50,41 @@ import wx  # noqa: E402
 IS_WINDOWS = sys.platform == "win32"
 IS_MAC = sys.platform == "darwin"
 
-#: How long a dialog must stay open before it's photographed, so its first
+#: How long a window must stay open before it's photographed, so its first
 #: paint (and a list's first selection) has happened.
 SETTLE_SECONDS = 0.8
 #: The formatted view draws in another process; it gets longer.
 WEBVIEW_SETTLE_SECONDS = 2.5
 DIALOG_TIMEOUT_SECONDS = 20.0
+DEFAULT_SIZE = (1000, 720)
 
 
 # -- capture ------------------------------------------------------------------------------
 
+@contextlib.contextmanager
+def _physical_pixels():
+    """Measure and copy in the screen's real pixels. The app (like the
+    probe) isn't DPI aware, so at 150% Windows draws it at 100% and stretches
+    it; only a per-monitor-aware thread sees what is really on screen."""
+    user32 = ctypes.windll.user32
+    user32.SetThreadDpiAwarenessContext.restype = ctypes.c_void_p
+    user32.SetThreadDpiAwarenessContext.argtypes = [ctypes.c_void_p]
+    PER_MONITOR_AWARE_V2 = ctypes.c_void_p(-4)
+    previous = user32.SetThreadDpiAwarenessContext(PER_MONITOR_AWARE_V2)
+    try:
+        yield
+    finally:
+        if previous:
+            user32.SetThreadDpiAwarenessContext(ctypes.c_void_p(previous))
 
-def _extended_frame_bounds(hwnd):
+
+def _window_rect(hwnd):
+    rect = (ctypes.c_long * 4)()
+    ctypes.windll.user32.GetWindowRect(ctypes.c_void_p(hwnd), ctypes.byref(rect))
+    return tuple(rect)
+
+
+def _frame_bounds(hwnd):
     """The window's visible rectangle on screen: GetWindowRect includes
     Windows 10/11's invisible resize border, which would show as a margin."""
     rect = (ctypes.c_long * 4)()
@@ -65,16 +96,10 @@ def _extended_frame_bounds(hwnd):
     return tuple(rect)
 
 
-def _window_rect(hwnd):
-    rect = (ctypes.c_long * 4)()
-    ctypes.windll.user32.GetWindowRect(ctypes.c_void_p(hwnd), ctypes.byref(rect))
-    return tuple(rect)
-
-
-def _one_colour(bitmap: wx.Bitmap) -> bool:
+def _one_colour(bitmap) -> bool:
     """True if a grid of samples across the picture are all the same colour:
-    what PrintWindow returns when it couldn't draw the window."""
-    image = bitmap.ConvertToImage()
+    what a capture that couldn't draw the window looks like."""
+    image = bitmap if isinstance(bitmap, wx.Image) else bitmap.ConvertToImage()
     w, h = image.GetWidth(), image.GetHeight()
     if w < 2 or h < 2:
         return True
@@ -87,79 +112,81 @@ def _one_colour(bitmap: wx.Bitmap) -> bool:
     return True
 
 
+def _screen_copy(left, top, width, height) -> wx.Bitmap:
+    bitmap = wx.Bitmap(width, height)
+    dc = wx.MemoryDC(bitmap)
+    dc.Blit(0, 0, width, height, wx.ScreenDC(), left, top)
+    dc.SelectObject(wx.NullBitmap)
+    return bitmap
+
+
 def _capture_windows(window: wx.TopLevelWindow) -> tuple[wx.Bitmap, str]:
-    """PrintWindow with PW_RENDERFULLCONTENT, which includes the formatted
-    view's WebView2 (drawn by another process); a screen copy if that came
-    back blank. Cropped to the visible frame."""
+    """At 100%: PrintWindow with PW_RENDERFULLCONTENT, which includes the
+    formatted view's WebView2 (drawn by another process), or a screen copy
+    if that came back blank. When Windows is stretching the window (scaling
+    above 100%), a screen copy in real pixels, which is what a person sees.
+    Cropped to the visible frame either way."""
     hwnd = window.GetHandle()
-    left, top, right, bottom = _window_rect(hwnd)
+    logical = _window_rect(hwnd)
+    with _physical_pixels():
+        physical = _window_rect(hwnd)
+        bounds = _frame_bounds(hwnd) or physical
+        stretched = (physical[2] - physical[0]) != (logical[2] - logical[0])
+        if stretched:
+            window.Raise()
+            _pump(0.4)
+            bl, bt, br, bb = bounds
+            return _screen_copy(bl, bt, br - bl, bb - bt), "screen copy (stretched by Windows)"
+    left, top, right, bottom = physical
     width, height = right - left, bottom - top
     bitmap = wx.Bitmap(width, height)
     dc = wx.MemoryDC(bitmap)
     PW_RENDERFULLCONTENT = 2
-    ok = ctypes.windll.user32.PrintWindow(ctypes.c_void_p(hwnd), ctypes.c_void_p(dc.GetHDC()),
+    ok = ctypes.windll.user32.PrintWindow(ctypes.c_void_p(hwnd), ctypes.c_void_p(dc.GetHandle()),
                                           PW_RENDERFULLCONTENT)
     dc.SelectObject(wx.NullBitmap)
     method = "PrintWindow"
     if not ok or _one_colour(bitmap):
         window.Raise()
-        wx.SafeYield()
-        time.sleep(0.3)
-        bitmap = wx.Bitmap(width, height)
-        screen = wx.ScreenDC()
-        dc = wx.MemoryDC(bitmap)
-        dc.Blit(0, 0, width, height, screen, left, top)
-        dc.SelectObject(wx.NullBitmap)
+        _pump(0.4)
+        bitmap = _screen_copy(left, top, width, height)
         method = "screen copy"
-    bounds = _extended_frame_bounds(hwnd)
-    if bounds:
-        bl, bt, br, bb = bounds
-        crop = wx.Rect(bl - left, bt - top, br - bl, bb - bt)
-        if crop.width > 0 and crop.height > 0 and wx.Rect(0, 0, width, height).Contains(crop):
-            bitmap = bitmap.GetSubBitmap(crop)
+    bl, bt, br, bb = bounds
+    crop = wx.Rect(bl - left, bt - top, br - bl, bb - bt)
+    if crop.width > 0 and crop.height > 0 and wx.Rect(0, 0, width, height).Contains(crop):
+        bitmap = bitmap.GetSubBitmap(crop)
     return bitmap, method
-
-
-def _mac_window_number(window) -> int:
-    """The window's number for ``screencapture -l``: [[view window] windowNumber]."""
-    objc = ctypes.cdll.LoadLibrary("/usr/lib/libobjc.A.dylib")
-    objc.sel_registerName.restype = ctypes.c_void_p
-    objc.sel_registerName.argtypes = [ctypes.c_char_p]
-    send = objc.objc_msgSend
-    send.restype = ctypes.c_void_p
-    send.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-    view = ctypes.c_void_p(window.GetHandle())
-    nswindow = send(view, objc.sel_registerName(b"window"))
-    send.restype = ctypes.c_long
-    return int(send(ctypes.c_void_p(nswindow), objc.sel_registerName(b"windowNumber")))
 
 
 def _capture_mac(window, path: Path) -> str:
     """``screencapture -l``: the window alone, without its shadow. Needs
-    Screen Recording permission for the terminal running the probe."""
-    number = _mac_window_number(window)
+    Screen Recording permission for the terminal running the probe; without
+    it the picture is an empty frame, which the blank check catches."""
+    from thechatplace.ui import mac_a11y
+    view = ctypes.c_void_p(window.GetHandle())
+    nswindow = mac_a11y._send(view, "window")
+    number = mac_a11y._send(ctypes.c_void_p(nswindow), "windowNumber", restype=ctypes.c_long)
     subprocess.run(["screencapture", "-x", "-o", "-l", str(number), str(path)], check=True)
     return "screencapture"
 
 
-def _capture_screen(window) -> tuple[wx.Bitmap, str]:
-    rect = window.GetScreenRect()
-    bitmap = wx.Bitmap(rect.width, rect.height)
-    dc = wx.MemoryDC(bitmap)
-    dc.Blit(0, 0, rect.width, rect.height, wx.ScreenDC(), rect.x, rect.y)
-    dc.SelectObject(wx.NullBitmap)
-    return bitmap, "screen copy"
-
-
 def capture(window: wx.TopLevelWindow, path: Path) -> str:
     """Save a PNG of ``window`` to ``path``; returns how it was taken."""
+    window.Refresh()
     window.Update()
-    wx.SafeYield()
+    _pump(0.1)
     if IS_MAC:
-        return _capture_mac(window, path)
-    bitmap, method = _capture_windows(window) if IS_WINDOWS else _capture_screen(window)
-    if not bitmap.SaveFile(str(path), wx.BITMAP_TYPE_PNG):
-        raise RuntimeError(f"couldn't save {path}")
+        method = _capture_mac(window, path)
+    else:
+        if IS_WINDOWS:
+            bitmap, method = _capture_windows(window)
+        else:
+            rect = window.GetScreenRect()
+            bitmap, method = _screen_copy(rect.x, rect.y, rect.width, rect.height), "screen copy"
+        if not bitmap.SaveFile(str(path), wx.BITMAP_TYPE_PNG):
+            raise RuntimeError(f"couldn't save {path}")
+    if _one_colour(wx.Image(str(path))):
+        raise RuntimeError(f"the picture is blank ({method})")
     return method
 
 
@@ -185,7 +212,7 @@ def describe(window: wx.TopLevelWindow) -> dict:
     client = window.GetClientSize()
     controls = []
 
-    def walk(parent, depth):
+    def walk(parent, depth, parent_index):
         for child in parent.GetChildren():
             if isinstance(child, wx.TopLevelWindow) or not child.IsShown():
                 continue
@@ -194,7 +221,8 @@ def describe(window: wx.TopLevelWindow) -> dict:
             best = child.GetBestSize()
             entry = {"class": type(child).__name__, "name": child.GetName(),
                      "label": _label(child), "rect": rect, "best": [best.width, best.height],
-                     "depth": depth, "enabled": child.IsEnabled(), "problems": []}
+                     "depth": depth, "parent": parent_index, "enabled": child.IsEnabled(),
+                     "problems": []}
             if isinstance(child, _TEXT_CONTROLS) and entry["label"]:
                 if best.width > screen.width + 1 or best.height > screen.height + 1:
                     entry["problems"].append("text cut off: smaller than its best size")
@@ -212,25 +240,25 @@ def describe(window: wx.TopLevelWindow) -> dict:
                         or right > client.width + 1 or bottom > client.height + 1):
                     entry["problems"].append("outside the window")
             controls.append(entry)
-            walk(child, depth + 1)
-    walk(window, 0)
-    _flag_overlaps(window, controls)
+            walk(child, depth + 1, len(controls) - 1)
+    walk(window, 0, -1)
+    _flag_overlaps(controls)
     return {"title": window.GetTitle(), "class": type(window).__name__,
             "size": list(window.GetSize()), "client": [client.width, client.height],
             "dpi": list(window.GetDPI()), "content_scale": window.GetContentScaleFactor(),
             "controls": controls}
 
 
-def _flag_overlaps(window, controls):
-    """Siblings (same parent, so the same depth and a shared container) whose
-    rectangles cross. A group box's rectangle holds its options on purpose
-    (#121), so a StaticBox is never counted."""
-    by_depth = {}
+def _flag_overlaps(controls):
+    """Siblings (children of the same parent) whose rectangles cross. A group
+    box's rectangle holds its options on purpose (#121), so a StaticBox is
+    never counted, nor the panels that only hold other controls."""
+    siblings = {}
     for entry in controls:
         if entry["class"] in ("StaticBox", "Panel", "ScrolledWindow"):
             continue
-        by_depth.setdefault(entry["depth"], []).append(entry)
-    for group in by_depth.values():
+        siblings.setdefault(entry["parent"], []).append(entry)
+    for group in siblings.values():
         for i, a in enumerate(group):
             ra = wx.Rect(*a["rect"])
             for b in group[i + 1:]:
@@ -242,19 +270,6 @@ def _flag_overlaps(window, controls):
 
 
 # -- the made-up world ---------------------------------------------------------------------
-
-
-class _Patch:
-    """monkeypatch.setattr for a process that exits when it's done."""
-    def __call__(self, target, name, value):
-        setattr(target, name, value)
-
-
-def _cwd(*parts):
-    if IS_WINDOWS:
-        return "C:\\Users\\probe\\Projects\\" + "\\".join(parts)
-    return "/Users/probe/Projects/" + "/".join(parts)
-
 
 FENCE = "`" * 3
 LONG_MESSAGE = f"""## What changed
@@ -282,52 +297,35 @@ follows so wrapping shows: {"wrapping " * 30}
 """
 
 
-def build_world(root: Path, empty: bool = False) -> dict:
-    """Install the fakes under ``root`` and write the probe's sessions."""
+def build_world(root: Path, patch=setattr, empty: bool = False, formatted_view: bool = True) -> dict:
+    """Install the fakes under ``root`` and write the probe's sessions. The
+    session folders are real (Continue Here checks the folder is there)."""
     import fake_env
     from records import assistant_block, text_block, tool_result, tool_use_block, user_text
-    from thechatplace.ui import main_frame
     from thechatplace import platform_paths
+    from thechatplace.ui import main_frame
 
-    env = fake_env.install(root, _Patch(), formatted_view=True)
-
-    class ProbeRunner:
-        """A turn that never ends, so the window shows one in progress."""
-        def __init__(self, command, cwd, prompt, on_event, images=None, remote_control=None):
-            self.on_event = on_event
-            self.session_started = True
-            self.last_activity = "running a command"
-
-        def start(self):
-            pass
-
-        def elapsed(self):
-            return 75.0
-
-        def cancel(self):
-            pass
-
-        def respond(self, request_id, response):
-            return True
-
-        def send_now(self, prompt):
-            return True
-    main_frame.TurnRunner = ProbeRunner
-    platform_paths.find_claude = lambda: platform_paths.ClaudeLookup("claude.exe")
-    env["runner"] = ProbeRunner
+    env = fake_env.install(root, patch, formatted_view=formatted_view)
+    patch(main_frame, "TurnRunner", fake_env.FakeRunner)
+    patch(platform_paths, "find_claude", lambda: platform_paths.ClaudeLookup("claude.exe"))
+    projects = root / "Projects"
+    env["folders"] = {}
+    for name in ("AIChat", "Website", "Scratch"):
+        (projects / name).mkdir(parents=True, exist_ok=True)
+        env["folders"][name] = str(projects / name)
     if empty:
         return env
 
-    repo = _cwd("AIChat")
+    repo = env["folders"]["AIChat"]
     fake_env.add_desktop(env, "local_a", "cli-a", "Fix the flaky upload test", cwd=repo,
                          postTurnSummary={"status_category": "blocked",
                                           "needs_action": "Pick a name for the release branch"})
-    fake_env.add_desktop(env, "local_b", "cli-b", "Write the release notes for 0.2",
-                         cwd=_cwd("AIChat"), ago=3_600_000)
+    fake_env.add_desktop(env, "local_b", "cli-b", "Write the release notes for 0.2", cwd=repo,
+                         ago=3_600_000)
     fake_env.add_desktop(env, "local_c", "cli-c",
                          "A session whose title goes on and on to show what a very long title "
                          "does to the session list and the heading above the messages",
-                         cwd=_cwd("Website"), ago=86_400_000)
+                         cwd=env["folders"]["Website"], ago=86_400_000)
     fake_env.add_transcript(env, repo, "cli-a", [
         user_text("The upload test fails now and then. Can you find out why?"),
         assistant_block(text_block("I'll look at the test and the uploader."), "m1"),
@@ -336,7 +334,7 @@ def build_world(root: Path, empty: bool = False) -> dict:
         tool_result("t1", "1 failed, 11 passed"),
         assistant_block(text_block(LONG_MESSAGE), "m3"),
         user_text("Thanks. Which branch name should the release use?")])
-    own_cwd = _cwd("Scratch")
+    own_cwd = env["folders"]["Scratch"]
     edit_path = os.path.join(own_cwd, "uploader.py")
     fake_env.add_transcript(env, own_cwd, "own-1", [
         user_text("Make the uploader flush before it signals."),
@@ -345,8 +343,7 @@ def build_world(root: Path, empty: bool = False) -> dict:
                                                 "new_string": "self._file.flush()\n"
                                                               "self._file.close()\n"
                                                               "self.done.set()"}, "e1"), "m1"),
-        tool_result("e1", "The file has been updated.",
-                    toolUseResult={"filePath": edit_path}),
+        tool_result("e1", "The file has been updated.", toolUseResult={"filePath": edit_path}),
         assistant_block(text_block(LONG_MESSAGE), "m2")])
     return env
 
@@ -357,30 +354,47 @@ def build_frame(env, empty: bool = False):
     from thechatplace.ui.main_frame import MainFrame
     store = OwnSessionStore(env["tmp"] / "own.json")
     if not empty:
-        store.add(OwnSession("own-1", "Visual probe", _cwd("Scratch"),
+        store.add(OwnSession("own-1", "Visual probe", env["folders"]["Scratch"],
                              last_activity_ms=fake_env.now_ms()))
     frame = MainFrame(store=store, check_updates_at_start=False)
-    if not empty:
-        fake_env.pump(lambda: frame.session_list.GetCount() == 4, timeout=15)
+    if not empty and not fake_env.pump(lambda: frame.session_list.GetCount() == 4, timeout=15):
+        raise RuntimeError("the made-up sessions didn't load")
     return frame
+
+
+def close_frame(frame):
+    frame.stop_timers()
+    frame._pool.shutdown(wait=True)
+    wx.GetApp().ProcessPendingEvents()
+    frame.Destroy()
+    wx.GetApp().ProcessPendingEvents()
 
 
 # -- surfaces -------------------------------------------------------------------------------
 
+def _pump(seconds):
+    end = time.time() + seconds
+    while time.time() < end:
+        wx.GetApp().ProcessPendingEvents()
+        wx.YieldIfNeeded()
+        time.sleep(0.02)
+
+
 def _select(frame, title):
     for i in range(frame.session_list.GetCount()):
-        if frame.session_list.GetString(i).startswith(title) or title in frame.session_list.GetString(i):
+        if title in frame.session_list.GetString(i):
             frame.session_list.SetSelection(i)
             return
     raise RuntimeError(f"{title} isn't in the session list")
 
 
-def _open(frame, title, count=None):
+def _open(frame, title):
     import fake_env
     _select(frame, title)
     frame.on_open_session()
-    fake_env.pump(lambda: frame._chat_loaded and (count is None or frame.chat_list.GetCount() >= count),
-                  timeout=10)
+    if not fake_env.pump(lambda: frame._chat_loaded and frame.chat_list.GetCount() > 0,
+                         timeout=10):
+        raise RuntimeError(f"{title} didn't load")
 
 
 def _select_message(frame, needle):
@@ -391,27 +405,15 @@ def _select_message(frame, needle):
     raise RuntimeError(f"no message containing {needle!r}")
 
 
-def _reset(frame):
-    """Back to the state each surface starts from: activity hidden, no turn."""
-    if frame.activity_check.GetValue():
-        frame.activity_check.SetValue(False)
-        frame.on_toggle_activity_check(None)
-
-
-def _pending(frame, request):
+def _waiting(frame, request):
     """Claude waiting on ``request`` in the own session, as a turn reports it."""
+    import fake_env
     from thechatplace.claude_cli import TurnEvent
     _open(frame, "Visual probe")
-    runner = frame._runners.get("own-1")
-    if runner is None:
-        frame._runners["own-1"] = runner = frame_runner(frame)
+    frame._pending.clear()
+    frame._runners["own-1"] = fake_env.FakeRunner([], "", "", None)
     frame._on_turn_event({"id": "own-1"}, "Visual probe",
                          TurnEvent("permission", text=request.summary(), request=request))
-
-
-def frame_runner(frame):
-    from thechatplace.ui import main_frame
-    return main_frame.TurnRunner([], "", "", None)
 
 
 def _request(tool, tool_input, request_id="r1"):
@@ -419,32 +421,38 @@ def _request(tool, tool_input, request_id="r1"):
     return PermissionRequest(request_id, tool, tool_input, suggestions=[])
 
 
-# Each surface: (what it shows, how to get there). A main-window surface's
-# function sets the window up and returns None; a dialog surface's returns
-# the call that opens it (a menu handler, usually), run while the probe
-# waits to catch the dialog.
+# Each surface: (kind, function, what it shows). A main-window surface's
+# function sets the window up; a dialog surface's returns the call that
+# opens it (a menu handler, usually), run while the probe waits to catch it.
 
 def s_main_start(frame, env):
-    _reset(frame)
+    pass
 
 
 def s_main_own(frame, env):
-    _reset(frame)
     _open(frame, "Visual probe")
 
 
 def s_main_own_working(frame, env):
-    _reset(frame)
     _open(frame, "Visual probe")
-    frame.reply_text.SetValue("Now run the whole suite.")
-    frame.on_send()
-    frame.reply_text.SetValue("And then open a PR.")
-    frame.on_send()
+    for text in ("Now run the whole suite.", "And then open a PR."):
+        frame.reply_text.SetValue(text)
+        frame.on_send()
     frame.reply_text.SetValue("Draft of a message still being typed")
 
 
+def s_main_attachments(frame, env):
+    _open(frame, "Visual probe")
+    folder = Path(env["folders"]["Scratch"])
+    paths = []
+    for name in ("screenshot of the error.png", "upload.log"):
+        (folder / name).write_bytes(b"made up")
+        paths.append(str(folder / name))
+    frame._attachments["own-1"] = paths
+    frame._show_attachments()
+
+
 def s_main_desktop(frame, env):
-    _reset(frame)
     _open(frame, "Fix the flaky upload test")
 
 
@@ -455,21 +463,24 @@ def s_main_activity(frame, env):
 
 
 def s_main_last_message(frame, env):
-    from thechatplace.sessions import FIELD_LAST_MESSAGE
-    _reset(frame)
-    if FIELD_LAST_MESSAGE not in frame.speech.session_fields:
-        frame.speech.session_fields = list(frame.speech.session_fields) + [FIELD_LAST_MESSAGE]
-    frame.refresh_sessions(force=True)
     import fake_env
-    fake_env.pump(lambda: not frame._snapshot_busy, timeout=10)
-    time.sleep(0.5)
-    fake_env.pump(lambda: True, timeout=0.5)
+    from thechatplace.sessions import FIELD_LAST_MESSAGE
+    frame.speech.session_fields = list(frame.speech.session_fields) + [FIELD_LAST_MESSAGE]
+    frame.refresh_sessions(force=True)
+    fake_env.pump(lambda: not frame._snapshot_busy and frame._pending_refresh is None, timeout=10)
+    _pump(0.5)
 
 
-def s_main_update_ready(frame, env):
-    _reset(frame)
+def s_main_status_bar(frame, env):
+    _open(frame, "Visual probe")
+    frame.status_parts.set("context", "Context 42% full")
     frame.status_parts.set("update", "Update 0.2.0 ready")
     frame.status_parts.layout()
+
+
+def s_main_narrow(frame, env):
+    _open(frame, "Visual probe")
+    frame.SetSize((640, 480))
 
 
 def d_shortcuts_page(frame, env):
@@ -518,13 +529,13 @@ def d_update_installed(frame, env):
 
 
 def d_permission(frame, env):
-    _pending(frame, _request("Bash", {"command": "git push origin release/0.2",
+    _waiting(frame, _request("Bash", {"command": "git push origin release/0.2",
                                       "description": "Push the release branch"}))
     return frame.on_answer
 
 
 def d_question(frame, env):
-    _pending(frame, _request("AskUserQuestion", {"questions": [
+    _waiting(frame, _request("AskUserQuestion", {"questions": [
         {"header": "Branch", "question": "Which name should the release branch use?",
          "options": [{"label": "release/0.2", "description": "Matches the last release"},
                      {"label": "v0.2-prep", "description": "Shorter"}]},
@@ -535,18 +546,17 @@ def d_question(frame, env):
 
 
 def d_plan(frame, env):
-    _pending(frame, _request("ExitPlanMode", {"plan": (
+    _waiting(frame, _request("ExitPlanMode", {"plan": (
         "# Plan\n\n1. Flush and close the progress file before signalling.\n"
         "2. Wait on the signal in the test.\n3. Run the suite ten times.\n")}, "p1"))
     return frame.on_answer
 
 
 def d_manage_groups(frame, env):
-    if "Releases" not in frame.groups.names():
-        frame.groups.create("Releases")
-        frame.groups.create("Website")
-        for session in frame._snapshot.sessions[:2]:
-            frame.groups.add("Releases", session.key)
+    frame.groups.create("Releases")
+    frame.groups.create("Website")
+    for session in frame._snapshot.sessions[:2]:
+        frame.groups.add("Releases", session.key)
     return frame.on_manage_groups
 
 
@@ -595,9 +605,8 @@ def d_session_columns(frame, env):
 
 
 def d_prompts(frame, env):
-    if not len(frame.prompts):
-        frame.prompts.add("Review", "Review this change for bugs, then for accessibility.")
-        frame.prompts.add("Release notes", "Draft release notes for what changed since the last tag.")
+    frame.prompts.add("Review", "Review this change for bugs, then for accessibility.")
+    frame.prompts.add("Release notes", "Draft release notes for what changed since the last tag.")
     return frame.on_prompts
 
 
@@ -612,27 +621,23 @@ def d_rename(frame, env):
     return frame.on_rename
 
 
-def d_message_box(frame, env):
-    """A plain wx.MessageBox, as the app shows for a warning."""
-    real = getattr(wx, "_probe_real_message_box", None)
-    return lambda: real("The Chat Place couldn't open that file.", "The Chat Place",
-                        wx.OK | wx.ICON_WARNING, frame)
-
-
 #: name -> (kind, function, what it shows). Order is the order photographed:
 #: main-window states first, then dialogs.
 SURFACES = {
     "main-start": ("window", s_main_start, "Main window as it opens: session list, no session loaded"),
     "main-own": ("window", s_main_own, "An own session loaded: messages and the reply box"),
     "main-own-working": ("window", s_main_own_working,
-                         "An own session mid-turn, with messages queued"),
+                         "An own session mid-turn, with two messages queued and a draft typed"),
+    "main-attachments": ("window", s_main_attachments,
+                         "An own session with two files attached to the next message"),
     "main-desktop": ("window", s_main_desktop,
                      "A desktop app session loaded: the read-only panel instead of a reply box"),
     "main-activity": ("window", s_main_activity, "Show tool activity turned on"),
     "main-last-message": ("window", s_main_last_message,
                           "The session list with the Last message column (#146)"),
-    "main-update-ready": ("window", s_main_update_ready,
-                          "The status bar with an update waiting"),
+    "main-status-bar": ("window", s_main_status_bar,
+                        "The status bar with every button showing: context, needs you, update"),
+    "main-narrow": ("window", s_main_narrow, "An own session in a 640 by 480 window"),
     "shortcuts-page": ("dialog", d_shortcuts_page, "Help, Keyboard Shortcuts (formatted page)"),
     "shortcuts-plain": ("dialog", d_shortcuts_plain, "Keyboard Shortcuts as plain text"),
     "user-guide": ("dialog", d_user_guide, "Help, User Guide (formatted page)"),
@@ -656,16 +661,19 @@ SURFACES = {
     "session-columns": ("dialog", d_session_columns, "View, Session List Columns"),
     "prompts": ("dialog", d_prompts, "File, Prompts"),
     "prompt-edit": ("dialog", d_prompt_edit, "Editing a saved prompt"),
-    "rename": ("dialog", d_rename, "Rename Session"),
-    "message-box": ("dialog", d_message_box, "A warning message box"),
+    "rename": ("dialog", d_rename, "Rename Session (wx's own text entry dialog)"),
+    "main-empty": ("window", s_main_start, "Main window with no sessions at all (a first run)"),
 }
+
+#: Surfaces built on a world with no sessions.
+EMPTY_WORLD = {"main-empty"}
 
 #: Dialog classes the probe deliberately doesn't photograph, and why.
 #: ``tests/test_ui_probe.py`` fails on any dialog class in neither list.
 NOT_PHOTOGRAPHED = {}
 
-#: Which dialog class each dialog surface shows (checked by the probe at
-#: run time, and by the test for coverage).
+#: Which of our dialog classes each dialog surface shows. "rename" shows
+#: wx's own TextEntryDialog.
 DIALOG_CLASSES = {
     "shortcuts-page": "FormattedMessageDialog",
     "shortcuts-plain": "ShortcutsDialog",
@@ -689,7 +697,20 @@ DIALOG_CLASSES = {
     "session-columns": "SessionColumnsDialog",
     "prompts": "PromptsDialog",
     "prompt-edit": "PromptEditDialog",
+    "rename": "TextEntryDialog",
 }
+
+#: What a formatted-page surface shows instead where there's no web view
+#: (a Mac, or Windows without the WebView2 runtime).
+PLAIN_INSTEAD = {"shortcuts-page": "ShortcutsDialog", "user-guide": "MessageDialog",
+                 "message-formatted": "MessageDialog"}
+
+
+def expected_class(name: str) -> str:
+    from thechatplace.ui import dialogs
+    if name in PLAIN_INSTEAD and not dialogs.formatted_view_available():
+        return PLAIN_INSTEAD[name]
+    return DIALOG_CLASSES[name]
 
 
 # -- running --------------------------------------------------------------------------------
@@ -702,36 +723,25 @@ def _open_modal_dialog():
     return None
 
 
-def _has_webview(window) -> bool:
+def _webviews(window):
     try:
         import wx.html2
     except ImportError:
-        return False
-    stack = list(window.GetChildren())
+        return []
+    found, stack = [], list(window.GetChildren())
     while stack:
         child = stack.pop()
         if isinstance(child, wx.html2.WebView):
-            return True
+            found.append(child)
         stack.extend(child.GetChildren())
-    return False
-
-
-def _webview_busy(window) -> bool:
-    import wx.html2
-    stack = list(window.GetChildren())
-    while stack:
-        child = stack.pop()
-        if isinstance(child, wx.html2.WebView) and child.IsBusy():
-            return True
-        stack.extend(child.GetChildren())
-    return False
+    return found
 
 
 def photograph_dialog(opener, out: Path, stem: str) -> dict:
     """Run ``opener`` (which shows a modal dialog, now or a moment later),
     photograph the dialog once it has settled, and cancel it."""
     result = {"kind": "dialog"}
-    state = {"seen": None, "since": 0.0, "done": False}
+    state = {"seen": None, "since": 0.0, "done": False, "started": time.time()}
 
     def tick(_event=None):
         if state["done"]:
@@ -746,9 +756,11 @@ def photograph_dialog(opener, out: Path, stem: str) -> dict:
         if dialog is not state["seen"]:
             state["seen"], state["since"] = dialog, now
             return
-        wait = WEBVIEW_SETTLE_SECONDS if _has_webview(dialog) else SETTLE_SECONDS
-        if now - state["since"] < wait or (_has_webview(dialog) and _webview_busy(dialog)
-                                           and now - state["since"] < DIALOG_TIMEOUT_SECONDS):
+        views = _webviews(dialog)
+        waited = now - state["since"]
+        if waited < (WEBVIEW_SETTLE_SECONDS if views else SETTLE_SECONDS):
+            return
+        if any(v.IsBusy() for v in views) and waited < DIALOG_TIMEOUT_SECONDS:
             return
         state["done"] = True
         try:
@@ -759,17 +771,14 @@ def photograph_dialog(opener, out: Path, stem: str) -> dict:
 
     timer = wx.Timer()
     timer.Bind(wx.EVT_TIMER, tick)
-    state["started"] = time.time()
     timer.Start(150)
     try:
         opener()
         # A dialog opened later (after background work) is caught here.
         end = time.time() + DIALOG_TIMEOUT_SECONDS + 5
         while not state["done"] and time.time() < end:
-            wx.GetApp().ProcessPendingEvents()
-            wx.YieldIfNeeded()
+            _pump(0.05)
             tick()
-            time.sleep(0.05)
         if not state["done"]:
             result["error"] = "no dialog appeared"
     finally:
@@ -793,28 +802,19 @@ def _save(window, out: Path, stem: str) -> dict:
 def _dpi_awareness() -> str:
     if not IS_WINDOWS:
         return ""
-    try:
-        user32 = ctypes.windll.user32
-        user32.GetThreadDpiAwarenessContext.restype = ctypes.c_void_p
-        user32.GetAwarenessFromDpiAwarenessContext.argtypes = [ctypes.c_void_p]
-        value = user32.GetAwarenessFromDpiAwarenessContext(user32.GetThreadDpiAwarenessContext())
-        return {0: "unaware", 1: "system aware", 2: "per-monitor aware"}.get(value, str(value))
-    except Exception:  # noqa: BLE001
-        return "unknown"
+    user32 = ctypes.windll.user32
+    user32.GetThreadDpiAwarenessContext.restype = ctypes.c_void_p
+    user32.GetAwarenessFromDpiAwarenessContext.argtypes = [ctypes.c_void_p]
+    value = user32.GetAwarenessFromDpiAwarenessContext(user32.GetThreadDpiAwarenessContext())
+    return {0: "unaware", 1: "system aware", 2: "per-monitor aware"}.get(value, str(value))
 
 
-def _system_appearance() -> dict:
-    info = {}
-    try:
-        appearance = wx.SystemSettings.GetAppearance()
-        info["dark"] = appearance.IsDark()
-        info["name"] = appearance.GetName()
-    except Exception:  # noqa: BLE001
-        pass
-    if IS_WINDOWS:
-        info["high_contrast"] = wx.SystemSettings.GetScreenType() == wx.SYS_SCREEN_NONE or \
-            _high_contrast_on()
-    return info
+def _system_scale() -> int:
+    """Windows' display scaling, in percent, as the screen really is."""
+    if not IS_WINDOWS:
+        return 100
+    with _physical_pixels():
+        return round(ctypes.windll.user32.GetDpiForSystem() * 100 / 96)
 
 
 def _high_contrast_on() -> bool:
@@ -827,118 +827,86 @@ def _high_contrast_on() -> bool:
     return bool(hc.dwFlags & 1)
 
 
-def run(out: Path, tag: str, names, size) -> dict:
-    out.mkdir(parents=True, exist_ok=True)
-    # Kept before the fakes replace it: the message-box surface shows a real one.
-    wx._probe_real_message_box = wx.MessageBox
-    results = {}
-    with tempfile.TemporaryDirectory(prefix="tcp-probe-") as tmp:
-        env = build_world(Path(tmp) / "world")
-        frame = build_frame(env)
+def _system_appearance() -> dict:
+    appearance = wx.SystemSettings.GetAppearance()
+    info = {"dark": appearance.IsDark(), "name": appearance.GetName(), "scale": _system_scale()}
+    if IS_WINDOWS:
+        info["high_contrast"] = _high_contrast_on()
+    return info
+
+
+def session_locked() -> bool:
+    """Windows draws nothing for a locked session, so every picture would be
+    blank: OpenInputDesktop fails while the lock screen is up."""
+    if not IS_WINDOWS:
+        return False
+    user32 = ctypes.windll.user32
+    user32.OpenInputDesktop.restype = ctypes.c_void_p
+    desktop = user32.OpenInputDesktop(0, False, 0x0100)  # DESKTOP_SWITCHDESKTOP
+    if not desktop:
+        return True
+    user32.CloseDesktop(ctypes.c_void_p(desktop))
+    return False
+
+
+def photograph(name: str, out: Path, stem: str, size, world: Path) -> dict:
+    """One surface, on a new window over fresh made-up data in ``world``."""
+    kind, function, about = SURFACES[name]
+    empty = name in EMPTY_WORLD
+    frame = None
+    try:
+        env = build_world(world, empty=empty)
+        frame = build_frame(env, empty=empty)
         frame.SetPosition((20, 20))
         frame.SetSize(size)
         frame.Show()
         frame.Raise()
-        wx.SafeYield()
-        try:
-            for name in [n for n in names if n in SURFACES]:
-                kind, function, about = SURFACES[name]
-                stem = f"{name}-{tag}" if tag else name
-                print(f"  {stem}", flush=True)
-                try:
-                    if kind == "window":
-                        function(frame, env)
-                        frame.Layout()
-                        _settle(frame)
-                        entry = {"kind": "window", **_save(frame, out, stem)}
-                    else:
-                        opener = function(frame, env)
-                        _settle(frame)
-                        entry = photograph_dialog(opener, out, stem)
-                        expected = DIALOG_CLASSES.get(name)
-                        if expected and entry.get("class") and entry["class"] != expected:
-                            entry["error"] = f"showed {entry['class']}, expected {expected}"
-                except Exception:  # noqa: BLE001
-                    entry = {"kind": kind, "error": traceback.format_exc(limit=4)}
-                entry["about"] = about
-                results[name] = entry
-        finally:
-            frame.stop_timers()
-            frame._pool.shutdown(wait=True)
-            wx.GetApp().ProcessPendingEvents()
-            frame.Destroy()
-            wx.GetApp().ProcessPendingEvents()
-        if "main-empty" in names:
-            results["main-empty"] = _empty(Path(tmp) / "empty", out, tag, size)
-    return results
-
-
-def _empty(root, out, tag, size):
-    """The window with no sessions at all: a first run."""
-    env = build_world(root, empty=True)
-    frame = build_frame(env, empty=True)
-    frame.SetPosition((20, 20))
-    frame.SetSize(size)
-    frame.Show()
-    try:
-        _settle(frame, 1.5)
-        stem = f"main-empty-{tag}" if tag else "main-empty"
-        entry = {"kind": "window", **_save(frame, out, stem)}
+        _pump(SETTLE_SECONDS)
+        if kind == "window":
+            function(frame, env)
+            frame.Layout()
+            _pump(SETTLE_SECONDS)
+            entry = {"kind": "window", **_save(frame, out, stem)}
+        else:
+            opener = function(frame, env)
+            _pump(0.2)
+            entry = photograph_dialog(opener, out, stem)
+            expected = expected_class(name)
+            if entry.get("class") and entry["class"] != expected:
+                entry["error"] = f"showed {entry['class']}, expected {expected}"
     except Exception:  # noqa: BLE001
-        entry = {"kind": "window", "error": traceback.format_exc(limit=4)}
+        entry = {"kind": kind, "error": traceback.format_exc(limit=4)}
     finally:
-        frame.stop_timers()
-        frame._pool.shutdown(wait=True)
-        wx.GetApp().ProcessPendingEvents()
-        frame.Destroy()
-    entry["about"] = "Main window with no sessions at all (a first run)"
+        if frame is not None:
+            close_frame(frame)
+    entry["about"] = about
     return entry
 
 
-def _settle(frame, seconds=SETTLE_SECONDS):
-    end = time.time() + seconds
-    while time.time() < end:
-        wx.GetApp().ProcessPendingEvents()
-        wx.YieldIfNeeded()
-        time.sleep(0.03)
-    frame.Refresh()
-    frame.Update()
-
-
-ALL_NAMES = list(SURFACES) + ["main-empty"]
-
-
-def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--out", type=Path, help="folder for the pictures and descriptions")
-    parser.add_argument("--tag", default="", help="variant label added to each file name, "
-                                                  "e.g. light-100")
-    parser.add_argument("--surface", action="append", choices=ALL_NAMES,
-                        help="only these surfaces (repeatable); all by default")
-    parser.add_argument("--size", default="1000x720", help="main window size, WIDTHxHEIGHT")
-    parser.add_argument("--list", action="store_true", help="list the surfaces and stop")
-    args = parser.parse_args(argv)
-    if args.list:
-        for name in ALL_NAMES:
-            about = SURFACES[name][2] if name in SURFACES else "Main window with no sessions"
-            print(f"{name:20} {about}")
-        return 0
-    if args.out is None:
-        parser.error("--out is required")
-    width, height = (int(n) for n in args.size.lower().split("x"))
-    app = wx.App(False)  # noqa: F841
-    names = args.surface or ALL_NAMES
-    started = time.time()
-    results = run(args.out, args.tag, names, (width, height))
-    manifest_path = args.out / (f"manifest-{args.tag}.json" if args.tag else "manifest.json")
+def run(out: Path, tag: str, names, size) -> int:
+    out.mkdir(parents=True, exist_ok=True)
+    manifest_path = out / (f"manifest-{tag}.json" if tag else "manifest.json")
     manifest = {
-        "tag": args.tag, "platform": sys.platform, "os": platform.platform(),
+        "tag": tag, "platform": sys.platform, "os": platform.platform(),
         "wx": wx.version(), "python": platform.python_version(),
+        # This Python's; a built app's own manifest may say otherwise.
         "dpi_awareness": _dpi_awareness(), "appearance": _system_appearance(),
-        "size": [width, height], "seconds": round(time.time() - started, 1),
-        "surfaces": results,
+        "size": list(size), "surfaces": {},
     }
-    manifest_path.write_text(json.dumps(manifest, indent=1, ensure_ascii=False), encoding="utf-8")
+    started = time.time()
+    with tempfile.TemporaryDirectory(prefix="tcp-probe-", ignore_cleanup_errors=True) as tmp:
+        # One WebView2 profile for the run (the runtime keeps using the first
+        # one it was given), and none of it in the real local app data.
+        os.environ["WEBVIEW2_USER_DATA_FOLDER"] = str(Path(tmp) / "webview2")
+        for name in names:
+            stem = f"{name}-{tag}" if tag else name
+            print(f"  {stem}", flush=True)
+            manifest["surfaces"][name] = photograph(name, out, stem, size, Path(tmp) / name)
+            manifest["seconds"] = round(time.time() - started, 1)
+            # Written after every surface, so a crash keeps what was done.
+            manifest_path.write_text(json.dumps(manifest, indent=1, ensure_ascii=False),
+                                     encoding="utf-8")
+    results = manifest["surfaces"]
     failed = [n for n, r in results.items() if r.get("error")]
     flagged = [n for n, r in results.items() if r.get("problems")]
     print(f"{len(results) - len(failed)} of {len(results)} surfaces photographed; "
@@ -946,6 +914,38 @@ def main(argv=None) -> int:
     for name in failed:
         print(f"FAILED {name}: {results[name]['error'].strip().splitlines()[-1]}")
     return 1 if failed else 0
+
+
+def _size(text: str):
+    try:
+        width, height = (int(n) for n in text.lower().split("x"))
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{text!r} isn't WIDTHxHEIGHT, e.g. 1000x720")
+    return width, height
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("--out", type=Path, help="folder for the pictures and descriptions")
+    parser.add_argument("--tag", default="", help="variant label added to each file name, "
+                                                  "e.g. light-100")
+    parser.add_argument("--surface", action="append", choices=list(SURFACES),
+                        help="only these surfaces (repeatable); all by default")
+    parser.add_argument("--size", type=_size, default=DEFAULT_SIZE,
+                        help="main window size, WIDTHxHEIGHT")
+    parser.add_argument("--list", action="store_true", help="list the surfaces and stop")
+    args = parser.parse_args(argv)
+    if args.list:
+        for name, (_kind, _f, about) in SURFACES.items():
+            print(f"{name:20} {about}")
+        return 0
+    if args.out is None:
+        parser.error("--out is required")
+    if session_locked():
+        print("The session is locked, so every picture would be blank. Unlock it and run again.")
+        return 2
+    app = wx.App(False)  # noqa: F841
+    return run(args.out, args.tag, args.surface or list(SURFACES), args.size)
 
 
 if __name__ == "__main__":

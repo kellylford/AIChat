@@ -20,7 +20,8 @@ from records import (assistant_block, lines, text_block, tool_result, tool_use_b
                      user_text)
 from markers import msaa, voiceover, windows_paths  # noqa: E402
 import fake_env  # noqa: E402
-from fake_env import FAKE_COMMANDS, add_desktop, add_transcript, now_ms, pump  # noqa: E402,F401
+from fake_env import (FAKE_COMMANDS, FakeRunner, add_desktop, add_transcript,  # noqa: E402,F401
+                      now_ms, pump)
 
 
 @pytest.fixture(scope="module")
@@ -70,45 +71,6 @@ def select(frame, title):
             frame.session_list.SetSelection(i)
             return i
     raise AssertionError(f"{title} not in list")
-
-
-class FakeRunner:
-    instances = []
-
-    def __init__(self, command, cwd, prompt, on_event, images=None, remote_control=None):
-        self.command, self.cwd, self.prompt, self.on_event = command, cwd, prompt, on_event
-        self.images = images or []
-        self.remote_control = remote_control
-        self.session_started = False
-        self.cancelled = False
-        self.last_activity = "starting"
-        self.waiting_on_background = False
-        self.background_tasks = []
-        FakeRunner.instances.append(self)
-
-    def start(self):
-        pass
-
-    def elapsed(self):
-        return 75.0
-
-    def cancel(self):
-        self.cancelled = True
-
-    def respond(self, request_id, response):
-        self.responses = getattr(self, "responses", []) + [(request_id, response)]
-        return not getattr(self, "ended", False)
-
-    def send_now(self, prompt):
-        self.sent_now = getattr(self, "sent_now", []) + [prompt]
-        return not getattr(self, "ended", False)
-
-    def send_follow_up(self, prompt, images=None):
-        if not self.waiting_on_background:
-            return False
-        self.follow_ups = getattr(self, "follow_ups", []) + [(prompt, images)]
-        self.waiting_on_background = False
-        return True
 
 
 @pytest.fixture
