@@ -227,16 +227,18 @@ function Find-HcThemeFile([string]$Name) {
 }
 
 function Set-HighContrast([string]$Name) {
-    if ($Name) {
-        Start-Process (Find-HcThemeFile $Name)
-    } else {
-        if (-not [ProbeDisplay]::HighContrastOn()) { return }
-        Start-Process (Join-Path $env:WINDIR 'Resources\Themes\aero.theme')
+    if (-not $Name -and -not [ProbeDisplay]::HighContrastOn()) { return }
+    $theme = if ($Name) { Find-HcThemeFile $Name } else { Join-Path $env:WINDIR 'Resources\Themes\aero.theme' }
+    # Windows sometimes ignores the first switch (after a run that was
+    # stopped part way, for one), so it gets a second try.
+    foreach ($try in 1, 2) {
+        Start-Process $theme
+        Close-Settings
+        $deadline = (Get-Date).AddSeconds(30)
+        while ([ProbeDisplay]::HighContrastOn() -ne [bool]$Name -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+        if ([ProbeDisplay]::HighContrastOn() -eq [bool]$Name) { return }
     }
-    Close-Settings
-    $deadline = (Get-Date).AddSeconds(20)
-    while ([ProbeDisplay]::HighContrastOn() -ne [bool]$Name -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
-    if ([ProbeDisplay]::HighContrastOn() -ne [bool]$Name) { throw "High Contrast didn't turn $(if ($Name) {'on'} else {'off'})." }
+    throw "High Contrast didn't turn $(if ($Name) {'on'} else {'off'})."
 }
 
 function Set-Scaling([int]$Percent) {
