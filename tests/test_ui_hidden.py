@@ -7864,3 +7864,37 @@ def test_the_first_run_line_names_this_platform_s_key():
     from thechatplace.ui.main_frame import NO_SESSIONS_YET
     key = "Cmd+N" if wx.Platform == "__WXMAC__" else "Ctrl+N"
     assert f"File, New Session ({key})" in NO_SESSIONS_YET
+
+
+# -- New Session and Continue Here fields (#178) ------------------------------------------
+
+
+def test_new_session_folder_is_as_wide_as_the_other_fields(frame, tmp_path):
+    from thechatplace.ui.dialogs import NewSessionDialog
+    dialog = NewSessionDialog(frame, str(tmp_path))
+    try:
+        dialog.Layout()
+        # Browse and From GitHub moved under it, so it isn't squeezed.
+        assert dialog.folder.GetSize().width == dialog.title_text.GetSize().width
+    finally:
+        dialog.Destroy()
+
+
+def test_continue_here_shows_the_start_of_its_title_and_all_its_note(frame, tmp_path):
+    from thechatplace.ui.dialogs import NewSessionDialog
+    dialog = NewSessionDialog(frame, str(tmp_path), continue_from="Fix the flaky upload test")
+    try:
+        assert dialog.title_text.GetValue() == "Fix the flaky upload test (continued)"
+        # Laid out before it's shown, so the title box has its full width
+        # when it's first drawn: at its first small size (110 pixels) it
+        # showed only the title's end.
+        assert dialog.title_text.GetSize().width == dialog.folder.GetSize().width
+        assert dialog.title_text.GetSize().width > dialog.title_text.GetTextExtent(
+            dialog.title_text.GetValue()).width
+        note = dialog.note
+        if wx.Platform == "__WXMSW__":  # elsewhere it counts paragraphs, not lines
+            lines = note.GetNumberOfLines()
+            assert lines >= 6  # two paragraphs, wrapped
+            assert note.GetClientSize().height >= lines * note.GetCharHeight()
+    finally:
+        dialog.Destroy()

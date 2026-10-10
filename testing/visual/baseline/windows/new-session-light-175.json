@@ -41,7 +41,7 @@
    "rect": [
     241,
     10,
-    227,
+    413,
     23
    ],
    "best": [
@@ -58,8 +58,8 @@
    "name": "button",
    "label": "&Browse...",
    "rect": [
-    474,
-    10,
+    241,
+    41,
     75,
     23
    ],
@@ -77,8 +77,8 @@
    "name": "button",
    "label": "From &GitHub...",
    "rect": [
-    555,
-    10,
+    322,
+    41,
     99,
     23
    ],
@@ -97,7 +97,7 @@
    "label": "Work &in:",
    "rect": [
     10,
-    44,
+    75,
     45,
     16
    ],
@@ -116,7 +116,7 @@
    "label": "",
    "rect": [
     241,
-    41,
+    72,
     413,
     23
    ],
@@ -136,7 +136,7 @@
    "label": "B&ranch (choose one, or type a new name):",
    "rect": [
     10,
-    75,
+    106,
     223,
     16
    ],
@@ -155,7 +155,7 @@
    "label": "",
    "rect": [
     241,
-    72,
+    103,
     413,
     23
    ],
@@ -174,7 +174,7 @@
    "label": "&Title:",
    "rect": [
     10,
-    106,
+    137,
     27,
     16
    ],
@@ -193,7 +193,7 @@
    "label": "",
    "rect": [
     243,
-    105,
+    136,
     413,
     23
    ],
@@ -213,7 +213,7 @@
    "label": "Mo&del:",
    "rect": [
     10,
-    137,
+    168,
     38,
     16
    ],
@@ -229,45 +229,6 @@
   {
    "class": "Choice",
    "name": "Model",
-   "label": "",
-   "rect": [
-    241,
-    134,
-    413,
-    23
-   ],
-   "best": [
-    211,
-    23
-   ],
-   "depth": 0,
-   "parent": -1,
-   "enabled": true,
-   "problems": [],
-   "value": "Default (your Claude Code setting)"
-  },
-  {
-   "class": "StaticText",
-   "name": "staticText",
-   "label": "&Effort:",
-   "rect": [
-    10,
-    168,
-    33,
-    16
-   ],
-   "best": [
-    33,
-    16
-   ],
-   "depth": 0,
-   "parent": -1,
-   "enabled": true,
-   "problems": []
-  },
-  {
-   "class": "Choice",
-   "name": "Effort",
    "label": "",
    "rect": [
     241,
@@ -288,10 +249,49 @@
   {
    "class": "StaticText",
    "name": "staticText",
-   "label": "Permission m&ode:",
+   "label": "&Effort:",
    "rect": [
     10,
     199,
+    33,
+    16
+   ],
+   "best": [
+    33,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Choice",
+   "name": "Effort",
+   "label": "",
+   "rect": [
+    241,
+    196,
+    413,
+    23
+   ],
+   "best": [
+    211,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": "Default (your Claude Code setting)"
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "Permission m&ode:",
+   "rect": [
+    10,
+    230,
     96,
     16
    ],
@@ -310,7 +310,7 @@
    "label": "",
    "rect": [
     241,
-    196,
+    227,
     413,
     23
    ],
@@ -330,7 +330,7 @@
    "label": "About &permissions:",
    "rect": [
     10,
-    229,
+    260,
     103,
     16
    ],
@@ -349,13 +349,13 @@
    "label": "The permission mode decides what Claude may do without asking. When Claude asks for permission, asks you a question or has a plan for you to approve, the turn waits: The Chat Place announces it, the session shows as needing you, and Ctrl+Shift+A answers. Effort is how hard Claude thinks; models that don't support effort levels ignore it. File, Change Permission Mode and Change Effort change them later.",
    "rect": [
     12,
-    247,
+    278,
     644,
     72
    ],
    "best": [
     127,
-    158
+    72
    ],
    "depth": 0,
    "parent": -1,
@@ -369,7 +369,7 @@
    "label": "First &message:",
    "rect": [
     10,
-    327,
+    358,
     75,
     16
    ],
@@ -388,9 +388,9 @@
    "label": "",
    "rect": [
     12,
-    355,
+    386,
     644,
-    179
+    148
    ],
    "best": [
     127,
