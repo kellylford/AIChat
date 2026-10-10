@@ -139,15 +139,8 @@ together ("Using Read 4 times, then Bash."), and it never cuts off your screen r
 
 ## Kinds of session
 
-The list holds four kinds of session, depending on where each was started. You read every kind the
-same way: arrow to it and press **Enter**. What differs is where you reply.
-
-| Kind | Started in | Its line adds | You reply | Open in Claude | Continue Here |
-|---|---|---|---|---|---|
-| **Desktop app session** | The Claude desktop app's Code tab | no kind | in the desktop app | yes | yes |
-| **Cowork session** | The desktop app's Cowork tab | "Cowork session" | in the desktop app | yes | no |
-| **Terminal session** | A terminal, by typing `claude` | "terminal session" | in that terminal | no | yes |
-| **Chat Place session** | The Chat Place (File, New Session) | "Chat Place session" | here, in the reply box | no | not needed |
+The session list holds four kinds of session, depending on where each was started. You read
+every kind the same way: arrow to it and press **Enter**. What differs is where you reply.
 
 Only The Chat Place's own sessions can be replied to here. The others are read-only. That's
 deliberate: if two programs both worked in one session at the same time, its conversation would
@@ -156,7 +149,7 @@ reply, followed by the buttons that apply to it. **Ctrl+3** moves to that note.
 
 To list one kind, use View, Show Sessions (Alt+V, H): **Desktop App Sessions** (Code and
 Cowork together), **Cowork Sessions**, **Terminal Sessions** or **Chat Place Sessions**. Ctrl+F in
-the list also finds sessions by "cowork" or "terminal".
+the session list also finds sessions by "cowork" or "terminal".
 
 ### Desktop app sessions
 
@@ -181,10 +174,10 @@ Anthropic's servers rather than on your computer, so they aren't listed.
 
 Sessions you started by typing `claude` in a terminal are listed too, read-only. Each one's line
 names the folder you started it in. Its title is the name you gave it with `/rename`, or else the
-one Claude Code gave it, or else the start of your first message. The list shows one as working
-while Claude works in it, and as needing you while it waits on you in the terminal (a permission
-or a question), and announces both. When it needs you, the line says what for, such as "needs
-you: dialog open".
+one Claude Code gave it, or else the start of your first message. The session list shows one as
+working while Claude works in it, and as needing you while it waits on you in the terminal (a
+permission or a question), and announces both. When it needs you, its line says what for, such as
+"needs you: dialog open".
 
 You reply to a terminal session in its terminal, or carry it on here with **Continue Here**. The
 desktop app doesn't list terminal sessions, so Open in Claude isn't offered for them. Sessions
@@ -217,6 +210,17 @@ each tool call as it happens, so you know what Claude is doing between messages:
 status; Read: main.py." Without it, the newest message can be a short note Claude wrote before
 its next step, such as "Trying again with JSON", followed by a pause while it works. When the turn
 ends, or the session needs you, it's announced.
+
+### The four kinds side by side
+
+The same differences in one table, to look things up once you know the kinds.
+
+| Kind | Started in | Its line adds | You reply | Open in Claude | Continue Here |
+|---|---|---|---|---|---|
+| **Desktop app session** | The Claude desktop app's Code tab | no kind | in the desktop app | yes | yes |
+| **Cowork session** | The desktop app's Cowork tab | "Cowork session" | in the desktop app | yes | no |
+| **Terminal session** | A terminal, by typing `claude` | "terminal session" | in that terminal | no | yes |
+| **Chat Place session** | The Chat Place (File, New Session) | "Chat Place session" | here, in the reply box | no | not needed |
 
 ## Starting a session and replying
 
