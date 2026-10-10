@@ -147,9 +147,19 @@ def app_data_dir() -> Path:
 
 
 def default_projects_root() -> Path:
-    """Where the New Session folder picker starts."""
-    github = Path.home() / "GitHub"
-    return github if github.is_dir() else Path.home()
+    """Where the New Session folder picker starts: the GitHub folder (in
+    the home folder, or in Documents as GitHub Desktop makes it on a Mac)."""
+    for github in (Path.home() / "GitHub", Path.home() / "Documents" / "GitHub"):
+        if github.is_dir():
+            return github
+    return Path.home()
+
+
+def clone_root() -> Path:
+    """Where New Session's From GitHub clones (#154): the GitHub folder,
+    made in the home folder if there isn't one, never the home folder itself."""
+    root = default_projects_root()
+    return root if root.name == "GitHub" else Path.home() / "GitHub"
 
 
 _NON_ALNUM = re.compile(r"[^A-Za-z0-9]")
@@ -580,6 +590,48 @@ def find_claude(which=None, native_candidates=None) -> ClaudeLookup:
 def claude_executable() -> Optional[str]:
     """Path to the native ``claude`` command, or None (see ``find_claude``)."""
     return find_claude().path
+
+
+def find_tool(name: str, which=None) -> Optional[str]:
+    """The ``git`` or ``gh`` program (#154), or None. Only a real program:
+    a ``.cmd`` or ``.bat`` would be run through cmd.exe, which re-reads its
+    arguments (a branch name, say) as a command line. As for ``claude``, an
+    app started from the Finder has no Homebrew folder on its PATH, so a Mac
+    looks there by name."""
+    import shutil
+
+    found = (which or shutil.which)(name)
+    if sys.platform == "darwin":
+        # /usr/bin/git is only a stand-in until Apple's Command Line Tools
+        # are installed, and running it asks to install them.
+        candidates = [found] if found else []
+        candidates += [str(Path(f) / name) for f in ("/opt/homebrew/bin", "/usr/local/bin",
+                                                     "/usr/bin")]
+        for candidate in candidates:
+            if Path(candidate).is_file() and (not candidate.startswith("/usr/bin/")
+                                              or _command_line_tools_installed()):
+                return candidate
+        return None
+    if found and not found.lower().endswith(_SCRIPT_SUFFIXES):
+        return found
+    return None
+
+
+_CLT = None
+
+
+def _command_line_tools_installed() -> bool:
+    """Whether a Mac has Apple's developer tools (asked once), without
+    the dialog offering to install them."""
+    global _CLT
+    if _CLT is None:
+        import subprocess
+        try:
+            _CLT = subprocess.run(["/usr/bin/xcode-select", "-p"], capture_output=True,
+                                  timeout=5).returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            _CLT = False
+    return _CLT
 
 
 def run_in_terminal(argv: List[str], script_name: str = "", title: str = "",

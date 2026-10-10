@@ -39,7 +39,9 @@ def set_accessible_name(control: wx.Window, label: str) -> None:
     """
     control.SetName(label)
     mac_a11y.set_label(control, label)
-    if not isinstance(control, wx.TextCtrl):
+    # A combo box too (#154): Windows names one by the text in it, so the
+    # Folder box was read as its path rather than as Folder.
+    if not isinstance(control, (wx.TextCtrl, wx.ComboBox)):
         return
     existing = getattr(control, "_hub_accessible", None)
     if existing is not None:

@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import dataclasses
 import os
+import threading
+from pathlib import Path
 from typing import Optional
 
 import wx
 
+from .. import workplaces
 from ..changes import file_text
 from ..claude_cli import DEFAULT_PERMISSION_MODE, MODELS, PERMISSION_MODES
 from ..sessions import DEFAULT_FIELDS, FIELD_IDS, FIELD_NAMES, clean_fields, field_short_name
@@ -50,34 +53,89 @@ CONTINUE_NOTE = (
     "desktop app session isn't changed, and replies here don't appear in it.")
 
 
+def _end_modal(dialog: wx.Dialog, code: int) -> None:
+    """EndModal, or (a dialog a test made without showing it) the same
+    return code and hidden."""
+    if dialog.IsModal():
+        dialog.EndModal(code)
+    else:
+        dialog.SetReturnCode(code)
+        dialog.Hide()
+
+
+#: The two places a new session can work in (#154).
+WORK_IN_FOLDER, WORK_IN_WORKTREE = 0, 1
+
+
 class NewSessionDialog(wx.Dialog):
-    """Folder, title, model, permission mode, first message.
+    """Folder, where in it to work, title, model, permission mode, first message.
+
+    The folder is typed, chosen from ``recent`` (the folders sessions have
+    used, #154), browsed for, or cloned From GitHub. Work In chooses the
+    folder as it is or a new git worktree on a branch of its own, which is
+    made when Start is pressed.
 
     With ``continue_from`` (a desktop session's title, #189) it continues that
     session as a copy: the folder is the session's own and can't be changed,
     and the title starts as "<title> (continued)".
     """
 
-    def __init__(self, parent, default_folder: str, continue_from: str = ""):
+    def __init__(self, parent, default_folder: str, continue_from: str = "",
+                 recent=(), projects_root: str = "", feedback=None, clone_root: str = ""):
         title = f"Continue Here: {continue_from}" if continue_from \
             else "New Chat Place Session"
-        super().__init__(parent, title=title, size=(640, 560),
+        super().__init__(parent, title=title, size=(680, 620),
                          style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
         self.continuing = bool(continue_from)
+        self._projects_root = projects_root or default_folder
+        self._clone_root = clone_root or self._projects_root
+        self._feedback = feedback or (lambda text: None)
+        self._repo = None           # workplaces.RepoInfo of the folder, or None
+        self._repo_for = None       # the folder being read, or read
+        self._repo_known = False    # whether _repo is the answer for _repo_for
+        self._worktree = ""         # made by Start
+        self._making = False        # a worktree is being made
         outer = wx.BoxSizer(wx.VERTICAL)
         grid = wx.FlexGridSizer(cols=2, vgap=8, hgap=8)
         grid.AddGrowableCol(1, 1)
 
         grid.Add(wx.StaticText(self, label="&Folder:"), 0, wx.ALIGN_CENTER_VERTICAL)
         folder_row = wx.BoxSizer(wx.HORIZONTAL)
-        self.folder = wx.TextCtrl(self, value=default_folder,
-                                  style=wx.TE_READONLY if continue_from else 0)
+        if continue_from:
+            self.folder = wx.TextCtrl(self, value=default_folder, style=wx.TE_READONLY)
+        else:
+            # Typed, or one of the recent folders (Up and Down, or Alt+Down).
+            recent = [f for f in recent if f]
+            self.folder = wx.ComboBox(self, value=recent[0] if recent else default_folder,
+                                      choices=recent, style=wx.CB_DROPDOWN)
+            if recent:
+                # Chosen, not just typed in: otherwise the first Down Arrow
+                # chooses the folder that's already there.
+                self.folder.SetSelection(0)
         set_accessible_name(self.folder, "Folder")
         folder_row.Add(self.folder, 1, wx.EXPAND | wx.RIGHT, 6)
         browse = wx.Button(self, label="&Browse...")
-        folder_row.Add(browse, 0)
+        folder_row.Add(browse, 0, wx.RIGHT, 6)
+        self.github_btn = wx.Button(self, label="From &GitHub...")
+        folder_row.Add(self.github_btn, 0)
         browse.Show(not continue_from)
+        self.github_btn.Show(not continue_from)
         grid.Add(folder_row, 1, wx.EXPAND)
+
+        self.work_in_label = wx.StaticText(self, label="Work &in:")
+        grid.Add(self.work_in_label, 0, wx.ALIGN_CENTER_VERTICAL)
+        self.work_in = wx.Choice(self, choices=["The folder as it is", "A new worktree"])
+        self.work_in.SetSelection(WORK_IN_FOLDER)
+        set_accessible_name(self.work_in, "Work in")
+        grid.Add(self.work_in, 1, wx.EXPAND)
+
+        self.branch_label = wx.StaticText(self, label="B&ranch (choose one, or type a new name):")
+        grid.Add(self.branch_label, 0, wx.ALIGN_CENTER_VERTICAL)
+        self.branch = wx.ComboBox(self, style=wx.CB_DROPDOWN)
+        set_accessible_name(self.branch, "Branch (choose one, or type a new name)")
+        grid.Add(self.branch, 1, wx.EXPAND)
+        for control in (self.work_in_label, self.work_in, self.branch_label, self.branch):
+            control.Show(not continue_from)
 
         grid.Add(wx.StaticText(self, label="&Title:"), 0, wx.ALIGN_CENTER_VERTICAL)
         self.title_text = wx.TextCtrl(self, value=f"{continue_from} (continued)"
@@ -126,10 +184,22 @@ class NewSessionDialog(wx.Dialog):
         self.SetSizer(outer)
 
         browse.Bind(wx.EVT_BUTTON, self._on_browse)
+        self.github_btn.Bind(wx.EVT_BUTTON, lambda e: self.on_github())
         ok.Bind(wx.EVT_BUTTON, self._on_ok)
+        self.Bind(wx.EVT_BUTTON, self._on_cancel, id=wx.ID_CANCEL)
+        self.start_btn = ok
+        if not continue_from:
+            self.folder.Bind(wx.EVT_COMBOBOX, lambda e: self.refresh_repo())
+            self.folder.Bind(wx.EVT_KILL_FOCUS, self._on_folder_left)
+            self.work_in.Bind(wx.EVT_CHOICE, lambda e: self._on_work_in())
+            self.refresh_repo()
         self.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
         # Continuing, the folder is fixed: start at the first thing to type.
-        wx.CallAfter((self.message if continue_from else self.folder).SetFocus)
+        wx.CallAfter(self._focus_first)
+
+    def _focus_first(self):
+        if self:
+            (self.message if self.continuing else self.folder).SetFocus()
 
     def _on_char_hook(self, event):
         # Ctrl+Enter starts the session from anywhere, as Send does elsewhere.
@@ -138,31 +208,162 @@ class NewSessionDialog(wx.Dialog):
             return
         event.Skip()
 
+    def _on_folder_left(self, event):
+        event.Skip()
+        wx.CallAfter(lambda: self and self.refresh_repo())
+
+    def _on_cancel(self, event):
+        if self._making:
+            # The worktree is half made: let git finish, then Start or
+            # Cancel again. Leaving now would leave a worktree nobody uses.
+            self._feedback("Still making the worktree.")
+            return
+        event.Skip()
+
+    # -- the folder's repository and branches (read in the background, #154:
+    # git, or a folder on a network drive, can be slow to answer)
+
+    def refresh_repo(self):
+        """Read the folder's git repository again, if the folder changed:
+        the branches offered, and what Work In says about the folder."""
+        if self.continuing:
+            return
+        folder = self.folder.GetValue().strip()
+        if folder == self._repo_for:
+            return
+        self._repo_for, self._repo_known = folder, False
+        threading.Thread(target=self._read_repo, args=(folder,), name="repo-info",
+                         daemon=True).start()
+
+    def _read_repo(self, folder: str):
+        git = workplaces.find_git()
+        info = workplaces.repo_info(git, folder) if git else None
+        wx.CallAfter(self._repo_read, folder, info)
+
+    def _repo_read(self, folder: str, info):
+        if not self or folder != self._repo_for:
+            return  # closed, or the folder has changed since
+        self._repo, self._repo_known = info, True
+        typed = self.branch.GetValue()
+        self.branch.Set(info.branches if info else [])
+        self.branch.ChangeValue(typed)
+        if info and info.branch:
+            here = f"The folder as it is, on {info.branch}"
+        elif info:
+            here = "The folder as it is"
+        else:
+            here = "The folder as it is (not a git repository, so no worktree)"
+        self.work_in.SetString(WORK_IN_FOLDER, here)
+        self._on_work_in()
+
+    def _on_work_in(self):
+        if self.work_in.GetSelection() == WORK_IN_WORKTREE and self._repo_known \
+                and self._repo is None:
+            self.work_in.SetSelection(WORK_IN_FOLDER)
+            self._feedback("That folder isn't in a git repository, so it can't have a "
+                           "worktree.")
+        worktree = self.work_in.GetSelection() == WORK_IN_WORKTREE
+        self.branch.Enable(worktree)
+        self.branch_label.Enable(worktree)
+
+    # -- choosing the folder
+
+    def set_folder(self, folder: str):
+        self.folder.SetValue(folder)
+        self.refresh_repo()
+
     def _on_browse(self, _event):
         start = self.folder.GetValue().strip()
         with wx.DirDialog(self, "Choose the folder Claude works in",
-                          defaultPath=start if os.path.isdir(start) else "",
+                          defaultPath=start if os.path.isdir(start) else self._projects_root,
                           style=wx.DD_DEFAULT_STYLE | wx.DD_DIR_MUST_EXIST) as dlg:
             if dlg.ShowModal() == wx.ID_OK:
-                self.folder.SetValue(dlg.GetPath())
+                self.set_folder(dlg.GetPath())
         self.folder.SetFocus()
 
+    def on_github(self):
+        gh = workplaces.find_gh()
+        if not gh:
+            wx.MessageBox(workplaces.GH_MISSING, "From GitHub", wx.OK | wx.ICON_WARNING, self)
+            self.github_btn.SetFocus()
+            return
+        dialog = GitHubRepoDialog(self, gh, self._clone_root, self._feedback)
+        try:
+            chosen = dialog.folder if dialog.ShowModal() == wx.ID_OK else None
+        finally:
+            dialog.Destroy()
+        if chosen:
+            self.set_folder(str(chosen))
+            self.folder.SetFocus()
+        else:
+            self.github_btn.SetFocus()
+
+    # -- Start
+
+    def _warn(self, text: str, control):
+        wx.MessageBox(text, self.GetTitle(), wx.OK | wx.ICON_WARNING, self)
+        control.SetFocus()
+
     def _on_ok(self, _event):
+        if self._making:
+            return
         folder = self.folder.GetValue().strip()
         if not folder or not os.path.isdir(folder):
-            wx.MessageBox("That folder doesn't exist. Choose an existing folder.",
-                          "New Session", wx.OK | wx.ICON_WARNING, self)
-            self.folder.SetFocus()
+            self._warn("That folder doesn't exist. Choose an existing folder.", self.folder)
             return
         if not self.message.GetValue().strip():
-            wx.MessageBox("Type the first message for Claude.", "New Session",
-                          wx.OK | wx.ICON_WARNING, self)
-            self.message.SetFocus()
+            self._warn("Type the first message for Claude.", self.message)
             return
-        self.EndModal(wx.ID_OK)
+        if not self.continuing and self.work_in.GetSelection() == WORK_IN_WORKTREE:
+            self.make_worktree()  # Start finishes when it's made
+            return
+        _end_modal(self, wx.ID_OK)
+
+    def make_worktree(self):
+        """Make the worktree Work In asks for, last, once everything else
+        is filled in, in the background (a large repository takes a while
+        to check out). The dialog closes when it's made, or says why not."""
+        git = workplaces.find_git()
+        if not git:
+            self._warn("Git isn't installed, or The Chat Place can't find it, so there can't "
+                       "be a worktree. Choose The folder as it is, or install Git.", self.work_in)
+            return
+        folder, branch = self.folder.GetValue().strip(), self.branch.GetValue()
+        self._making = True
+        self.start_btn.Enable(False)
+        self._feedback("Making the worktree.")
+
+        def make():
+            focus = self.branch
+            try:
+                info = workplaces.repo_info(git, folder)
+                if info is None:
+                    focus = self.work_in
+                    made, error = None, ("That folder isn't in a git repository, so it can't "
+                                         "have a worktree. Choose The folder as it is, or "
+                                         "another folder.")
+                else:
+                    made, error = workplaces.add_worktree(git, info, branch), ""
+            except workplaces.ToolError as exc:
+                made, error = None, f"Couldn't make the worktree. {exc}"
+            except Exception as exc:  # noqa: BLE001 - always come back to the dialog
+                made, error = None, f"Couldn't make the worktree: {exc}"
+            wx.CallAfter(self._worktree_made, made, error, focus)
+        threading.Thread(target=make, name="worktree", daemon=True).start()
+
+    def _worktree_made(self, made, error: str, focus=None):
+        if not self:
+            return
+        self._making = False
+        self.start_btn.Enable(True)
+        if made is None:
+            self._warn(error, focus or self.branch)
+            return
+        self._worktree = str(made)
+        _end_modal(self, wx.ID_OK)
 
     def values(self):
-        folder = os.path.abspath(self.folder.GetValue().strip())
+        folder = self._worktree or os.path.abspath(self.folder.GetValue().strip())
         message = self.message.GetValue().strip()
         title = " ".join(self.title_text.GetValue().split())
         if not title:
@@ -174,6 +375,175 @@ class NewSessionDialog(wx.Dialog):
         index = self.model.GetSelection()
         model = MODELS[index][0] if 0 <= index < len(MODELS) else ""
         return folder, title, mode, message, model
+
+
+class GitHubRepoDialog(wx.Dialog):
+    """New Session, From GitHub (#154): your repositories from ``gh repo
+    list``. Type to filter, or type owner/name (or a GitHub address) for any
+    repository. Use takes its folder under the GitHub folder, cloning it
+    there first if it isn't there yet. ``folder`` is the result."""
+
+    def __init__(self, parent, gh: str, root: str, feedback=None):
+        super().__init__(parent, title="From GitHub", size=(720, 520),
+                         style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+        self._gh, self._root = gh, root
+        self._feedback = feedback or (lambda text: None)
+        self._all = []
+        self._shown = []
+        self._loaded = False
+        self._error = ""  # why the list couldn't be had
+        self._clone = None
+        self.folder = None
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer.Add(wx.StaticText(self, label="&Search, or type owner/name:"), 0,
+                  wx.LEFT | wx.TOP, 8)
+        self.search = wx.TextCtrl(self, style=wx.TE_PROCESS_ENTER)
+        # Where a clone goes is part of the box's name: the status line
+        # below isn't in the tab order.
+        set_accessible_name(self.search, "Search your repositories, or type owner/name. "
+                                         f"Clones go into {root}")
+        sizer.Add(self.search, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        self.list_label = wx.StaticText(self, label="&Repositories:")
+        sizer.Add(self.list_label, 0, wx.LEFT | wx.TOP, 8)
+        self.list = wx.ListBox(self, style=wx.LB_SINGLE)
+        set_accessible_name(self.list, "Repositories")
+        sizer.Add(self.list, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        self.status = wx.StaticText(self, label=f"Cloned into {root}, if it isn't there yet.")
+        sizer.Add(self.status, 0, wx.LEFT | wx.RIGHT | wx.TOP, 8)
+        row = wx.BoxSizer(wx.HORIZONTAL)
+        self.use_btn = wx.Button(self, wx.ID_OK, "&Use")
+        self.use_btn.SetDefault()
+        row.Add(self.use_btn, 0, wx.RIGHT, 6)
+        self.cancel_btn = wx.Button(self, wx.ID_CANCEL)
+        row.Add(self.cancel_btn, 0)
+        sizer.Add(row, 0, wx.ALIGN_RIGHT | wx.ALL, 8)
+        self.SetSizer(sizer)
+        self.SetEscapeId(wx.ID_CANCEL)
+        self.search.Bind(wx.EVT_TEXT, lambda e: self._filter())
+        self.search.Bind(wx.EVT_TEXT_ENTER, lambda e: self.choose())
+        self.search.Bind(wx.EVT_KEY_DOWN, self._on_search_key)
+        self.list.Bind(wx.EVT_LISTBOX_DCLICK, lambda e: self.choose())
+        self.use_btn.Bind(wx.EVT_BUTTON, lambda e: self.choose())
+        self.Bind(wx.EVT_BUTTON, self._on_cancel, id=wx.ID_CANCEL)
+        self.Bind(wx.EVT_CLOSE, lambda e: self._on_cancel(None))
+        self._filter()
+        threading.Thread(target=self._load, name="gh-repos", daemon=True).start()
+        wx.CallAfter(lambda: self and self.search.SetFocus())
+
+    def _load(self):
+        try:
+            repos, error = workplaces.list_github_repos(self._gh), ""
+        except workplaces.ToolError as exc:
+            repos, error = [], str(exc)
+        wx.CallAfter(self.loaded, repos, error)
+
+    def loaded(self, repos, error: str = ""):
+        if not self:
+            return
+        self._all, self._loaded, self._error = list(repos), True, error
+        if error:
+            self.status.SetLabel(f"Couldn't list your repositories: {error} You can still "
+                                 "type owner/name.")
+            self._feedback("Couldn't list your repositories. You can still type owner/name.")
+        else:
+            count = len(self._all)
+            self._feedback(f"{count} repositor{'y' if count == 1 else 'ies'}.")
+        self._filter()
+
+    def _filter(self):
+        typed = workplaces.parse_repo(self.search.GetValue())
+        if typed:
+            # owner/name means that repository, not one that mentions it.
+            self._shown = [r for r in self._all if r.name.lower() == typed.lower()]
+        else:
+            words = self.search.GetValue().lower().split()
+            self._shown = [r for r in self._all
+                           if all(w in (r.name + " " + r.description).lower() for w in words)]
+        if self._shown:
+            self.list.Set([r.row() for r in self._shown])
+        elif not self._loaded:
+            self.list.Set(["Loading your repositories…"])
+        elif workplaces.parse_repo(self.search.GetValue()):
+            self.list.Set([f"Not one of yours: Enter uses "
+                           f"{workplaces.parse_repo(self.search.GetValue())}."])
+        elif self._error:
+            # In the list, where Tab and the arrows reach it: the status
+            # line below isn't in the tab order.
+            self.list.Set([f"Couldn't list your repositories. {self._error}"])
+        else:
+            self.list.Set(["Nothing matches."])
+        self.list.SetSelection(0)
+        count = len(self._shown)
+        self.list_label.SetLabel(f"&Repositories ({count} of {len(self._all)}):")
+        set_accessible_name(self.list, f"Repositories, {count} of {len(self._all)}")
+
+    def _on_search_key(self, event):
+        if event.GetKeyCode() in (wx.WXK_DOWN, wx.WXK_UP) and self._shown:
+            self.list.SetFocus()
+            self.list.SetSelection(0)
+            return
+        event.Skip()
+
+    def chosen_repo(self):
+        """owner/name: the selected repository, or else what was typed."""
+        index = self.list.GetSelection()
+        if self._shown and 0 <= index < len(self._shown):
+            return self._shown[index].name
+        return workplaces.parse_repo(self.search.GetValue())
+
+    def choose(self):
+        if self._clone is not None:
+            return  # one clone at a time
+        repo = self.chosen_repo()
+        if not repo:
+            self._feedback("Type owner/name, or choose one of your repositories.")
+            self.search.SetFocus()
+            return
+        target = workplaces.clone_target(Path(self._root), repo)
+        if target.exists():
+            git = workplaces.find_git()
+            if target.is_dir() and git and workplaces.is_clone_of(git, target, repo):
+                self._feedback(f"{repo} is already in {target}.")
+                self.folder = target
+                _end_modal(self, wx.ID_OK)
+                return
+            wx.MessageBox(f"{target} already exists and isn't a clone of {repo}, so it "
+                          "wasn't changed. Browse to it, or clone it yourself somewhere "
+                          "else.", self.GetTitle(), wx.OK | wx.ICON_WARNING, self)
+            self.search.SetFocus()
+            return
+        self.status.SetLabel(f"Cloning {repo} into {target}… Cancel stops it.")
+        self._feedback(f"Cloning {repo} into {target}. Cancel stops it.")
+        # Onto Cancel before the rest are disabled, so focus doesn't wander
+        # through them (each read aloud) as they go.
+        self.cancel_btn.SetFocus()
+        for control in (self.search, self.list, self.use_btn):
+            control.Enable(False)
+        self._clone = workplaces.Clone(self._gh, repo, target,
+                                       lambda folder, error: wx.CallAfter(
+                                           self.cloned, repo, folder, error)).start()
+
+    def cloned(self, repo: str, folder, error: str):
+        if not self:
+            return
+        self._clone = None
+        for control in (self.search, self.list, self.use_btn):
+            control.Enable(True)
+        if folder is not None:
+            self._feedback(f"Cloned {repo}.")
+            self.folder = folder
+            _end_modal(self, wx.ID_OK)
+            return
+        self.status.SetLabel(error or "Cancelled.")
+        if error:
+            wx.MessageBox(error, self.GetTitle(), wx.OK | wx.ICON_WARNING, self)
+        self.search.SetFocus()
+
+    def _on_cancel(self, _event):
+        if self._clone is not None:
+            self._clone.cancel()
+            self._clone = None
+        _end_modal(self, wx.ID_CANCEL)
 
 
 class SettingsDialog(wx.Dialog):
