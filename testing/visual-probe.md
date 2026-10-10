@@ -23,7 +23,8 @@ The data is the hidden-window tests' (`tests/fake_env.py`): no real sessions, no
 ## Windows: in the test VM
 
 The probe shows real windows, and the variants change Windows' theme and scaling, so it
-runs in the ClaudeTesting VM, never on a PC someone is using. From the repo:
+runs in a test VM from vmtest's pool (ClaudeTesting and any others), never on a PC someone is
+using. From the repo:
 
 ```
 vmtest begin

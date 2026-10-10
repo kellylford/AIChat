@@ -25,7 +25,13 @@ $Surface = @($Surface | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
 $repo = Split-Path $PSScriptRoot
 Import-Module (Join-Path $VmTest 'VmTest.psm1') -Force
 Push-Location $repo
-try { Assert-TaskHasVM } finally { Pop-Location }
+try {
+    Assert-TaskHasVM
+    # vmtest keeps a pool of VMs (TheWorkBench #208): this task's is the one
+    # its lock names, not necessarily the first.
+    $vmName = Find-TaskVM (Resolve-Task)
+} finally { Pop-Location }
+if (-not $vmName) { throw "This task holds no test VM. Run 'vmtest begin' first." }
 
 $plan = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'ui_probe_plan.json') -Raw | ConvertFrom-Json
 $variants = @($plan.windows | Where-Object { -not $Variant -or $Variant -contains $_.tag })
@@ -54,7 +60,7 @@ function Invoke-Vm([string]$Command, [int]$Timeout = 600, [switch]$Elevated) {
 $config = Get-VmTestConfig
 $credential = New-Object System.Management.Automation.PSCredential($config.UserName,
     (ConvertTo-SecureString $config.Password -AsPlainText -Force))
-$session = New-PSSession -VMName $config.VMName -Credential $credential
+$session = New-PSSession -VMName $vmName -Credential $credential
 $failed = @()
 try {
     # This checkout as it stands (tracked and new files, not ignored ones).
