@@ -70,7 +70,15 @@ try {
         }
     } finally { $archive.Dispose() }
     Invoke-Command -Session $session -ScriptBlock {
-        Remove-Item C:\vmtest\tcp, C:\vmtest\probe-out -Recurse -Force -ErrorAction SilentlyContinue
+        # A probe left over from a run that was stopped holds vmtest's output
+        # file, and every later vmtest run would be refused.
+        $left = @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'ui_probe(_guest)?\.(py|ps1)' })
+        foreach ($p in $left) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }
+        # Gone, not just told to go: one still running keeps its pictures locked.
+        foreach ($p in $left) { Wait-Process -Id $p.ProcessId -Timeout 15 -ErrorAction SilentlyContinue }
+        Remove-Item C:\vmtest\tcp -Recurse -Force -ErrorAction SilentlyContinue
+        # An old run's pictures left here would be copied back as this run's.
+        if (Test-Path C:\vmtest\probe-out) { Remove-Item C:\vmtest\probe-out -Recurse -Force -ErrorAction Stop }
         New-Item C:\vmtest -ItemType Directory -Force | Out-Null
     }
     Copy-Item -LiteralPath $zip -Destination C:\vmtest\tcp-source.zip -ToSession $session -Force

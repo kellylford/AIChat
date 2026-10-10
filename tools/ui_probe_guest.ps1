@@ -210,30 +210,35 @@ function Set-AppsTheme([bool]$Dark) {
 
 function Find-HcThemeFile([string]$Name) {
     $Name = $Name -replace '-', ' '  # night-sky: vmtest run can't pass a quoted space
-    # Windows 11 names its High Contrast themes Aquatic, Desert, Dusk and
-    # Night sky; the files are hc1/hc2/hcblack/hcwhite, so match the name inside.
+    # Windows 11's High Contrast themes are named in the files only by
+    # resource strings (themeui.dll,-2108), and the file names don't follow
+    # the names (Aquatic is hcblack.theme), so each is found by its window
+    # colour, which is what makes it that theme.
+    $windowColour = @{ aquatic = '32 32 32'; desert = '255 250 239'; dusk = '45 50 54'; 'night sky' = '0 0 0' }
+    if (-not $windowColour.ContainsKey($Name)) { throw "No High Contrast theme called '$Name' (aquatic, desert, dusk, night-sky)." }
     $folder = Join-Path $env:WINDIR 'Resources\Ease of Access Themes'
     foreach ($file in Get-ChildItem $folder -Filter *.theme) {
         $text = Get-Content $file.FullName -Raw
-        if ($text -match "(?im)^DisplayName=(.+)$" -and $Matches[1] -match [regex]::Escape($Name)) { return $file.FullName }
-        if ($file.BaseName -eq $Name) { return $file.FullName }
+        if ($text -match '(?im)^Window=\s*(\d+\s+\d+\s+\d+)\s*$' -and ($Matches[1] -replace '\s+', ' ') -eq $windowColour[$Name]) {
+            return $file.FullName
+        }
     }
-    $known = @{ aquatic = 'hc1'; desert = 'hc2'; dusk = 'hcblack'; 'night sky' = 'hcwhite' }
-    if ($known.ContainsKey($Name)) { return (Join-Path $folder "$($known[$Name]).theme") }
-    throw "No High Contrast theme called '$Name' in $folder"
+    throw "No theme in $folder has $Name's window colour ($($windowColour[$Name]))."
 }
 
 function Set-HighContrast([string]$Name) {
-    if ($Name) {
-        Start-Process (Find-HcThemeFile $Name)
-    } else {
-        if (-not [ProbeDisplay]::HighContrastOn()) { return }
-        Start-Process (Join-Path $env:WINDIR 'Resources\Themes\aero.theme')
+    if (-not $Name -and -not [ProbeDisplay]::HighContrastOn()) { return }
+    $theme = if ($Name) { Find-HcThemeFile $Name } else { Join-Path $env:WINDIR 'Resources\Themes\aero.theme' }
+    # Windows sometimes ignores the first switch (after a run that was
+    # stopped part way, for one), so it gets a second try.
+    foreach ($try in 1, 2) {
+        Start-Process $theme
+        Close-Settings
+        $deadline = (Get-Date).AddSeconds(30)
+        while ([ProbeDisplay]::HighContrastOn() -ne [bool]$Name -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+        if ([ProbeDisplay]::HighContrastOn() -eq [bool]$Name) { return }
     }
-    Close-Settings
-    $deadline = (Get-Date).AddSeconds(20)
-    while ([ProbeDisplay]::HighContrastOn() -ne [bool]$Name -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
-    if ([ProbeDisplay]::HighContrastOn() -ne [bool]$Name) { throw "High Contrast didn't turn $(if ($Name) {'on'} else {'off'})." }
+    throw "High Contrast didn't turn $(if ($Name) {'on'} else {'off'})."
 }
 
 function Set-Scaling([int]$Percent) {
@@ -268,7 +273,7 @@ try {
     & $Python @probeArgs
     $code = $LASTEXITCODE
 } finally {
-    Reset-Display
-    [ProbeDisplay]::RestoreResolution()
+    # The resolution goes back even if the theme couldn't.
+    try { Reset-Display } finally { [ProbeDisplay]::RestoreResolution() }
 }
 exit $code
