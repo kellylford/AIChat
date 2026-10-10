@@ -228,3 +228,21 @@ def test_store_loads_an_unoffered_model_as_the_default(tmp_path, stored):
     path = tmp_path / "sessions.json"
     path.write_text(json.dumps({"sessions": [entry]}), encoding="utf-8")
     assert OwnSessionStore(path).get("id-1").model == ""
+
+
+
+def test_store_keeps_the_effort(tmp_path):
+    path = tmp_path / "sessions.json"
+    store = OwnSessionStore(path)
+    store.add(OwnSession("id-1", "First", "C:\a", effort="high"))
+    assert OwnSessionStore(path).get("id-1").effort == "high"
+
+
+@pytest.mark.parametrize("stored", [None, 5, "huge", "--help", "HIGH"])
+def test_store_loads_an_unknown_effort_as_the_default(tmp_path, stored):
+    entry = {"cli_session_id": "id-1", "title": "Old", "cwd": "C:\a"}
+    if stored is not None:
+        entry["effort"] = stored
+    path = tmp_path / "sessions.json"
+    path.write_text(json.dumps({"sessions": [entry]}), encoding="utf-8")
+    assert OwnSessionStore(path).get("id-1").effort == ""

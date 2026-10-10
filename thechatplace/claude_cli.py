@@ -157,6 +157,22 @@ MODELS = [
     ("haiku", "Haiku"),
 ]
 MODEL_LABELS = dict(MODELS)
+
+#: The effort choices for a session (#189): ``--effort`` value and what the
+#: picker says. Checked with Claude Code 2.1.296: ``-p`` takes ``--effort``
+#: with these values on every model, warning about (and ignoring) any other.
+#: "" passes no ``--effort``, leaving it to Claude Code's own setting.
+EFFORTS = [
+    ("", "Default (your Claude Code setting)"),
+    ("low", "Low"),
+    ("medium", "Medium"),
+    ("high", "High"),
+    ("xhigh", "Extra high"),
+    ("max", "Max"),
+]
+EFFORT_LABELS = dict(EFFORTS)
+#: Said with the effort choices: not every model thinks harder for it.
+EFFORT_NOTE = "Models that don't support effort levels ignore this."
 # A full model name ("claude-opus-5-5") may be stored by hand; nothing that
 # could read as another option. No brackets: "sonnet[1m]" (1M context) needs
 # usage credits on every subscription plan. No "@" or ":": those are Vertex
@@ -200,6 +216,17 @@ def model_label(model: str) -> str:
     return MODEL_LABELS.get(model, model) if model else "the default model"
 
 
+def effort_label(effort: str) -> str:
+    """How a session's effort is said: "high effort", "the default effort"."""
+    return f"{EFFORT_LABELS[effort].lower()} effort" if effort else "the default effort"
+
+
+def mode_label(mode: str) -> str:
+    """A permission mode's short name: "auto", "accept edits", "plan"."""
+    label = dict(PERMISSION_MODES).get(normalize_permission_mode(mode), mode)
+    return label.split(":")[0].lower()
+
+
 #: A permission rule as Claude Code writes them: ``Tool`` or
 #: ``Tool(content)``, one line. Rules come from Claude Code's own suggestions,
 #: and must never read as a flag.
@@ -211,7 +238,7 @@ def is_safe_rule(rule: str) -> bool:
 
 
 def _common_flags(permission_mode: str, model: str = "",
-                  allowed_tools: Collection[str] = ()) -> List[str]:
+                  allowed_tools: Collection[str] = (), effort: str = "") -> List[str]:
     permission_mode = normalize_permission_mode(permission_mode)
     if permission_mode not in PERMISSION_MODE_VALUES:
         raise ValueError(f"Unknown permission mode: {permission_mode!r}")
@@ -225,6 +252,11 @@ def _common_flags(permission_mode: str, model: str = "",
         # session keeps its model without this, but saying it each time keeps
         # the session on Kelly's choice whatever Claude Code does later.
         flags += ["--model", model]
+    if effort:
+        if effort not in EFFORT_LABELS:
+            raise ValueError(f"Not a valid effort level: {effort!r}")
+        # Every turn, as with the model: each turn is a new process (#189).
+        flags += ["--effort", effort]
     rules = [rule for rule in allowed_tools if is_safe_rule(rule)]
     if rules:
         # "Allow for this session" (#187). Claude Code keeps a session-scoped
@@ -242,11 +274,11 @@ def new_session_id() -> str:
 
 def build_new_command(executable: str, session_id: str, title: str,
                       permission_mode: str, model: str = "",
-                      allowed_tools: Collection[str] = ()) -> List[str]:
+                      allowed_tools: Collection[str] = (), effort: str = "") -> List[str]:
     """Command for the first turn of a new session. The prompt goes on stdin."""
     if not platform_paths.is_safe_id(session_id):
         raise ValueError("Not a valid session id.")
-    command = [executable, *_common_flags(permission_mode, model, allowed_tools),
+    command = [executable, *_common_flags(permission_mode, model, allowed_tools, effort),
                "--session-id", session_id]
     title = " ".join((title or "").split())
     if title:
@@ -274,7 +306,7 @@ def check_resume_allowed(session_id: str, own_ids: Collection[str],
 def build_fork_command(executable: str, source_id: str, new_id: str, title: str,
                        permission_mode: str, model: str = "",
                        taken_ids: Collection[str] = (),
-                       cowork_ids: Collection[str] = ()) -> List[str]:
+                       cowork_ids: Collection[str] = (), effort: str = "") -> List[str]:
     """Command for the first turn of a copy of another session (#189), such
     as a desktop app session, to carry on in The Chat Place.
 
@@ -293,7 +325,7 @@ def build_fork_command(executable: str, source_id: str, new_id: str, title: str,
         raise ResumeRefused("A Cowork session can't be continued here; open it in Claude.")
     if not platform_paths.is_safe_id(new_id) or new_id == source_id or new_id in taken_ids:
         raise ValueError("The new session needs an id of its own.")
-    command = [executable, *_common_flags(permission_mode, model),
+    command = [executable, *_common_flags(permission_mode, model, effort=effort),
                "--resume", source_id, "--fork-session", "--session-id", new_id]
     title = " ".join((title or "").split())
     if title:
@@ -304,7 +336,8 @@ def build_fork_command(executable: str, source_id: str, new_id: str, title: str,
 def build_resume_command(executable: str, session_id: str, permission_mode: str,
                          own_ids: Collection[str],
                          desktop_ids: Collection[str], model: str = "",
-                         allowed_tools: Collection[str] = (), title: str = "") -> List[str]:
+                         allowed_tools: Collection[str] = (), title: str = "",
+                         effort: str = "") -> List[str]:
     """Command for a later turn. Refuses anything but The Chat Place's own sessions.
 
     ``--name`` goes on every turn, not just the first (#123). Other sessions
@@ -314,7 +347,7 @@ def build_resume_command(executable: str, session_id: str, permission_mode: str,
     2.1.286: ``--resume`` with ``--name`` is accepted and keeps the title.
     """
     check_resume_allowed(session_id, own_ids, desktop_ids)
-    command = [executable, *_common_flags(permission_mode, model, allowed_tools)]
+    command = [executable, *_common_flags(permission_mode, model, allowed_tools, effort)]
     title = " ".join((title or "").split())
     if title:
         command += ["--name", title]

@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from . import platform_paths
-from .claude_cli import MODEL_LABELS, is_safe_rule
+from .claude_cli import EFFORT_LABELS, MODEL_LABELS, is_safe_rule
 from .sessions import IDLE, OWN, SessionInfo
 
 
@@ -39,6 +39,8 @@ class OwnSession:
     #: ``--model`` for every turn ("" is Claude Code's own default). Older
     #: stores don't have it and load as the default.
     model: str = ""
+    #: ``--effort`` for every turn (#189), "" for Claude Code's own setting.
+    effort: str = ""
     #: Permission rules chosen with "Allow for this session" (#187), given
     #: to every later turn as ``--allowedTools``.
     allowed_tools: List[str] = field(default_factory=list)
@@ -108,6 +110,8 @@ def _session_from_dict(item: dict) -> Optional[OwnSession]:
     # that bills usage credits) would fail or cost extra on every turn.
     if values.get("model") not in MODEL_LABELS:
         values["model"] = ""
+    if values.get("effort") not in EFFORT_LABELS:
+        values["effort"] = ""
     if values.get("fork_source") and not platform_paths.is_safe_id(values["fork_source"]):
         values["fork_source"] = ""
     return OwnSession(**values)

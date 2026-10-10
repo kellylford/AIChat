@@ -54,13 +54,14 @@ from ..changes import by_file, summary_text
 from ..codeblocks import find_code_blocks
 from .. import (__version__, about_you, announce, attachments, bugreport, signin, export, hub, links,
                platform_paths, remote, usage, workplaces)
-from ..claude_cli import (MODELS, PERMISSION_MODES, PermissionRequest, ResumeRefused, TurnEvent,
+from ..claude_cli import (DEFAULT_PERMISSION_MODE, EFFORT_NOTE, EFFORTS, MODELS, PERMISSION_MODES, PermissionRequest, ResumeRefused, TurnEvent,
                           TurnRunner, allow_response, answer_questions_response,
                           build_fork_command, build_new_command, build_resume_command,
                           SESSION_INJECTED_PREFIXES, STRIPPED_VARS, child_environment,
                           deny_response, fetch_commands, usable_commands,
-                          describe_elapsed, model_label, model_matches, model_spoken,
-                          new_session_id)
+                          describe_elapsed, effort_label, mode_label, model_label,
+                          model_matches, model_spoken, new_session_id,
+                          normalize_permission_mode)
 from ..hub import (Snapshot, collect, fill_last_message, finished_turns,
                    forget_last_messages, last_reply_from_tail)
 from ..own_store import OwnSession, OwnSessionStore
@@ -339,6 +340,11 @@ class MainFrame(wx.Frame):
         self._item(session, "Con&tinue Here...\tCtrl+Shift+N", self.on_continue_here)
         self._item(session, "&New Session...\tCtrl+N", self.on_new_session)
         self._item(session, "Change Mo&del...", lambda e: self.on_change_model())
+        # Every letter of "Change Permission Mode" is another item's access
+        # key already, so, as with Other Machines, its shortcut is the way in.
+        self._item(session, "Change Permission Mode...\tCtrl+Shift+O",
+                   lambda e: self.on_change_permission_mode())
+        self._item(session, "Change E&ffort...", lambda e: self.on_change_effort())
         self._item(session, "Rem&ote Control...", lambda e: self.on_remote_control())
         # As with Rename Session, every letter is taken, so the key is its shortcut.
         self._item(session, "Other Machines...\tCtrl+Shift+M",
@@ -1330,6 +1336,12 @@ class MainFrame(wx.Frame):
             own = self.store.get(info.cli_session_id)
             if own is not None:
                 kind += f" on {model_label(own.model)}"
+                if own.effort:
+                    kind += f" at {effort_label(own.effort)}"
+                # Only when it isn't auto, the default: the heading must
+                # still fit a narrow window.
+                if normalize_permission_mode(own.permission_mode) != DEFAULT_PERMISSION_MODE:
+                    kind += f", {mode_label(own.permission_mode)} mode"
                 if own.forked_from:
                     kind += f", continued from {own.forked_from}"
                 if self._remote_control_on(own):
@@ -2572,35 +2584,98 @@ class MainFrame(wx.Frame):
     def _queued_words(count: int) -> str:
         return "1 message queued." if count == 1 else f"{count} messages queued."
 
-    def on_change_model(self):
-        """File, Change Model: the model for this session's next turns. A
-        session's model goes with every turn, so it can change at any time."""
+    def _own_for_setting(self, what: str):
+        """The selected session and its stored record, for a File, Change
+        item; None (and why, said) for a session whose ``what`` is set
+        elsewhere."""
         info = self._selected_session()
         if info is None:
             self._feedback("No session selected.")
-            return
+            return None
         if not info.is_own:
             where = "terminal" if info.is_terminal else "desktop app"
-            self._feedback(f"{info.title} is {kind_name(info)}: its model is set in the "
+            self._feedback(f"{info.title} is {kind_name(info)}: its {what} is set in the "
                            f"{where}.")
-            return
+            return None
         own = self.store.get(info.cli_session_id)
         if own is None:
             self._feedback(f"Couldn't find {info.title} in The Chat Place's sessions.")
+            return None
+        return info, own
+
+    def _change_setting(self, title: str, prompt: str, choices, now: str):
+        """The value chosen from ``choices`` ((value, label) pairs), with the
+        current one marked and selected; None if cancelled or unchanged."""
+        values = [value for value, _label in choices]
+        labels = [f"{label} (now)" if value == now else label for value, label in choices]
+        index = self._choose(title, prompt, labels,
+                             selection=values.index(now) if now in values else None)
+        if index is None or values[index] == now:
+            return None
+        return values[index]
+
+    def _from_next_turn(self, info: SessionInfo) -> str:
+        """When a change to a session's setting starts to count."""
+        if info.cli_session_id in self._runners:
+            return "from its next turn; the turn running now carries on as it started"
+        return "from its next turn"
+
+    def on_change_model(self):
+        """File, Change Model: the model for this session's next turns. A
+        session's model goes with every turn, so it can change at any time."""
+        found = self._own_for_setting("model")
+        if found is None:
             return
-        values = [value for value, _label in MODELS]
-        labels = [f"{label} (now)" if value == own.model else label for value, label in MODELS]
-        current = values.index(own.model) if own.model in values else None
-        index = self._choose("Change Model",
-                             f"Model for {info.title}, now {model_label(own.model)}:", labels,
-                             selection=current)
-        if index is None or values[index] == own.model:
+        info, own = found
+        model = self._change_setting("Change Model",
+                                     f"Model for {info.title}, now {model_label(own.model)}:",
+                                     MODELS, own.model)
+        if model is None:
             return
-        if not self._store_write(self.store.update, info.cli_session_id, model=values[index]):
+        if not self._store_write(self.store.update, info.cli_session_id, model=model):
             return
         self._update_heading()
-        self._feedback(f"{info.title} now uses {model_label(values[index])}, from its next "
-                       "turn.")
+        self._feedback(f"{info.title} now uses {model_label(model)}, from its next turn.")
+
+    def on_change_permission_mode(self):
+        """File, Change Permission Mode (Ctrl+Shift+O, #189): the mode this
+        session's next turns start in. Every turn is given its stored mode,
+        as approving a plan already relies on."""
+        found = self._own_for_setting("permission mode")
+        if found is None:
+            return
+        info, own = found
+        now = normalize_permission_mode(own.permission_mode)
+        mode = self._change_setting(
+            "Change Permission Mode",
+            f"Permission mode for {info.title}, now {mode_label(now)}:",
+            PERMISSION_MODES, now)
+        if mode is None:
+            return
+        if not self._store_write(self.store.update, info.cli_session_id, permission_mode=mode):
+            return
+        self._update_heading()
+        self._feedback(f"Permission mode for {info.title}: {mode_label(mode)}, "
+                       f"{self._from_next_turn(info)}.")
+
+    def on_change_effort(self):
+        """File, Change Effort (#189): how hard Claude thinks in this
+        session's next turns, given as ``--effort`` on every turn."""
+        found = self._own_for_setting("effort")
+        if found is None:
+            return
+        info, own = found
+        effort = self._change_setting(
+            "Change Effort",
+            f"Effort for {info.title}, now {effort_label(own.effort)}. {EFFORT_NOTE}",
+            EFFORTS, own.effort)
+        if effort is None:
+            return
+        if not self._store_write(self.store.update, info.cli_session_id, effort=effort):
+            return
+        self._update_heading()
+        self._feedback(f"Effort for {info.title}: {effort_label(effort)}, "
+                       f"{self._from_next_turn(info)}.")
 
     def _check_model(self, session_id: str, title: str, actual: str):
         """Say once if Claude Code runs another model than the session chose
@@ -2802,12 +2877,13 @@ class MainFrame(wx.Frame):
             if dialog.ShowModal() != wx.ID_OK:
                 return
             folder, title, mode, message, model = dialog.values()
+            effort = dialog.effort()
         finally:
             dialog.Destroy()
         session_id = new_session_id()
-        command = build_new_command(exe, session_id, title, mode, model)
+        command = build_new_command(exe, session_id, title, mode, model, effort=effort)
         own = OwnSession(cli_session_id=session_id, title=title, cwd=folder,
-                         permission_mode=mode, started=False, model=model)
+                         permission_mode=mode, started=False, model=model, effort=effort)
         if not self._store_write(self.store.add, own):
             return
         # Start the turn first, so the session view sees it running.
@@ -2954,6 +3030,7 @@ class MainFrame(wx.Frame):
             if dialog.ShowModal() != wx.ID_OK:
                 return
             _folder, title, mode, message, model = dialog.values()
+            effort = dialog.effort()
         finally:
             dialog.Destroy()
         new_id = new_session_id()
@@ -2962,12 +3039,12 @@ class MainFrame(wx.Frame):
                 lookup.path, info.cli_session_id, new_id, title, mode, model,
                 taken_ids={s.cli_session_id for s in self.store.all()}
                 | set(self._snapshot.desktop_cli_ids),
-                cowork_ids=self._snapshot.cowork_cli_ids)
+                cowork_ids=self._snapshot.cowork_cli_ids, effort=effort)
         except (ResumeRefused, ValueError) as exc:
             wx.MessageBox(str(exc), APP_NAME, wx.OK | wx.ICON_WARNING, self)
             return
         own = OwnSession(cli_session_id=new_id, title=title, cwd=info.cwd,
-                         permission_mode=mode, started=False, model=model,
+                         permission_mode=mode, started=False, model=model, effort=effort,
                          fork_source=info.cli_session_id, forked_from=info.title,
                          remote_control=remote_control)
         if not self._store_write(self.store.add, own):
@@ -3075,7 +3152,7 @@ class MainFrame(wx.Frame):
                     exe, own.cli_session_id, own.permission_mode,
                     own_ids={s.cli_session_id for s in self.store.all()},
                     desktop_ids=self._snapshot.desktop_cli_ids, model=own.model,
-                    allowed_tools=own.allowed_tools, title=own.title)
+                    allowed_tools=own.allowed_tools, title=own.title, effort=own.effort)
             else:
                 # The first turn never got as far as creating the session:
                 # start it again rather than resume something that isn't there.
@@ -3087,11 +3164,13 @@ class MainFrame(wx.Frame):
                     command = build_fork_command(exe, own.fork_source, own.cli_session_id,
                                                  own.title, own.permission_mode, own.model,
                                                  taken_ids=self._snapshot.desktop_cli_ids,
-                                                 cowork_ids=self._snapshot.cowork_cli_ids)
+                                                 cowork_ids=self._snapshot.cowork_cli_ids,
+                                                 effort=own.effort)
                 else:
                     command = build_new_command(exe, own.cli_session_id, own.title,
                                                 own.permission_mode, own.model,
-                                                allowed_tools=own.allowed_tools)
+                                                allowed_tools=own.allowed_tools,
+                                                effort=own.effort)
         except (ResumeRefused, ValueError) as exc:
             return str(exc)
         self._start_turn(own.cli_session_id, command, own.cwd, message, own.title,

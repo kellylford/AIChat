@@ -1670,3 +1670,31 @@ def test_an_empty_result_after_the_answer_keeps_the_answer(tmp_path):
         ev(type="result", subtype="error_during_execution", is_error=True, result=""), IDLE])
     _runner, events, _ = run_turn(process, tmp_path)
     assert events[-1].is_error and events[-1].text != "DONE"
+
+
+
+def test_effort_goes_on_every_turn():
+    """#189: --effort, like --model, is given to each turn's new process."""
+    new = build_new_command(EXE, "aaaa-1111", "t", "auto", effort="high")
+    resumed = build_resume_command(EXE, "aaaa-1111", "auto", OWN, DESKTOP, effort="max")
+    fork = cli.build_fork_command(EXE, "bbbb-2222", "cccc-3333", "t", "auto", effort="low")
+    assert new[new.index("--effort") + 1] == "high"
+    assert resumed[resumed.index("--effort") + 1] == "max"
+    assert fork[fork.index("--effort") + 1] == "low"
+    assert "--effort" not in build_resume_command(EXE, "aaaa-1111", "auto", OWN, DESKTOP)
+
+
+@pytest.mark.parametrize("effort", ["--help", "huge", "HIGH", " high"])
+def test_unknown_effort_refused(effort):
+    with pytest.raises(ValueError):
+        build_new_command(EXE, "aaaa-1111", "t", "auto", effort=effort)
+
+
+def test_effort_and_mode_labels():
+    assert [value for value, _label in cli.EFFORTS] == ["", "low", "medium", "high", "xhigh",
+                                                         "max"]
+    assert cli.effort_label("") == "the default effort"
+    assert cli.effort_label("xhigh") == "extra high effort"
+    assert cli.mode_label("acceptEdits") == "accept edits"
+    assert cli.mode_label("default") == "manual"
+    assert cli.mode_label("plan") == "plan"
