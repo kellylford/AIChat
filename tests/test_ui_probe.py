@@ -113,8 +113,10 @@ def _control(entries, label):
 def test_describe_flags_cut_off_text_and_overlaps(app):
     dialog = wx.Dialog(None, title="Probe check", size=(400, 300))
     try:
+        # A Mac sizes a label to its text unless told not to.
         cramped = wx.StaticText(dialog, label="A label far too long for the room it was given",
-                                pos=(10, 10), size=(60, 20))
+                                pos=(10, 10), size=(60, 20), style=wx.ST_NO_AUTORESIZE)
+        cramped.SetSize((60, 20))
         roomy = wx.StaticText(dialog, label="Fits", pos=(10, 60))
         wx.Button(dialog, label="First", pos=(10, 120), size=(100, 30))
         wx.Button(dialog, label="Second", pos=(50, 125), size=(100, 30))
