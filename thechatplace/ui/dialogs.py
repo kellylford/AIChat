@@ -179,7 +179,8 @@ class NewSessionDialog(wx.Dialog):
                            value=(CONTINUE_NOTE + "\n\n" + PERMISSION_NOTE) if continue_from
                            else PERMISSION_NOTE)
         set_accessible_name(note, about)
-        note.SetMinSize((-1, 60))
+        # Four lines: the note about permissions and effort, whole (#189).
+        note.SetMinSize((-1, self.GetCharHeight() * 4 + 12))
         outer.Add(note, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
 
         outer.Add(wx.StaticText(self, label="First &message:"), 0, wx.LEFT | wx.TOP, 10)
