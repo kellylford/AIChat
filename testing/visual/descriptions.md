@@ -230,9 +230,9 @@ This is a small 346 by 153 dialog. The line "New name for Visual probe:" sits ab
 
 ## main-empty: Main window with no sessions at all (a first run)
 
-This picture has the same layout as main-start. The session list on the left is completely empty white, apart from a thin dotted focus rectangle across its top row. The messages list on the right still says "No session loaded. Choose one in the session list and press Enter." (selected in blue). The status bar shows two parts: "0 sessions: 0 need you, 0 working." and "No session loaded". It has no needs-you button, and its left part is wider (572).
+This picture has the same layout as main-start. The session list on the left is completely empty white, apart from a thin dotted focus rectangle across its top row. The messages list on the right says "No sessions yet. Start one with File, New Session (Ctrl+N), in the Claude desktop app or in a terminal." (selected in blue), on one line that fits the list. The status bar shows two parts: "0 sessions: 0 need you, 0 working." and "No session loaded". It has no needs-you button, and its left part is wider (572).
 
-**What looks off:** Nothing on the screen tells a new user what to do. The empty list has no message, and the messages list tells them to choose from a list that has nothing in it. "New Session..." is the only clue (#182).
+**What looks off:** The session list itself stays empty white, with no words of its own; the line about how to start is in the messages list (#182 put it there).
 
 ## High Contrast and scaling, surface by surface
 
