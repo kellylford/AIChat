@@ -70,6 +70,11 @@ and Shift+F6 move between the parts and the **status bar**, which holds whatever
 Ctrl+9 goes straight to the status bar. Escape in the messages or the reply box takes you back to
 the session list, on the same session.
 
+If you haven't used Claude Code yet, the session list is empty and the messages say so: start a
+session with File, New Session (Ctrl+N, or Cmd+N on a Mac), or in the Claude desktop app or a
+terminal, and it
+appears in the list.
+
 ### On a Mac
 
 This guide gives the Windows keys. On a Mac:

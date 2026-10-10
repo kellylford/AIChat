@@ -165,6 +165,12 @@ def claude_link(info: SessionInfo) -> str:
 #: The narrowest the lists go. Without it a list's minimum is its longest row
 #: (see session_list in _build_ui).
 LIST_MIN_WIDTH = 200
+#: The messages list's line when there are no sessions to choose (#182).
+#: Short enough to fit the list at the window's usual size, as a list's rows
+#: don't wrap.
+NO_SESSIONS_YET = ("No sessions yet. Start one with File, New Session ("
+                   + ("Cmd+N" if wx.Platform == "__WXMAC__" else "Ctrl+N")
+                   + "), in the Claude desktop app or in a terminal.")
 
 
 class MainFrame(wx.Frame):
@@ -988,6 +994,7 @@ class MainFrame(wx.Frame):
                     continue  # don't make the reader re-read for a clock tick
                 self.session_list.SetString(i, line)
                 wrote(keys[i])
+            self._sync_no_session_line()  # the first, empty, list lands here
             return
 
         if keep_order:
@@ -1008,6 +1015,7 @@ class MainFrame(wx.Frame):
                 for key in keys[len(kept):]:
                     wrote(key)
             self._list_keys = keys
+            self._sync_no_session_line()
             if selected_key in keys:
                 if self.session_list.GetSelection() != keys.index(selected_key):
                     self.session_list.SetSelection(keys.index(selected_key))
@@ -1020,6 +1028,7 @@ class MainFrame(wx.Frame):
         self._list_keys = keys
         for key in keys:
             wrote(key)
+        self._sync_no_session_line()
         if not lines:
             return
         if selected_key in keys:
@@ -1321,11 +1330,27 @@ class MainFrame(wx.Frame):
         self.SetTitle(APP_NAME)
         self._show_no_session()
 
+    def _no_session_line(self) -> str:
+        """What the messages list says with no session loaded. With no
+        sessions at all (a first run), it says how to start one, rather than
+        to choose from an empty list (#182)."""
+        # Every session, not just those the view shows: a group with none in
+        # it isn't a first run.
+        if not self._first_snapshot and not self._snapshot.sessions:
+            return NO_SESSIONS_YET
+        return "No session loaded. Choose one in the session list and press Enter."
+
+    def _sync_no_session_line(self):
+        """The line above, kept right as sessions come and go."""
+        if self._open is None and self.chat_list.GetCount() == 1:
+            line = self._no_session_line()
+            if self.chat_list.GetString(0) != line:
+                self.chat_list.SetString(0, line)
+
     def _show_no_session(self):
         self.messages_label.SetLabel("&Messages:")
         set_accessible_name(self.chat_list, "Messages")
-        self.chat_list.Set(["No session loaded. Choose one in the session list and "
-                            "press Enter."])
+        self.chat_list.Set([self._no_session_line()])
         self.chat_list.SetSelection(0)
         self.session_heading.set_text("")
         if hasattr(self, "status_parts"):
