@@ -6,11 +6,11 @@ The Chat Place is an independent project by Kelly Ford. It works with Claude Cod
 Claude desktop app, but it isn't made, sponsored or endorsed by Anthropic, and isn't affiliated
 with it. Claude and Claude Code are trademarks of Anthropic.
 
-New to The Chat Place? The [user guide](https://kellylford.github.io/AIChat/user-guide.html) starts
+New to The Chat Place? The [user guide](https://theideaplace.github.io/AIChat/user-guide.html) starts
 with the everyday things and goes deeper; it's also in the app, under Help, User Guide. This README
 has the full details.
 
-Keyboard shortcuts: [a web page](https://kellylford.github.io/AIChat/keyboard-shortcuts.html), also as
+Keyboard shortcuts: [a web page](https://theideaplace.github.io/AIChat/keyboard-shortcuts.html), also as
 [Markdown](docs/keyboard-shortcuts.md) and [plain text](docs/keyboard-shortcuts.txt): the same list
 as Help, Keyboard Shortcuts (F1) in the app.
 
@@ -490,7 +490,7 @@ sign-in for you. Homebrew (`brew install --cask claude-code`) and WinGet
 (`winget install Anthropic.ClaudeCode`) installs work too.
 
 **Windows.** Download `TheChatPlace-windows-Setup.exe` from the newest release on
-[the releases page](https://github.com/kellylford/AIChat/releases) and run it.
+[the releases page](https://github.com/TheIdeaPlace/AIChat/releases) and run it.
 It installs for you only, with no administrator rights, adds The Chat Place to the Start menu, and
 starts it. The portable zip from the same release runs without installing, but doesn't update
 itself.
@@ -520,7 +520,7 @@ check that fails leaves it as it was.
 **After an update.** The first time the updated app starts, a small dialog, **The Chat Place
 Update Installed**, says "The Chat Place was updated to 0.1.5." Focus starts on **See what's new
 in 0.1.5** (Alt+W), which opens that version's release notes on GitHub
-(`https://github.com/kellylford/AIChat/releases/tag/v0.1.5`) and closes the dialog; **Close**
+(`https://github.com/TheIdeaPlace/AIChat/releases/tag/v0.1.5`) and closes the dialog; **Close**
 (Alt+C) or Escape just closes it. It waits until the main window is in front with no other dialog
 open (a warning about a damaged file, say), so it never lands on top of another one; if that
 doesn't happen within half an hour, the status bar says it instead. It's shown only by an

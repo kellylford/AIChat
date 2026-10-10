@@ -40,7 +40,7 @@ extra usage, which is billed. View, Usage and Context (Ctrl+Shift+U) shows where
 ### Installing
 
 **Windows:** download `TheChatPlace-windows-Setup.exe` from the newest release on the
-[releases page](https://github.com/kellylford/AIChat/releases) and run it. It installs for you
+[releases page](https://github.com/TheIdeaPlace/AIChat/releases) and run it. It installs for you
 only, needs no administrator rights, adds The Chat Place to the Start menu, and starts it. The
 portable zip from the same release runs without installing, but doesn't update itself.
 
@@ -668,5 +668,5 @@ support@theideaplace.net.
   Chat Place can read.
 
 For every keyboard shortcut, see Help, Keyboard Shortcuts (F1), or the
-[keyboard shortcuts page](https://kellylford.github.io/AIChat/keyboard-shortcuts.html).
-The [README](https://github.com/kellylford/AIChat#readme) has the full details of everything here.
+[keyboard shortcuts page](https://theideaplace.github.io/AIChat/keyboard-shortcuts.html).
+The [README](https://github.com/TheIdeaPlace/AIChat#readme) has the full details of everything here.
