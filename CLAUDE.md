@@ -24,11 +24,13 @@ locations and behaviour. Keep it in step with behaviour changes.
 BuildAndRelease/MacBuilds/build_macos.sh           # tests, app, Velopack osx feed, .dmg; signed if the keychain has a Developer ID
 BuildAndRelease\WinBuilds\build_windows.cmd         # Windows: tests, app, Velopack installer and feed (always unsigned)
 python tools/check_version.py [vTAG]               # print version / check a tag against it
+powershell -File tools\ui_probe_vm.ps1 [-Variant light-100] [-Surface settings]  # visual probe, in the test VM (vmtest begin first)
+python tools/ui_compare.py RUN_FOLDER [--accept]   # what changed against testing/visual/baseline/windows
 ```
 
 - Tests of Windows-only behaviour (made-up `C:\` paths, MSAA via `wx.Accessible`) are marked with
-  `windows_paths` / `msaa` from `tests/markers.py` and skip elsewhere. Use them for new tests of that
-  kind rather than letting the macOS CI job fail.
+  `windows_paths` / `msaa` / `windows_layout` from `tests/markers.py` and skip elsewhere. Use them for
+  new tests of that kind rather than letting the macOS CI job fail.
 - PyInstaller is pinned in `requirements-build.txt`, and `vpk` must match the `velopack` version in
   `requirements.txt` (1.2.161) everywhere it's installed. The PyInstaller command lines live in
   three places that must agree: `build_windows.cmd`, `build_macos.sh`, and the Windows job of
@@ -125,8 +127,30 @@ WebView2 formatted view), `usage.py`, `changes.py`, `codeblocks.py`, `attachment
   `FAKE_CLAUDE_LOG`). Use it for turn, cancel and permission tests.
 - `test_ui_hidden.py` builds `MainFrame` hidden, with fixtures that monkeypatch paths, speech
   (`spoken`/`feedback` recorders), clipboard, sign-in, `fetch_commands`, `open_url` and the
-  formatted view. New UI tests should use its `env` fixture so no test touches real `%APPDATA%`,
-  real `claude`, or speaks aloud.
+  formatted view. New UI tests should use its `env` fixture (from `tests/fake_env.py`) so no test
+  touches real `%APPDATA%`, real `claude`, or speaks aloud.
+
+## Visual check (#155)
+
+Kelly can't see the screen, so how the app looks is checked by the visual probe, never assumed.
+`testing/visual-probe.md` says how it works.
+- **A new dialog or main-window state needs a surface in `tools/ui_probe.py`.**
+  `tests/test_ui_probe.py` fails on a dialog class without one. `tests/test_layout.py` then measures
+  it in CI for cut-off text, overlaps and controls outside the window. Its `KNOWN` list holds only
+  problems with a filed issue.
+- **Any change that can alter how something looks runs the probe** on the affected surfaces in the
+  test VM, at least `light-100` and one High Contrast variant. That's a change to `ui/`,
+  `rendering.py`, `statusbar.py`, dialog sizes or labels, or a string a dialog shows.
+- **Then compare and review.** Run `tools/ui_compare.py` on the run. Review each changed picture
+  with `tools/ui_review_prompt.md`, and say in the PR what changed and its verdict.
+  - **No screenshot, no claim:** don't describe a look you haven't seen in a picture.
+  - **Contrast is measured** from the pixels, not judged.
+  - Give the pictures to the `code-reviewer` too.
+- **Accept with care.** Once the change is right, `--accept` the changed pictures into
+  `testing/visual/baseline/windows/` in the same PR. Update `testing/visual/descriptions.md` for any
+  screen whose look changed.
+- **Hand the rest to Kelly.** Anything the probe can't see (animation, focus moving, how it sounds)
+  goes in the step-4 list for Kelly.
 
 ## Conventions
 
