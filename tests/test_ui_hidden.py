@@ -4264,6 +4264,20 @@ def test_rename_a_desktop_session_only_here(frame, env):
     assert any(r.startswith("Quiet one") for r in frame.session_list.GetStrings())
 
 
+def test_renaming_a_terminal_session_names_claude_codes_name(frame, env, monkeypatch):
+    add_terminal(env, monkeypatch, "term-1", "C:\\T\\Docs", user_text("Clean the drive"))
+    frame.refresh_sessions(force=True)
+    settle(frame)
+    select(frame, "Clean the drive")
+    frame.rename_session(frame._selected_session(), "")
+    assert env["feedback"][-1] == "Clean the drive already has Claude Code's name."
+    frame.rename_session(frame._selected_session(), "Tidy")
+    settle(frame)
+    select(frame, "Tidy")
+    frame.rename_session(frame._selected_session(), "")
+    assert env["feedback"][-1] == "Tidy goes back to Claude Code's name."
+
+
 def test_clearing_a_name_never_given_says_so(frame, env):
     select(frame, "Quiet one")
     frame.rename_session(frame._selected_session(), "")
@@ -6453,12 +6467,47 @@ def test_recent_folders_are_offered_unchecked_if_checking_is_slow(frame, env, fa
     class Fills(main_frame.NewSessionDialog):
         def ShowModal(self):
             seen["choices"] = list(self.folder.GetStrings())
+            seen["value"] = self.folder.GetValue()
             return wx.ID_CANCEL
     monkeypatch.setattr(main_frame, "NewSessionDialog", Fills)
     started = time.monotonic()
     frame.on_new_session()
     assert time.monotonic() - started < 2.5
     assert "C:\\G\\Scratch" in seen["choices"]  # not checked, so offered
+    # ...but not started at, as it may be gone: the projects folder is there.
+    assert seen["value"] == str(platform_paths.default_projects_root())
+
+
+def test_arrowing_through_recent_folders_reads_only_the_one_stopped_on(frame, tmp_path,
+                                                                       monkeypatch):
+    from thechatplace.ui import dialogs
+    from thechatplace.ui.dialogs import NewSessionDialog
+    folders = [str(tmp_path / name) for name in ("a", "b", "c")]
+    dialog = NewSessionDialog(frame, "C:\\G", recent=folders)
+    try:
+        _read(dialog)
+        read, timers = [], []
+
+        class Timer:
+            def __init__(self, ms, fn):
+                self.ms, self.fn, self.running = ms, fn, True
+                timers.append(self)
+
+            def Stop(self):
+                self.running = False
+        monkeypatch.setattr(dialogs.wx, "CallLater", Timer)
+        monkeypatch.setattr(dialog, "refresh_repo",
+                            lambda: read.append(dialog.folder.GetValue()))
+        for index in (1, 2):
+            dialog.folder.SetSelection(index)
+            dialog.folder.GetEventHandler().ProcessEvent(
+                wx.CommandEvent(wx.wxEVT_COMBOBOX, dialog.folder.GetId()))
+        assert read == []  # not yet: still arrowing
+        assert [x.running for x in timers] == [False, True] and timers[-1].ms >= 200
+        timers[-1].fn()
+        assert read == [folders[2]]
+    finally:
+        dialog.Destroy()
 
 
 def test_new_session_without_recent_folders_starts_at_the_root(frame):
@@ -6745,6 +6794,23 @@ def test_a_reply_with_background_work_is_said_and_the_turn_stays_open(frame, env
     frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("finished", text="Built."))
     assert env["spoken"][-1] == "Hub probe replied. Built."
     assert "own-1" not in frame._runners
+
+
+def test_background_work_ending_with_no_new_answer_isnt_notified_again(frame, env, fake_runner,
+                                                                      monkeypatch):
+    monkeypatch.setattr(frame, "_app_is_active", lambda: False)
+    runner = _start(frame, fake_runner)
+    _answered_with_background(frame, runner)
+    before = len(env["notified"])
+    runner.waiting_on_background = False
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent(
+        "finished", data={"after_background": True}))
+    assert "own-1" not in frame._runners
+    assert len(env["notified"]) == before
+    # A turn that ends with an answer is still notified.
+    runner = _start(frame, fake_runner)
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("finished", text="Built."))
+    assert env["notified"][-1] == ("Hub probe finished", "Built.", "own:own-1")
 
 
 def test_send_while_waiting_on_background_work_goes_straight_to_claude(frame, env, fake_runner):

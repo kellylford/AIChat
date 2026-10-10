@@ -96,6 +96,7 @@ class NewSessionDialog(wx.Dialog):
         self._repo_known = False    # whether _repo is the answer for _repo_for
         self._worktree = ""         # made by Start
         self._making = False        # a worktree is being made
+        self._folder_timer = None   # reads a folder chosen from the list, shortly
         outer = wx.BoxSizer(wx.VERTICAL)
         grid = wx.FlexGridSizer(cols=2, vgap=8, hgap=8)
         grid.AddGrowableCol(1, 1)
@@ -190,7 +191,7 @@ class NewSessionDialog(wx.Dialog):
         self.Bind(wx.EVT_BUTTON, self._on_cancel, id=wx.ID_CANCEL)
         self.start_btn = ok
         if not continue_from:
-            self.folder.Bind(wx.EVT_COMBOBOX, lambda e: self.refresh_repo())
+            self.folder.Bind(wx.EVT_COMBOBOX, lambda e: self._folder_chosen())
             self.folder.Bind(wx.EVT_KILL_FOCUS, self._on_folder_left)
             self.work_in.Bind(wx.EVT_CHOICE, lambda e: self._on_work_in())
             self.refresh_repo()
@@ -208,6 +209,13 @@ class NewSessionDialog(wx.Dialog):
             self._on_ok(None)
             return
         event.Skip()
+
+    def _folder_chosen(self):
+        # Arrowing through the recent folders chooses each in turn: read the
+        # one stopped on, not every one passed (each read runs git a few times).
+        if self._folder_timer is not None:
+            self._folder_timer.Stop()
+        self._folder_timer = wx.CallLater(300, lambda: self and self.refresh_repo())
 
     def _on_folder_left(self, event):
         event.Skip()

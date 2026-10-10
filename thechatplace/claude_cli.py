@@ -681,10 +681,13 @@ class StreamParser:
         if etype == "system" and subtype == "background_tasks_changed":
             # The whole list of background work still running (shell commands,
             # agents), after every change; empty once it has all finished.
-            # Checked with Claude Code 2.1.296 (#161).
+            # Checked with Claude Code 2.1.296 (#161). Ambient ones (watchers,
+            # tasks kept out of the transcript) aren't work, Claude Code says,
+            # and are left out: one would keep the turn open for good.
             tasks = event.get("tasks")
-            names = [str(t.get("description") or "a background task")
-                     for t in tasks if isinstance(t, dict)] if isinstance(tasks, list) else []
+            names = ([str(t.get("description") or "a background task")
+                      for t in tasks if isinstance(t, dict) and not t.get("ambient")]
+                     if isinstance(tasks, list) else [])
             return [TurnEvent("background", session_id=self.session_id,
                               data={"tasks": names})]
         if etype == "system" and subtype == "compact_boundary":
@@ -1373,7 +1376,8 @@ class TurnRunner:
                     # The work finished and no turn came after it (the
                     # BACKGROUND_DONE_WAIT): nothing new to say.
                     final = TurnEvent("finished", session_id=final.session_id,
-                                      raw_type=final.raw_type)
+                                      raw_type=final.raw_type,
+                                      data={"after_background": True})
             if final is None:
                 if self._cancelled:
                     final = TurnEvent("failed", text="Stopped.", is_error=True,

@@ -105,8 +105,9 @@ SHORTCUTS = [
         ("Ctrl+Shift+U", "Usage and context: a list of how full the loaded session's context "
                          "is, and how much of each of your plan's limits is used; Ctrl+C "
                          "copies a line"),
-        ("Ctrl+Shift+T", "Turn status: how long Claude has been working, on what, "
-                         "and whether a message is queued"),
+        ("Ctrl+Shift+T", "Turn status: how long Claude has been working, on what, what "
+                         "is still running in the background, and whether a message "
+                         "is queued"),
     ]),
     ("Anywhere", [
         ("Ctrl+Shift+A", "Answer Claude: approve or deny a tool, answer its questions, or "

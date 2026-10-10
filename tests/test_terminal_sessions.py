@@ -120,6 +120,21 @@ def test_a_long_session_is_read_at_its_start_and_end_only(tmp_path):
     assert facts.cwd == moved and facts.modified_ms > 0
 
 
+def test_a_cd_into_a_subfolder_doesnt_move_the_session(tmp_path):
+    """Each record's cwd follows a ``cd`` Claude runs in Bash: the session's
+    folder stays the one it started in, unless it moved to a worktree."""
+    for tail in (None, 64 * 1024):
+        path = write(tmp_path, f"cd-{tail}", user_text("Start"))
+        append(path, dict(user_text("Build it", entrypoint="cli"), cwd=CWD + "\\build"),
+               other("ai-title", aiTitle="T"))
+        cache = SessionFactsCache(tail=tail) if tail else SessionFactsCache()
+        assert cache.get(path).cwd == CWD
+        moved = CWD + "\\.claude\\worktrees\\fix"
+        append(path, dict(user_text("Fix it", entrypoint="cli"), cwd=moved),
+               dict(user_text("Then here", entrypoint="cli"), cwd=moved + "\\src"))
+        assert cache.get(path).cwd == moved  # the worktree, not its subfolder
+
+
 def test_a_moved_session_ending_in_records_without_a_folder(tmp_path):
     """Claude Code ends a write with titles and such, which name no folder:
     the folder is the newest record's that does, however far back."""
