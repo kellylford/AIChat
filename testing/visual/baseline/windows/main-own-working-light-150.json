@@ -7,7 +7,7 @@
  ],
  "client": [
   984,
-  550
+  542
  ],
  "dpi": [
   96,
@@ -23,7 +23,7 @@
     0,
     0,
     984,
-    550
+    542
    ],
    "best": [
     1166,
@@ -61,7 +61,7 @@
     10,
     34,
     268,
-    510
+    502
    ],
    "best": [
     876,
@@ -125,7 +125,7 @@
     294,
     50,
     684,
-    263
+    255
    ],
    "best": [
     286,
@@ -148,7 +148,7 @@
    "label": "panel",
    "rect": [
     292,
-    319,
+    311,
     684,
     169
    ],
@@ -167,7 +167,7 @@
    "label": "&Your message (Ctrl+Enter sends):",
    "rect": [
     292,
-    319,
+    311,
     176,
     16
    ],
@@ -186,7 +186,7 @@
    "label": "",
    "rect": [
     294,
-    341,
+    333,
     684,
     120
    ],
@@ -206,7 +206,7 @@
    "label": "Sen&d",
    "rect": [
     292,
-    465,
+    457,
     75,
     23
    ],
@@ -225,7 +225,7 @@
    "label": "Sto&p",
    "rect": [
     373,
-    465,
+    457,
     75,
     23
    ],
@@ -244,7 +244,7 @@
    "label": "C&ommands...",
    "rect": [
     454,
-    465,
+    457,
     92,
     23
    ],
@@ -263,7 +263,7 @@
    "label": "A&ttach Files...",
    "rect": [
     552,
-    465,
+    457,
     91,
     23
    ],
@@ -282,7 +282,7 @@
    "label": "1 message queued. Claude is working (1 minute 15 seconds).",
    "rect": [
     655,
-    468,
+    460,
     321,
     16
    ],
@@ -301,7 +301,7 @@
    "label": "Show tool &activity",
    "rect": [
     292,
-    496,
+    488,
     116,
     15
    ],
@@ -320,7 +320,7 @@
    "label": "&New Session...",
    "rect": [
     292,
-    519,
+    511,
     96,
     23
    ],
@@ -339,7 +339,7 @@
    "label": "&Refresh",
    "rect": [
     394,
-    519,
+    511,
     75,
     23
    ],
@@ -358,13 +358,13 @@
    "label": "",
    "rect": [
     0,
-    550,
+    542,
     984,
-    23
+    31
    ],
    "best": [
     301,
-    23
+    31
    ],
    "depth": 0,
    "parent": -1,
@@ -377,9 +377,9 @@
    "label": "4 sessions: 1 need you, 1 working.",
    "rect": [
     2,
-    554,
+    546,
     464,
-    16
+    24
    ],
    "best": [
     100,
@@ -396,9 +396,9 @@
    "label": "Visual probe: 1 message queued. Claude is working (1 minute 15 seconds).",
    "rect": [
     471,
-    554,
+    546,
     312,
-    16
+    24
    ],
    "best": [
     100,
@@ -415,9 +415,9 @@
    "label": "1 session needs you",
    "rect": [
     788,
-    554,
-    154,
-    16
+    546,
+    146,
+    24
    ],
    "best": [
     111,
@@ -426,9 +426,7 @@
    "depth": 1,
    "parent": 17,
    "enabled": true,
-   "problems": [
-    "text cut off: smaller than its best size"
-   ]
+   "problems": []
   }
  ],
  "capture": "screen copy (stretched by Windows)"

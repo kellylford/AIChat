@@ -30,17 +30,10 @@ from markers import windows_layout  # noqa: E402
 
 pytestmark = windows_layout
 
-_NEEDS_YOU = (r"^Button '1 session needs you': text cut off", 175)
-
 #: surface -> [(pattern matching one problem, issue)]. Each pattern names
 #: the problem it excuses, so it can't hide another on the same control.
 KNOWN = {
-    **{name: [_NEEDS_YOU] for name in (
-        "main-start", "main-own", "main-own-working", "main-attachments", "main-desktop",
-        "main-activity", "main-last-message")},
-    "main-status-bar": [(r"^Button 'Context 42% full': text cut off", 175), _NEEDS_YOU,
-                        (r"^Button 'Update 0.2.0 ready': text cut off", 175)],
-    "main-narrow": [(r"^StaticText 'Ready\.': text cut off", 179), _NEEDS_YOU],
+    "main-narrow": [(r"^StaticText 'Ready\.': text cut off", 179)],
     "settings": [(r"^CheckBox \"Turn on Remote &Control.*: text cut off", 176)],
     "bug-report": [(r"^StaticText \"Open on GitHub needs access.*: text cut off", 176)],
     "session-columns": [(r"^StaticText 'Each session in the list is read as one line.*"
@@ -113,7 +106,24 @@ def test_a_long_session_title_fits_the_heading(app, tmp_path, monkeypatch):
         ui_probe.close_frame(frame)
     KNOWN_HERE = {"long-title": [
         (r"^StaticText 'A session whose title .*read-only\.': text cut off", 176),
-        (r"^StaticText '&Messages in A session whose title .*': text cut off", 176), _NEEDS_YOU]}
+        (r"^StaticText '&Messages in A session whose title .*': text cut off", 176)]}
     with pytest.MonkeyPatch.context() as patch:
         patch.setitem(KNOWN, "long-title", KNOWN_HERE["long-title"])
         _check("long-title", found)
+
+
+def test_status_bar_buttons_are_as_tall_as_their_text(app, tmp_path, monkeypatch):
+    """#175: the buttons were 16 pixels in a bar whose text needs 23, which
+    cut the bottoms off letters such as y ("needs vou")."""
+    env = ui_probe.build_world(tmp_path, monkeypatch.setattr, formatted_view=False)
+    frame = ui_probe.build_frame(env)
+    frame.SetSize(ui_probe.DEFAULT_SIZE)
+    try:
+        frame.status_parts.set("context", "Context 42% full")
+        frame.status_parts.set("update", "Update 0.2.0 ready")
+        for key in ("context", "needs_you", "update"):
+            button = frame.status_parts.get(key)
+            assert button.IsShown()
+            assert button.GetSize().height >= button.GetBestSize().height, key
+    finally:
+        ui_probe.close_frame(frame)

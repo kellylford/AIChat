@@ -138,6 +138,10 @@ class StatusButton(wx.Button):
         return False  # reached with F6, Ctrl+9 and the arrows, not Tab
 
 
+#: Space kept around each part inside its field.
+_INSET = 2
+
+
 @dataclass
 class _Part:
     key: str
@@ -152,6 +156,7 @@ class StatusParts:
     def __init__(self, bar: wx.StatusBar):
         self.bar = bar
         self._parts: List[_Part] = []
+        self._fitted = False  # the bar's height is set for its buttons (#175)
         bar.Bind(wx.EVT_SIZE, self._on_size)
 
     def add_text(self, key: str, name: str, width: int, empty_text: str = "") -> StatusText:
@@ -164,11 +169,29 @@ class StatusParts:
                    on_press: Callable[[], None]) -> "StatusButton":
         control = StatusButton(self.bar, self.focus_first, label="",
                                style=wx.BORDER_NONE | wx.BU_EXACTFIT)
-        control.Bind(wx.EVT_BUTTON, lambda e: on_press())
         control.Hide()
+        if not self._fitted:
+            self._fit_height(control)
+        control.Bind(wx.EVT_BUTTON, lambda e: on_press())
         self._parts.append(_Part(key, control, width, False))
         self.layout()
         return control
+
+    def _fit_height(self, button: wx.Button) -> None:
+        """Make the bar tall enough for a button's text (#175): its fields
+        were 20 pixels and a button with letters below the line needs 23, so
+        "needs you" read as "needs vou". SetMinHeight takes the height the
+        controls need and adds the bar's own borders. Every button has the
+        same font, so the first one's height does for all. (A Mac's status
+        bar keeps its own fixed height whatever this asks.)"""
+        button.SetLabel("Ag")
+        needed = button.GetBestSize().height
+        button.SetLabel("")
+        before = self.bar.GetFieldRect(0).height
+        self.bar.SetMinHeight(needed)
+        self._fitted = True
+        if self.bar.GetFieldRect(0).height != before:
+            self.bar.GetParent().SendSizeEvent()
 
     def get(self, key: str) -> wx.Window:
         return next(p.control for p in self._parts if p.key == key)
@@ -222,10 +245,11 @@ class StatusParts:
         grip = self.bar.GetSize().height
         for index, part in enumerate(shown):
             rect = self.bar.GetFieldRect(index)
-            width = rect.width - 4
+            width = rect.width - 2 * _INSET
             if index == len(shown) - 1:
                 width -= grip  # keep the size grip visible
-            part.control.SetSize(rect.x + 2, rect.y + 2, max(width, 20), rect.height - 4)
+            part.control.SetSize(rect.x + _INSET, rect.y + _INSET, max(width, 20),
+                                 rect.height - 2 * _INSET)
         self._sync_fields()
 
     def _sync_fields(self) -> None:
