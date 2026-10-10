@@ -1929,6 +1929,104 @@ def test_cowork_view_shows_only_cowork_sessions(frame, env):
             for i in range(frame.session_list.GetCount())] == ["Sort the receipts"]
 
 
+# -- sessions started in a terminal (#158) ---------------------------------------------------
+
+
+def add_terminal(env, monkeypatch, cli, cwd, *records):
+    """A session started by typing claude in a terminal: a transcript whose
+    records say so, and no metadata file. The list looks for them in the
+    env's projects folder."""
+    monkeypatch.setattr(hub, "terminal_projects_dir", lambda: env["projects"])
+    stamped = [dict(r, entrypoint="cli", cwd=cwd) if r.get("type") in ("user", "assistant")
+               else r for r in records]
+    return add_transcript(env, cwd, cli, stamped)
+
+
+def test_terminal_session_reads_is_read_only_and_continues(frame, env, fake_runner,
+                                                           monkeypatch):
+    folder = env["tmp"] / "notes"
+    folder.mkdir()
+    add_terminal(env, monkeypatch, "term-1", str(folder), user_text("Tidy my notes"),
+                 assistant_block(text_block("Sorted them by date."), "m1"))
+    frame.refresh_sessions(force=True, resort=True)
+    settle(frame)
+    row = select(frame, "Tidy my notes")
+    assert "terminal session" in frame.session_list.GetString(row)
+    frame.on_open_session()
+    assert pump(lambda: frame._chat_loaded and frame.chat_list.GetCount() == 2)
+    assert "Sorted them by date." in frame.chat_list.GetString(1)
+    assert frame.session_heading.GetLabel().endswith("Terminal session, read-only.")
+    assert frame.desktop_reply.IsShown() and not frame.own_reply.IsShown()
+    assert frame.continue_btn.IsShown() and not frame.reply_claude_btn.IsShown()
+    assert "typing claude in a terminal" in frame.desktop_note.GetValue()
+    frame.on_send()  # read-only
+    assert frame._runners == {}
+    frame.on_open_in_claude()
+    assert "started in a terminal" in env["boxes"][-1] and env["opened"] == []
+    frame.on_delete_permanently()
+    assert env["feedback"][-1] == ("Tidy my notes is a terminal session: The Chat Place "
+                                   "doesn't delete it. Here it can only be hidden.")
+    seen = _continue(frame, env, monkeypatch)
+    assert seen["name"] == "Tidy my notes (continued)"
+    command = fake_runner.instances[-1].command
+    assert command[command.index("--resume") + 1] == "term-1" and "--fork-session" in command
+    new_id = command[command.index("--session-id") + 1]
+    assert frame.store.get(new_id).forked_from == "Tidy my notes"
+    # A desktop app session after it gets its Open in Claude button back.
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    assert frame.reply_claude_btn.IsShown()
+    assert "belongs to the Claude desktop app" in frame.desktop_note.GetValue()
+
+
+def test_terminal_session_waiting_on_you_is_announced(frame, env, monkeypatch):
+    """A permission or question up in the terminal: Claude Code's live file
+    says "waiting", and the session needs you, not "finished"."""
+    add_terminal(env, monkeypatch, "term-1", "C:\\T\\Docs", user_text("Clean the drive"))
+    original = hub.load_live_status
+    monkeypatch.setattr(hub, "load_live_status",
+                        lambda directory=None, alive=None, started=None: original(
+                            directory, alive=lambda pid: True, started=lambda pid: None))
+    monkeypatch.setattr(frame, "_app_is_active", lambda: False)
+    live = env["live"] / "4242.json"
+    live.write_text(json.dumps({"pid": 4242, "sessionId": "term-1", "status": "busy"}))
+    frame.refresh_sessions(force=True, resort=True)
+    settle(frame)
+    assert next(s for s in frame._snapshot.sessions if s.is_terminal).state == "working"
+    live.write_text(json.dumps({"pid": 4242, "sessionId": "term-1", "status": "waiting",
+                                "waitingFor": "dialog open"}))
+    frame.refresh_sessions(force=True, resort=True)
+    settle(frame)
+    assert env["notified"][-1] == ("Clean the drive needs you", "dialog open", "terminal:term-1")
+    row = select(frame, "Clean the drive")
+    assert "needs you: dialog open" in frame.session_list.GetString(row)
+
+
+def test_terminal_view_menu_filter_and_bug_report(frame, env, monkeypatch):
+    from thechatplace.sessions import VIEW_DESKTOP, VIEW_TERMINAL
+    add_terminal(env, monkeypatch, "term-1", "C:\\T\\Docs", user_text("Plan the trip"))
+    frame.refresh_sessions(force=True, resort=True)
+    settle(frame)
+    frame.on_view(VIEW_TERMINAL)
+    assert env["feedback"][-1] == "Showing terminal sessions: 1 session."
+    assert [frame.session_list.GetString(i).split(",")[0]
+            for i in range(frame.session_list.GetCount())] == ["Plan the trip"]
+    frame.on_view(VIEW_DESKTOP)
+    assert "Plan the trip" not in [frame.session_list.GetString(i).split(",")[0]
+                                   for i in range(frame.session_list.GetCount())]
+    frame.on_view("all")
+    assert frame._filter_text(next(s for s in frame._snapshot.sessions
+                                   if s.is_terminal)).endswith(" terminal")
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    select(frame, "Plan the trip")
+    menu, _actions = frame._session_menu()
+    assert _enabled(menu, "Con&tinue Here") and not _enabled(menu, "Open in &Claude")
+    fills = _fake_bug_dialog(monkeypatch, "open", ("T", "W", "E", ""))
+    frame.on_report_bug()
+    assert any(line.startswith("Sessions listed: 2 desktop app, 1 Chat Place, 1 terminal")
+               for line in fills.seen)
+
+
 def test_cowork_session_menu_remote_control_and_filter(frame, env, monkeypatch):
     add_cowork(env, "local_cw", "cli-cw", "Sort the receipts", user_text("Hi"))
     frame.refresh_sessions(force=True, resort=True)

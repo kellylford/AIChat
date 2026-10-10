@@ -70,7 +70,7 @@ from ..prompts import (MAX_NAME as PROMPT_NAME_MAX, PromptStore, clean_text as c
 from ..hidden import HiddenStore
 from ..titles import MAX_TITLE, TitleStore, clean_title
 from ..sessions import (FIELD_ACTIVITY, FIELD_LAST_MESSAGE, GROUP_VIEW_PREFIX, IDLE,
-                        NEEDS_YOU, OWN, SORT_ORDERS,
+                        DESKTOP, NEEDS_YOU, OWN, SORT_ORDERS,
                         SORT_SPOKEN, VIEW_ALL, VIEW_ARCHIVED, VIEW_HIDDEN, VIEW_NEEDS_YOU, VIEWS,
                         WORKING,
                         SessionInfo, field_short_name, group_view, in_view, view_spoken)
@@ -125,6 +125,25 @@ _COWORK_NOTE = (
     "in Claude. The Chat Place only reads it. Open in Claude switches the "
     "desktop app to it. Cowork keeps its conversation inside the desktop app's "
     "own folders, so it can't be continued here.")
+#: The same for a session started by typing claude in a terminal (#158).
+_TERMINAL_NOTE = (
+    "This session was started by typing claude in a terminal, so you reply to "
+    "it there. The Chat Place only reads it: sending from here while the "
+    "terminal has it open could run two turns at once and tangle the "
+    "conversation. Continue Here starts a Chat Place copy of it, with the "
+    "whole conversation so far, that you can reply to here; the terminal "
+    "session isn't changed.")
+
+
+def kind_name(info: SessionInfo) -> str:
+    """What a session is, for "<title> is a terminal session: ...". """
+    if info.is_own:
+        return "a Chat Place session"
+    if info.is_terminal:
+        return "a terminal session"
+    if info.cowork:
+        return "a desktop app Cowork session"
+    return "a desktop app session"
 
 
 def claude_link(info: SessionInfo) -> str:
@@ -1021,8 +1040,9 @@ class MainFrame(wx.Frame):
         if info.is_own:
             prompt = f"New name for {info.title}:"
         else:
-            prompt = (f"New name for {info.title}. It shows only in The Chat Place; the "
-                      "Claude desktop app keeps its own name for it. Leave it empty to go "
+            keeper = "Claude Code" if info.is_terminal else "the Claude desktop app"
+            prompt = (f"New name for {info.title}. It shows only in The Chat Place; "
+                      f"{keeper} keeps its own name for it. Leave it empty to go "
                       "back to that name.")
         dialog = wx.TextEntryDialog(self, prompt, "Rename Session", info.title)
         dialog.SetMaxLength(MAX_TITLE)
@@ -1081,8 +1101,12 @@ class MainFrame(wx.Frame):
         if info is None:
             self._feedback("No session selected.")
             return
+        if info.is_terminal:
+            self._feedback(f"{info.title} is a terminal session: The Chat Place doesn't "
+                           "delete it. Here it can only be hidden.")
+            return
         if not info.is_own:
-            self._feedback(f"{info.title} is a desktop app session: delete it in the desktop "
+            self._feedback(f"{info.title} is {kind_name(info)}: delete it in the desktop "
                            "app. Here it can only be hidden.")
             return
         # Desktop sessions are read-only, and this deletes files: an own
@@ -1207,8 +1231,11 @@ class MainFrame(wx.Frame):
         self.own_reply.Show(info.is_own)
         self.desktop_reply.Show(not info.is_own)
         if not info.is_own:
-            self.desktop_note.SetValue(_COWORK_NOTE if info.cowork else _DESKTOP_NOTE)
+            self.desktop_note.SetValue(_COWORK_NOTE if info.cowork else
+                                       _TERMINAL_NOTE if info.is_terminal else _DESKTOP_NOTE)
             self.continue_btn.Show(not info.cowork)
+            # Only the desktop app's sessions can be opened in it.
+            self.reply_claude_btn.Show(info.can_open_in_claude)
             self.desktop_reply.Layout()
         self.session_view.Layout()
         self._update_heading()
@@ -1277,6 +1304,8 @@ class MainFrame(wx.Frame):
             kind = "Chat Place session"
         elif info.cowork:
             kind = "Claude desktop app Cowork session, read-only"
+        elif info.is_terminal:
+            kind = "Terminal session, read-only"
         else:
             kind = "Claude desktop app session, read-only"
         if info.is_own:
@@ -1963,10 +1992,15 @@ class MainFrame(wx.Frame):
             self._feedback("No session selected.")
             return
         if not info.can_open_in_claude:
-            wx.MessageBox(
-                "This session was started by The Chat Place, so the Claude desktop app "
-                "doesn't list it and it can't be opened there. Read and reply to it "
-                "here.", APP_NAME, wx.OK | wx.ICON_INFORMATION, self)
+            if info.is_terminal:
+                text = ("This session was started in a terminal, so the Claude desktop app "
+                        "doesn't list it and it can't be opened there. Reply to it in the "
+                        "terminal, or use Continue Here to carry it on in The Chat Place.")
+            else:
+                text = ("This session was started by The Chat Place, so the Claude desktop "
+                        "app doesn't list it and it can't be opened there. Read and reply "
+                        "to it here.")
+            wx.MessageBox(text, APP_NAME, wx.OK | wx.ICON_INFORMATION, self)
             return
         try:
             platform_paths.open_url(claude_link(info))
@@ -2436,10 +2470,14 @@ class MainFrame(wx.Frame):
             choices.append("Continue it here as a copy, with Remote Control on")
             actions.append(lambda: self.on_continue_here(remote_control="on"))
         if not choices:
-            self._feedback(f"{info.title} is a desktop app session that can't be opened in "
+            self._feedback(f"{info.title} is {kind_name(info)} that can't be opened in "
                            "the desktop app or continued here, so it can't use Remote Control.")
             return
-        if info.remote:
+        if info.is_terminal:
+            prompt = (f"{info.title} was started in a terminal, which The Chat Place doesn't "
+                      "change; to reach it from claude.ai as it is, type /remote-control in "
+                      "that terminal. Or here:")
+        elif info.remote:
             prompt = (f"{info.title} is already on Remote Control in the desktop app, so you "
                       "can reach it from claude.ai now; nothing more is needed. The Chat "
                       "Place doesn't change desktop app sessions. Other ways:")
@@ -2483,8 +2521,9 @@ class MainFrame(wx.Frame):
             self._feedback("No session selected.")
             return
         if not info.is_own:
-            self._feedback(f"{info.title} is a desktop app session: its model is set in the "
-                           "desktop app.")
+            where = "terminal" if info.is_terminal else "desktop app"
+            self._feedback(f"{info.title} is {kind_name(info)}: its model is set in the "
+                           f"{where}.")
             return
         own = self.store.get(info.cli_session_id)
         if own is None:
@@ -2809,7 +2848,8 @@ class MainFrame(wx.Frame):
             wx.TheClipboard.Close()
 
     def on_continue_here(self, _event=None, remote_control: str = ""):
-        """Carry on a desktop app session in The Chat Place, as a copy (#189).
+        """Carry on a desktop app or terminal session (#158) in The Chat Place,
+        as a copy (#189).
         ``remote_control`` "on" puts the copy on Remote Control from its
         first turn (#96)."""
         info = self._selected_session()
@@ -3374,7 +3414,7 @@ class MainFrame(wx.Frame):
         """What Ctrl+F in the list searches: its title, folder and what it
         needs, whichever columns its row shows (#134), with "Cowork" for a
         Cowork session whose folder has another name (#91)."""
-        kind = " Cowork" if info.cowork else ""
+        kind = " Cowork" if info.cowork else " terminal" if info.is_terminal else ""
         return f"{info.title} {info.repo} {info.detail}{kind}".casefold()
 
     def _update_list_label(self, shown: int):
@@ -4045,7 +4085,7 @@ class MainFrame(wx.Frame):
             return ("Load one of The Chat Place's own sessions first: a prompt goes into "
                     "its reply box.")
         if not self._open.is_own:
-            return ("This is a Claude desktop app session, which The Chat Place only reads. "
+            return (f"This is {kind_name(self._open)}, which The Chat Place only reads. "
                     "Load one of The Chat Place's own sessions to use a prompt in its reply "
                     "box.")
         return ""
@@ -4150,12 +4190,13 @@ class MainFrame(wx.Frame):
         """Help, Report a Bug (#28): what happened, plus non-sensitive facts
         about the app, to a GitHub issue (see bugreport.py)."""
         listed = [s for s in self._snapshot.sessions if not s.archived]
-        code = sum(1 for s in listed if not s.is_own and not s.cowork)
+        code = sum(1 for s in listed if s.source == DESKTOP and not s.cowork)
         cowork = sum(1 for s in listed if s.cowork)
         # Cowork ones are desktop app sessions too: split only when there are some.
         counts = {"desktop app Code": code, "desktop app Cowork": cowork} if cowork \
             else {"desktop app": code}
         counts["Chat Place"] = sum(1 for s in listed if s.is_own)
+        counts["terminal"] = sum(1 for s in listed if s.is_terminal)
         facts = bugreport.environment(self.speech, counts,
                                       claude_version=self._claude_version or "checking",
                                       speech_route=speaker.last_route)

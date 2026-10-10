@@ -14,7 +14,9 @@ The id in a link is the one that stays put for the life of the session:
 * one of The Chat Place's own sessions: its Claude Code session id (the
   transcript's name, a UUID);
 * a Claude desktop app session, Code or Cowork: the desktop app's own id
-  (``local_...``), the one its claude:// links use.
+  (``local_...``), the one its claude:// links use;
+* a session started in a terminal (#158): its Claude Code session id, as
+  for The Chat Place's own.
 
 Nothing here imports wx, so it's all tested without a window.
 """
@@ -62,8 +64,10 @@ def parse_link(text: object) -> Optional[str]:
 
 
 def link_id(info) -> str:
-    """The id a session's link carries ("" if it has none to give)."""
-    if info.is_own:
+    """The id a session's link carries ("" if it has none to give): Claude
+    Code's id for The Chat Place's own sessions and terminal ones (#158),
+    which have no other, and the desktop app's for its sessions."""
+    if info.is_own or info.is_terminal:
         return info.cli_session_id if platform_paths.is_safe_id(info.cli_session_id) else ""
     return info.desktop_session_id if platform_paths.is_safe_id(info.desktop_session_id) else ""
 
@@ -76,7 +80,8 @@ def session_link(info) -> str:
 
 def find_session(sessions: Iterable, session_id: str):
     """The session a link's id names, or None. The Chat Place's own sessions
-    first (by their Claude Code id), then desktop app ones (by theirs). Ids
+    first (by their Claude Code id), then desktop app ones (by theirs), then
+    terminal ones (#158, by their Claude Code id). Ids
     are compared ignoring case: they're UUIDs, and a program passing the
     link on may change its case."""
     wanted = (session_id or "").casefold()
@@ -88,6 +93,9 @@ def find_session(sessions: Iterable, session_id: str):
             return info
     for info in sessions:
         if not info.is_own and info.desktop_session_id.casefold() == wanted:
+            return info
+    for info in sessions:
+        if info.is_terminal and info.cli_session_id.casefold() == wanted:
             return info
     return None
 

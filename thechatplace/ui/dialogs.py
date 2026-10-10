@@ -48,9 +48,10 @@ PERMISSION_NOTE = (
 
 
 CONTINUE_NOTE = (
-    "This starts a Chat Place session that is a copy of the desktop app session, "
-    "with its whole conversation so far, so you can carry on and reply here. The "
-    "desktop app session isn't changed, and replies here don't appear in it.")
+    "This starts a Chat Place session that is a copy of this session, with its "
+    "whole conversation so far, so you can carry on and reply here. The original, "
+    "in the desktop app or a terminal, isn't changed, and replies here don't "
+    "appear in it.")
 
 
 def _end_modal(dialog: wx.Dialog, code: int) -> None:
