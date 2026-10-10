@@ -67,7 +67,7 @@ def test_update_available_is_not_downloaded_until_asked():
     assert result.status == AVAILABLE and result.version == "0.2.0"
     assert result.describe() == "The Chat Place 0.2.0 is available. You have 0.1.0."
     # Velopack reads the feed from that one release, not the repo's newest 10.
-    assert urls[-1] == ("https://github.com/kellylford/AIChat/releases/download/"
+    assert urls[-1] == ("https://github.com/TheIdeaPlace/AIChat/releases/download/"
                         "v0.2.0/")
     assert manager.downloaded == []            # nothing happens without a yes
     assert svc.apply_and_restart() is False   # can't apply what isn't downloaded
@@ -389,7 +389,7 @@ def test_parse_version():
 
 def test_release_notes_url_is_the_release_tag_page():
     assert updater.release_notes_url("0.1.4") == \
-        "https://github.com/kellylford/AIChat/releases/tag/v0.1.4"
+        "https://github.com/TheIdeaPlace/AIChat/releases/tag/v0.1.4"
 
 
 def test_help_update_item_label_says_the_running_version_or_the_update():
