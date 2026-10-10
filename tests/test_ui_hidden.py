@@ -7428,6 +7428,8 @@ def test_a_link_the_system_refuses_is_said_not_raised(frame, env, monkeypatch):
     _links_dialog(monkeypatch, lambda d: d.open_selected())
     frame.on_links()
     assert "Couldn't open the link: embedded null character" in env["boxes"][-1]
+
+
 # -- Find in All Sessions (#109) ------------------------------------------------------------------
 
 

@@ -20,50 +20,21 @@
   1000,
   720
  ],
- "complete": false,
  "surfaces": {
-  "new-session": {
+  "find-all": {
    "kind": "dialog",
-   "png": "new-session-hc-aquatic-100.png",
-   "json": "new-session-hc-aquatic-100.json",
-   "title": "New Chat Place Session",
-   "class": "NewSessionDialog",
+   "png": "find-all-hc-aquatic-100.png",
+   "json": "find-all-hc-aquatic-100.json",
+   "title": "Find in All Sessions: \"the\"",
+   "class": "FindResultsDialog",
    "size": [
-    680,
-    620
+    820,
+    520
    ],
    "capture": "PrintWindow",
    "problems": [],
-   "about": "File, New Session"
-  },
-  "continue-here": {
-   "kind": "dialog",
-   "png": "continue-here-hc-aquatic-100.png",
-   "json": "continue-here-hc-aquatic-100.json",
-   "title": "Continue Here: Fix the flaky upload test",
-   "class": "NewSessionDialog",
-   "size": [
-    680,
-    620
-   ],
-   "capture": "PrintWindow",
-   "problems": [],
-   "about": "Continue Here (a desktop session)"
-  },
-  "links": {
-   "kind": "dialog",
-   "png": "links-hc-aquatic-100.png",
-   "json": "links-hc-aquatic-100.json",
-   "title": "Links in Fix the flaky upload test: 1",
-   "class": "LinksDialog",
-   "size": [
-    760,
-    480
-   ],
-   "capture": "PrintWindow",
-   "problems": [],
-   "about": "View, Links"
+   "about": "View, Find in All Sessions: the results"
   }
  },
- "seconds": 7.6
+ "seconds": 5.0
 }

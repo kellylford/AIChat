@@ -174,6 +174,12 @@ This is a 760 by 480 dialog titled "Links in Fix the flaky upload test: 1". "Fil
 
 **What looks off:** With one link, the list is mostly empty. Nothing else.
 
+## find-all: View, Find in All Sessions: the results (#109)
+
+This is an 820 by 520 dialog titled 'Find in All Sessions: "the"'. "Results:" heads a white list that takes most of the dialog, with six rows, the first selected in blue. Each row is the session, who wrote the message, when, and the words around the match, such as "Fix the flaky upload test, You, 6 October 07:00: Thanks. Which branch name should the release use?". "Searched:" heads a two-line read-only box: '6 messages in 2 sessions contain "the". Searched 2 sessions. 2 had no transcript to read.' "Go to Message" (the default) and "Close" are at the bottom right. In High Contrast Aquatic it follows the theme: a dark background, outlined controls, the selected row and the default button in the theme's highlight.
+
+**What looks off:** Long rows are cut at the list's right edge, with no horizontal scroll bar, as in the other lists (a screen reader reads the whole row). A heading and the text after it run together ("What changed The upload test…"). Nothing else.
+
 ## code-blocks: A message's code blocks
 
 This is a 760 by 560 dialog. "Code blocks:" heads a white list 728 by 110 with one row, "Python, 4 lines: def finish(self):", selected. "Code:" heads a large text box (728 by 324, about 60% of the dialog) showing the four lines in a monospaced font with their indentation. "Copy" and "Close" are at the bottom right.
