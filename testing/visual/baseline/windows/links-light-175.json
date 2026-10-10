@@ -1,0 +1,177 @@
+{
+ "title": "Links in Fix the flaky upload test: 1",
+ "class": "LinksDialog",
+ "size": [
+  760,
+  480
+ ],
+ "client": [
+  744,
+  441
+ ],
+ "dpi": [
+  96,
+  96
+ ],
+ "content_scale": 1.0,
+ "controls": [
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "&Filter:",
+   "rect": [
+    8,
+    8,
+    30,
+    16
+   ],
+   "best": [
+    30,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "TextCtrl",
+   "name": "Filter links",
+   "label": "",
+   "rect": [
+    10,
+    26,
+    728,
+    23
+   ],
+   "best": [
+    110,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": ""
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "&Links (1):",
+   "rect": [
+    8,
+    55,
+    48,
+    16
+   ],
+   "best": [
+    48,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "ListBox",
+   "name": "Links, 1",
+   "label": "",
+   "rect": [
+    10,
+    73,
+    728,
+    331
+   ],
+   "best": [
+    414,
+    49
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "items": [
+    "the issue, github.com/example/repo/issues/42. Claude, 1 message ago"
+   ],
+   "selection": 0
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Open",
+   "rect": [
+    370,
+    410,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Copy",
+   "rect": [
+    451,
+    410,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "Copy as &Markdown",
+   "rect": [
+    532,
+    410,
+    123,
+    23
+   ],
+   "best": [
+    123,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "Clo&se",
+   "rect": [
+    661,
+    410,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  }
+ ],
+ "capture": "screen copy (stretched by Windows)"
+}

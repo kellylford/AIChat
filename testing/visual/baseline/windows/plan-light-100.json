@@ -91,7 +91,7 @@
    "parent": -1,
    "enabled": true,
    "problems": [],
-   "value": "Accept edits: file edits allowed; Claude asks before commands that need approval"
+   "value": "Auto: Claude decides what is safe to run without asking"
   },
   {
    "class": "StaticText",

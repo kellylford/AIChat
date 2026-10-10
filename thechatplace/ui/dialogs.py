@@ -658,11 +658,14 @@ class SettingsDialog(wx.Dialog):
         notify_row.Add(self.notify_choice, 0)
         outer.Add(notify_row, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 
-        self.remote_control = wx.CheckBox(
-            self, label="Turn on Remote &Control for The Chat Place's sessions, so you can "
-                        "reach them from claude.ai and other devices. Their conversations "
-                        "are copied to claude.ai and kept there. (File, Remote Control "
-                        "changes one session.)")
+        # The label wraps onto several lines: as one it ran past the dialog's
+        # edge (#176). A check box's label is its spoken name, so screen
+        # readers hear the same sentence as before.
+        self.remote_control = wx.CheckBox(self, label=_wrapped(
+            self, "Turn on Remote &Control for The Chat Place's sessions, so you can reach "
+                  "them from claude.ai and other devices. Their conversations are copied to "
+                  "claude.ai and kept there. (File, Remote Control changes one session.)",
+            self.GetClientSize().width - 20 - _CHECK_BOX_GLYPH))
         self.remote_control.SetValue(speech.remote_control)
         outer.Add(self.remote_control, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 
@@ -680,6 +683,7 @@ class SettingsDialog(wx.Dialog):
         buttons.Realize()
         outer.Add(buttons, 0, wx.EXPAND | wx.ALL, 8)
         self.SetSizer(outer)
+        _fit_height(self)
 
         selected = 0
         for i, option in enumerate(self._options):
@@ -944,6 +948,111 @@ ID_ALLOW_SESSION = wx.NewIdRef()
 ID_DENY = wx.NewIdRef()
 
 
+def _screen_area(window) -> wx.Rect:
+    """The work area of the monitor ``window`` is on (the main one if it
+    isn't on any yet)."""
+    index = wx.Display.GetFromWindow(window)
+    return wx.Display(index if index != wx.NOT_FOUND else 0).GetClientArea()
+
+
+def _fit_height(dialog, max_height: Optional[int] = None) -> None:
+    """Make ``dialog`` the height its controls need, keeping its width: no
+    band of empty space (#176: Settings and Question had them), and no
+    controls cut off, up to ``max_height`` (the screen's height by
+    default)."""
+    dialog.Layout()
+    width, height = dialog.GetSize()
+    chrome = height - dialog.GetClientSize().height
+    limit = max_height if max_height is not None else _screen_area(dialog).height
+    target = min(dialog.GetSizer().GetMinSize().height + chrome, limit)
+    if target != height:
+        dialog.SetSize((width, target))
+        dialog.Layout()
+
+
+#: The room a check box's square and its gap take beside the label.
+_CHECK_BOX_GLYPH = 24
+
+
+def _wrapped(window, text: str, width: int) -> str:
+    """``text`` with line breaks so no line is wider than ``width`` in
+    ``window``'s font. For a control whose label can't wrap itself (a check
+    box), where the breaks are part of the label (#176)."""
+    from wx.lib.wordwrap import wordwrap
+    dc = wx.ClientDC(window)
+    dc.SetFont(window.GetFont())
+    # Without the space wordwrap leaves at each line's end, which a braille
+    # display would show.
+    lines = wordwrap(text, width, dc).rstrip("\n").split("\n")
+    return "\n".join(line.rstrip() for line in lines)
+
+
+class WrappingText(wx.StaticText):
+    """A paragraph that wraps to the width its sizer gives it, and wraps
+    again when that changes (#176). Add it with wx.EXPAND. A plain StaticText
+    is one line as long as its text, and a long one ran past the dialog's
+    edge: Report a Bug hid the support address that way. Screen readers read
+    the label as written, without the line breaks."""
+
+    def __init__(self, parent, label: str = ""):
+        # Not resized to its label: its width is the sizer's to give.
+        super().__init__(parent, label=label, style=wx.ST_NO_AUTORESIZE)
+        self._text = label
+        self._width = 0
+        self._laying_out = False
+        self._again = False
+        self.SetMinSize((1, -1))  # its width comes from the sizer, never the text
+        self.Bind(wx.EVT_SIZE, self._on_size)
+
+    def set_text(self, text: str) -> None:
+        if text != self._text:
+            self._text = text
+            self._width = 0
+            self._rewrap(self.GetSize().width)
+
+    # The label as written, without the line breaks: what callers compare.
+    # Set it with set_text.
+    def GetLabel(self):
+        return self._text
+
+    def SetLabel(self, label):
+        self.set_text(label)
+
+    def _on_size(self, event):
+        event.Skip()
+        self._rewrap(event.GetSize().width)
+
+    def _rewrap(self, width: int):
+        # Nothing to lay out in a window that's going.
+        if (width <= 40 or width == self._width or self.IsBeingDeleted()
+                or self.GetParent().IsBeingDeleted()):
+            return
+        self._width = width
+        # Measured with the control's own font in its own pixels: on a PC at
+        # 150% (the app isn't DPI aware, #185), wx's Wrap left a heading 50
+        # pixels too wide unwrapped.
+        wx.StaticText.SetLabel(self, _wrapped(self, self._text, width))
+        # Measured with no minimum, which would hold the old height.
+        self.SetMinSize((1, -1))
+        self.InvalidateBestSize()
+        self.SetMinSize((1, self.GetBestSize().height))
+        # Laid out again with the new height. If that changes the width (a
+        # column whose share depends on its contents), it wraps once more
+        # and is laid out again; a few rounds settle it.
+        if self._laying_out:
+            self._again = True
+            return
+        self._laying_out = True
+        try:
+            for _round in range(4):
+                self._again = False
+                self.GetParent().Layout()
+                if not self._again:
+                    break
+        finally:
+            self._laying_out = False
+
+
 def _read_only_text(parent, value: str, name: str, min_height: int = 160) -> wx.TextCtrl:
     text = wx.TextCtrl(parent, value=value,
                        style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_RICH2)
@@ -1086,6 +1195,18 @@ class QuestionDialog(wx.Dialog):
         row.Add(wx.Button(self, wx.ID_CANCEL, "Answer &Later"), 0)
         outer.Add(row, 0, wx.ALIGN_RIGHT | wx.ALL, 8)
         self.SetSizer(outer)
+        # As tall as the questions need, up to the size it was given; past
+        # that the questions scroll (#176: two short questions left a band
+        # of empty space above the buttons).
+        # The questions' own height, up to the size it was given; past that
+        # they scroll. The panel's minimum is the questions' height only
+        # while fitting: left in place it would push the buttons out of a
+        # dialog too short for it.
+        panel.SetMinSize((-1, sizer.GetMinSize().height))
+        _fit_height(self, max_height=self.GetSize().height)
+        panel.SetMinSize((-1, -1))
+        self.Layout()
+        panel.FitInside()
         self.SetEscapeId(wx.ID_CANCEL)
         self.declined = False
         send.Bind(wx.EVT_BUTTON, self._on_send)
@@ -1464,10 +1585,10 @@ class BugReportDialog(wx.Dialog):
         self.included = _read_only_text(self, "\n".join(environment_lines),
                                         "What the report includes", min_height=90)
         outer.Add(self.included, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
-        outer.Add(wx.StaticText(self, label=(
+        outer.Add(WrappingText(self, (
             "Open on GitHub needs access to the app's repository on GitHub. Without it, "
             "use Copy Report and email the report to support@theideaplace.net.")),
-            0, wx.LEFT | wx.RIGHT | wx.TOP, 8)
+            0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 8)
 
         row = wx.BoxSizer(wx.HORIZONTAL)
         self.open_btn = wx.Button(self, wx.ID_OK, "&Open on GitHub")
@@ -1634,6 +1755,13 @@ class UsageDialog(wx.Dialog):
         super().__init__(parent, title="Usage and Context", size=(640, 360),
                          style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
         self._lines = list(lines)
+        # A list's rows don't wrap, so the dialog is as wide as its longest
+        # line, within the screen (#176: the context line was cut off).
+        longest = max((self.GetTextExtent(line).width for line in self._lines), default=0)
+        screen = _screen_area(parent).width
+        width = min(max(640, longest + 60), screen - 40)
+        if width != 640:
+            self.SetSize((width, 360))
         self._copy = copy
         sizer = wx.BoxSizer(wx.VERTICAL)
         sizer.Add(wx.StaticText(self, label="&Usage and context:"), 0, wx.LEFT | wx.TOP, 8)
@@ -1859,10 +1987,10 @@ class SessionColumnsDialog(wx.Dialog):
         self._sample = sample
         self._say = say
         sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer.Add(wx.StaticText(self, label=(
+        sizer.Add(WrappingText(self, (
             "Each session in the list is read as one line. Choose what it says, and in "
             "what order: put Status first to hear what each session is doing before "
-            "its title.")), 0, wx.LEFT | wx.TOP | wx.RIGHT, 8)
+            "its title.")), 0, wx.EXPAND | wx.LEFT | wx.TOP | wx.RIGHT, 8)
         lists = wx.BoxSizer(wx.HORIZONTAL)
         left = wx.BoxSizer(wx.VERTICAL)
         left.Add(wx.StaticText(self, label="A&vailable columns:"), 0, wx.BOTTOM, 4)

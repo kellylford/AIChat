@@ -7648,3 +7648,137 @@ def test_a_result_in_a_session_without_its_transcript_forgets_the_target(frame, 
 def main_frame_module():
     from thechatplace.ui import main_frame
     return main_frame
+
+
+# -- long labels wrap (#176) ----------------------------------------------------------
+
+
+def test_a_wrapping_label_wraps_to_its_width_and_keeps_its_text(frame):
+    from thechatplace.ui.dialogs import WrappingText
+    dialog = wx.Dialog(frame, size=(400, 300))
+    try:
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        text = "A sentence long enough that it needs more than one line in a narrow dialog. " * 3
+        note = WrappingText(dialog, text)
+        sizer.Add(note, 0, wx.EXPAND | wx.ALL, 8)
+        dialog.SetSizer(sizer)
+        dialog.Layout()
+        one_line = note.GetTextExtent("Ag").height
+        assert note.GetSize().width <= 400
+        assert note.GetBestSize().width <= note.GetSize().width + 1
+        assert note.GetSize().height >= 2 * one_line  # wrapped onto several lines
+        assert note.GetLabel() == text  # without the breaks Wrap put in
+        note.set_text("Short.")
+        dialog.Layout()
+        assert note.GetLabel() == "Short." and note.GetSize().height < 2 * one_line
+    finally:
+        dialog.Destroy()
+
+
+def test_remote_control_wraps_but_says_all_it_says(frame):
+    from thechatplace.ui.dialogs import SettingsDialog
+    dialog = SettingsDialog(frame, speech.SpeechSettings(), speech.default_options())
+    try:
+        dialog.Layout()
+        label = dialog.remote_control.GetLabel()
+        # Several lines, so it fits; the same words, so it's read the same.
+        assert label.count("\n") >= 1
+        assert " ".join(label.split()) == (
+            "Turn on Remote &Control for The Chat Place's sessions, so you can reach them "
+            "from claude.ai and other devices. Their conversations are copied to claude.ai "
+            "and kept there. (File, Remote Control changes one session.)")
+        box = dialog.remote_control
+        assert box.GetBestSize().width <= box.GetSize().width + 1
+        assert box.GetRect().GetRight() <= dialog.GetClientSize().width
+    finally:
+        dialog.Destroy()
+
+
+def test_usage_is_wide_enough_for_its_longest_line(frame):
+    from thechatplace.ui.dialogs import UsageDialog
+    long_line = ("Visual probe: Context: 1 tokens used; the window's size isn't known until "
+                 "this session or another on the same model runs a turn here.")
+    dialog = UsageDialog(frame, [long_line, "Five-hour limit: 12% used."], lambda t, o: None)
+    try:
+        dialog.Layout()
+        needed = dialog.GetTextExtent(long_line).width
+        screen = wx.Display(0).GetClientArea().width
+        assert dialog.list.GetSize().width >= min(needed, screen - 100)
+    finally:
+        dialog.Destroy()
+
+
+def test_settings_is_no_taller_than_its_controls(frame):
+    from thechatplace.ui.dialogs import SettingsDialog
+    dialog = SettingsDialog(frame, speech.SpeechSettings(), speech.default_options())
+    try:
+        dialog.Layout()
+        spare = dialog.GetClientSize().height - dialog.GetSizer().GetMinSize().height
+        assert 0 <= spare <= 2
+    finally:
+        dialog.Destroy()
+
+
+def _questions(count):
+    from thechatplace.claude_cli import PermissionRequest
+    return PermissionRequest("q1", "AskUserQuestion", {"questions": [
+        {"header": f"Q{n}", "question": f"Question number {n}?",
+         "options": [{"label": "Yes"}, {"label": "No"}]} for n in range(count)]},
+        suggestions=[])
+
+
+def test_a_few_questions_leave_no_empty_band(frame):
+    from thechatplace.ui.dialogs import QuestionDialog
+    dialog = QuestionDialog(frame, "Probe", _questions(2))
+    try:
+        dialog.Layout()
+        panel = dialog.GetChildren()[0]
+        content = panel.GetSizer().GetMinSize().height
+        # The panel is as tall as its questions (with the sizer's border).
+        assert 0 <= panel.GetSize().height - content <= 10
+        assert dialog.GetSize().height < 560
+    finally:
+        dialog.Destroy()
+
+
+def test_many_questions_keep_the_size_and_scroll(frame):
+    from thechatplace.ui.dialogs import QuestionDialog
+    dialog = QuestionDialog(frame, "Probe", _questions(12))
+    try:
+        dialog.Layout()
+        panel = dialog.GetChildren()[0]
+        assert dialog.GetSize().height == 560
+        assert panel.GetVirtualSize().height > panel.GetClientSize().height  # it scrolls
+        buttons = [c for c in dialog.GetChildren() if isinstance(c, wx.Button)]
+        assert all(b.GetRect().GetBottom() <= dialog.GetClientSize().height for b in buttons)
+    finally:
+        dialog.Destroy()
+
+
+def test_the_messages_label_keeps_its_whole_text_and_key(env):
+    from thechatplace.ui.main_frame import MainFrame
+    long_title = "A session whose title goes on and on " * 6
+    add_desktop(env, "local_a", "cli-a", long_title)
+    window = MainFrame(store=OwnSessionStore(env["tmp"] / "own.json"),
+                       check_updates_at_start=False)
+    try:
+        assert pump(lambda: window.session_list.GetCount() == 1)
+        select(window, "A session")
+        window.on_open_session()
+        assert pump(lambda: window._chat_loaded)
+        label = window.messages_label.GetLabel()
+        # Shown with "..." when it doesn't fit, but the label (what screen
+        # readers read, and the Alt+M key) is whole.
+        assert label.startswith("&Messages in " + long_title.strip())
+        assert window.messages_label.HasFlag(wx.ST_ELLIPSIZE_END)
+        heading = window.session_heading
+        assert heading.GetLabel().startswith(long_title.strip())
+        window.SetSize((1000, 720))
+        window.Layout()
+        assert heading.GetSize().width <= window.GetClientSize().width
+    finally:
+        window.stop_timers()
+        window._pool.shutdown(wait=True)
+        wx.GetApp().ProcessPendingEvents()
+        window.Destroy()
+        wx.GetApp().ProcessPendingEvents()

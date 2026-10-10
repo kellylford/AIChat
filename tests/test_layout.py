@@ -34,10 +34,6 @@ pytestmark = windows_layout
 #: the problem it excuses, so it can't hide another on the same control.
 KNOWN = {
     "main-narrow": [(r"^StaticText 'Ready\.': text cut off", 179)],
-    "settings": [(r"^CheckBox \"Turn on Remote &Control.*: text cut off", 176)],
-    "bug-report": [(r"^StaticText \"Open on GitHub needs access.*: text cut off", 176)],
-    "session-columns": [(r"^StaticText 'Each session in the list is read as one line.*"
-                         r": text cut off", 176)],
 }
 
 
@@ -95,7 +91,8 @@ def test_each_surface_lays_out_cleanly(name, app, tmp_path, monkeypatch):
 
 def test_a_long_session_title_fits_the_heading(app, tmp_path, monkeypatch):
     """Not one of the probe's pictures: the long-titled session loaded. Its
-    heading and messages label are single lines that run off the window."""
+    heading and messages label used to be single lines that ran off the
+    window (#176)."""
     env = ui_probe.build_world(tmp_path, monkeypatch.setattr, formatted_view=False)
     frame = ui_probe.build_frame(env)
     frame.SetSize(ui_probe.DEFAULT_SIZE)
@@ -104,11 +101,10 @@ def test_a_long_session_title_fits_the_heading(app, tmp_path, monkeypatch):
         found = _problems(frame)
     finally:
         ui_probe.close_frame(frame)
-    KNOWN_HERE = {"long-title": [
-        (r"^StaticText 'A session whose title .*read-only\.': text cut off", 176),
-        (r"^StaticText '&Messages in A session whose title .*': text cut off", 176)]}
+    # The heading wraps and the messages label ends in "..." (#176), so
+    # nothing here runs off the window.
     with pytest.MonkeyPatch.context() as patch:
-        patch.setitem(KNOWN, "long-title", KNOWN_HERE["long-title"])
+        patch.setitem(KNOWN, "long-title", [])
         _check("long-title", found)
 
 

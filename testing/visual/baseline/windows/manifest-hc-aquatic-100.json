@@ -20,6 +20,7 @@
   1000,
   720
  ],
+ "complete": true,
  "surfaces": {
   "main-start": {
    "kind": "window",
@@ -227,12 +228,10 @@
    "class": "SettingsDialog",
    "size": [
     680,
-    620
+    517
    ],
    "capture": "PrintWindow",
-   "problems": [
-    "CheckBox \"Turn on Remote &Control for The Chat Place's sessions, so you can reach them from claude.ai and other devices. Their conversations are copied to claude.ai and kept there. (File, Remote Control changes one session.)\": text cut off: smaller than its best size"
-   ],
+   "problems": [],
    "about": "Settings"
   },
   "new-session": {
@@ -313,7 +312,7 @@
    "class": "QuestionDialog",
    "size": [
     700,
-    560
+    377
    ],
    "capture": "PrintWindow",
    "problems": [],
@@ -372,9 +371,7 @@
     640
    ],
    "capture": "PrintWindow",
-   "problems": [
-    "StaticText \"Open on GitHub needs access to the app's repository on GitHub. Without it, use Copy Report and email the report to support@theideaplace.net.\": text cut off: smaller than its best size"
-   ],
+   "problems": [],
    "about": "Help, Report a Bug"
   },
   "code-blocks": {
@@ -390,6 +387,34 @@
    "capture": "PrintWindow",
    "problems": [],
    "about": "A message's code blocks"
+  },
+  "links": {
+   "kind": "dialog",
+   "png": "links-hc-aquatic-100.png",
+   "json": "links-hc-aquatic-100.json",
+   "title": "Links in Fix the flaky upload test: 1",
+   "class": "LinksDialog",
+   "size": [
+    760,
+    480
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "View, Links"
+  },
+  "find-all": {
+   "kind": "dialog",
+   "png": "find-all-hc-aquatic-100.png",
+   "json": "find-all-hc-aquatic-100.json",
+   "title": "The Chat Place: 6 results for \"the\", Find in All Sessions",
+   "class": "FindResultsDialog",
+   "size": [
+    820,
+    520
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "View, Find in All Sessions: the results"
   },
   "changes": {
    "kind": "dialog",
@@ -412,7 +437,7 @@
    "title": "Usage and Context",
    "class": "UsageDialog",
    "size": [
-    640,
+    754,
     360
    ],
    "capture": "PrintWindow",
@@ -444,9 +469,7 @@
     560
    ],
    "capture": "PrintWindow",
-   "problems": [
-    "StaticText 'Each session in the list is read as one line. Choose what it says, and in what order: put Status first to hear what each session is doing before its title.': text cut off: smaller than its best size"
-   ],
+   "problems": [],
    "about": "View, Session List Columns"
   },
   "prompts": {
@@ -504,35 +527,7 @@
    "capture": "PrintWindow",
    "problems": [],
    "about": "Main window with no sessions at all (a first run)"
-  },
-  "links": {
-   "kind": "dialog",
-   "png": "links-hc-aquatic-100.png",
-   "json": "links-hc-aquatic-100.json",
-   "title": "Links in Fix the flaky upload test: 1",
-   "class": "LinksDialog",
-   "size": [
-    760,
-    480
-   ],
-   "capture": "PrintWindow",
-   "problems": [],
-   "about": "View, Links"
-  },
-  "find-all": {
-   "kind": "dialog",
-   "png": "find-all-hc-aquatic-100.png",
-   "json": "find-all-hc-aquatic-100.json",
-   "title": "The Chat Place: 6 results for \"the\", Find in All Sessions",
-   "class": "FindResultsDialog",
-   "size": [
-    820,
-    520
-   ],
-   "capture": "PrintWindow",
-   "problems": [],
-   "about": "View, Find in All Sessions: the results"
   }
  },
- "seconds": 83.4
+ "seconds": 87.7
 }
