@@ -164,9 +164,27 @@ def report(result: dict) -> str:
     return "\n".join(lines)
 
 
+def _failed(run: Path) -> dict:
+    """stem -> the error the probe reported for it (a page that never drew,
+    the wrong dialog): never the truth to compare against."""
+    failed = {}
+    for manifest in run.glob("manifest-*.json"):
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        tag = data.get("tag", "")
+        for name, entry in data.get("surfaces", {}).items():
+            if entry.get("error"):
+                failed[f"{name}-{tag}" if tag else name] = entry["error"].strip().splitlines()[-1]
+    return failed
+
+
 def accept(run: Path, baseline: Path, names) -> list:
-    baseline.mkdir(parents=True, exist_ok=True)
+    failed = _failed(run)
     stems = names or sorted(p.stem for p in run.glob("*.json") if not p.stem.startswith("manifest"))
+    refused = {stem: failed[stem] for stem in stems if stem in failed}
+    if refused:
+        raise SystemExit("Not accepted: the probe reported these as failed. Run them again.\n" +
+                         "\n".join(f"  {stem}: {why}" for stem, why in refused.items()))
+    baseline.mkdir(parents=True, exist_ok=True)
     if not names:
         # Accepting a whole run keeps its manifests: which Windows, scaling
         # and theme the baseline was taken in.

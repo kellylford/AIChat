@@ -66,6 +66,38 @@ terminal (System Settings, Privacy & Security, Screen Recording):
 Switch to Dark appearance and run it again with `--tag mac-dark`. A Mac has no WebView2,
 so the formatted-page surfaces show the plain-text dialogs there, as the app does.
 
+## Comparing with the baseline
+
+The pictures and descriptions of the last accepted run are in `testing/visual/baseline/windows/`,
+with each variant's manifest. To see what a change did:
+
+```
+python tools/ui_compare.py %TEMP%\tcp-ui-probe\<run>
+```
+
+It writes `compare.md` in the run folder, listing each screen that changed and what changed in
+words: controls gone, new, moved or resized by more than 2 pixels, and new layout problems. It
+also gives the share of pixels that changed, which catches colour and theme changes the
+layout can't see. For each changed screen, `diff\<screen>.png` marks the changed pixels in red.
+
+A run of some variants is compared only with those variants. Two runs of the same code compare
+as unchanged:
+- anti-aliasing differences are within the tolerance;
+- the window's outer border, drawn by Windows, isn't compared;
+- the 150% and 175% pictures stop at the taskbar.
+
+When the review agrees the changes are right, accept them into the baseline in the same PR:
+
+```
+python tools/ui_compare.py %TEMP%\tcp-ui-probe\<run> --accept                   # the whole run
+python tools/ui_compare.py %TEMP%\tcp-ui-probe\<run> --accept settings-light-100   # one screen
+```
+
+A formatted page (WebView2) now and then fails to draw in a freshly reset VM. The probe tries
+once more on a new window. If it's still blank, it reports the screen as an error, and `--accept`
+refuses any screen the run reported as failed, so a blank picture never becomes the baseline.
+Run that screen again.
+
 ## Reviewing a run
 
 Ask Claude to review the run folder with `tools/ui_review_prompt.md`. It gives each

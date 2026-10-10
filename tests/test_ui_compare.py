@@ -137,3 +137,18 @@ def test_the_window_border_is_not_compared(app, tmp_path):
     _surface(tmp_path / "run", "usage-light-150", [], box=(0, 0, 80, 1), colour=(255, 0, 0))
     assert ui_compare.compare(tmp_path / "run", tmp_path / "base")["unchanged"] == [
         "usage-light-150"]
+
+
+def test_a_screen_the_probe_reported_failed_is_not_accepted(app, tmp_path):
+    _surface(tmp_path / "run", "user-guide-light-150", [])
+    _surface(tmp_path / "run", "usage-light-150", [])
+    (tmp_path / "run" / "manifest-light-150.json").write_text(json.dumps({
+        "tag": "light-150", "surfaces": {
+            "user-guide": {"error": "the web page never drew: photographed blank"},
+            "usage": {}}}), encoding="utf-8")
+    with pytest.raises(SystemExit, match="user-guide-light-150: the web page never drew"):
+        ui_compare.main([str(tmp_path / "run"), "--baseline", str(tmp_path / "base"),
+                         "--accept"])
+    assert not (tmp_path / "base").exists()
+    assert ui_compare.main([str(tmp_path / "run"), "--baseline", str(tmp_path / "base"),
+                            "--accept", "usage-light-150"]) == 0
