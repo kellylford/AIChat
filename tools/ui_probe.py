@@ -454,6 +454,11 @@ def s_main_own_working(frame, env):
         frame.reply_text.SetValue(text)
         frame.on_send()
     frame.reply_text.SetValue("Draft of a message still being typed")
+    # The list and heading say "working" from the next refresh, as the
+    # app's own timer would bring in a moment.
+    import fake_env
+    frame.refresh_sessions(force=True)
+    fake_env.pump(lambda: not frame._snapshot_busy and frame._pending_refresh is None, timeout=10)
 
 
 def s_main_attachments(frame, env):
@@ -649,7 +654,7 @@ SURFACES = {
     "main-start": ("window", s_main_start, "Main window as it opens: session list, no session loaded"),
     "main-own": ("window", s_main_own, "An own session loaded: messages and the reply box"),
     "main-own-working": ("window", s_main_own_working,
-                         "An own session mid-turn, with two messages queued and a draft typed"),
+                         "An own session mid-turn, one more message queued and a draft typed"),
     "main-attachments": ("window", s_main_attachments,
                          "An own session with two files attached to the next message"),
     "main-desktop": ("window", s_main_desktop,
@@ -761,6 +766,19 @@ def _webviews(window):
     return found
 
 
+def _page_ready(view) -> bool:
+    """The page has loaded and has text: IsBusy goes false before WebView2
+    has drawn anything, which gave a blank picture of the shortcuts page."""
+    if view.IsBusy():
+        return False
+    try:
+        ok, length = view.RunScript(
+            "document.readyState === 'complete' ? String(document.body.innerText.length) : '0'")
+    except Exception:  # noqa: BLE001 - an older wx without RunScript's result
+        return True
+    return bool(ok) and str(length).strip('"').isdigit() and int(str(length).strip('"')) > 0
+
+
 def photograph_dialog(opener, out: Path, stem: str) -> dict:
     """Run ``opener`` (which shows a modal dialog, now or a moment later),
     photograph the dialog once it has settled, and cancel it."""
@@ -768,8 +786,16 @@ def photograph_dialog(opener, out: Path, stem: str) -> dict:
     state = {"seen": None, "since": 0.0, "done": False, "started": time.time()}
 
     def tick(_event=None):
-        if state["done"]:
+        # RunScript pumps messages, so the timer can fire again inside it.
+        if state["done"] or state.get("ticking"):
             return
+        state["ticking"] = True
+        try:
+            _tick()
+        finally:
+            state["ticking"] = False
+
+    def _tick():
         dialog = _open_modal_dialog()
         now = time.time()
         if dialog is None:
@@ -784,7 +810,7 @@ def photograph_dialog(opener, out: Path, stem: str) -> dict:
         waited = now - state["since"]
         if waited < (WEBVIEW_SETTLE_SECONDS if views else SETTLE_SECONDS):
             return
-        if any(v.IsBusy() for v in views) and waited < DIALOG_TIMEOUT_SECONDS:
+        if not all(_page_ready(v) for v in views) and waited < DIALOG_TIMEOUT_SECONDS:
             return
         state["done"] = True
         try:
