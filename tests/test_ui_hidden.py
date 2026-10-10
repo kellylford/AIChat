@@ -191,6 +191,8 @@ class FakeRunner:
         self.session_started = False
         self.cancelled = False
         self.last_activity = "starting"
+        self.waiting_on_background = False
+        self.background_tasks = []
         FakeRunner.instances.append(self)
 
     def start(self):
@@ -209,6 +211,13 @@ class FakeRunner:
     def send_now(self, prompt):
         self.sent_now = getattr(self, "sent_now", []) + [prompt]
         return not getattr(self, "ended", False)
+
+    def send_follow_up(self, prompt, images=None):
+        if not self.waiting_on_background:
+            return False
+        self.follow_ups = getattr(self, "follow_ups", []) + [(prompt, images)]
+        self.waiting_on_background = False
+        return True
 
 
 @pytest.fixture
@@ -6852,3 +6861,119 @@ def test_from_github_without_gh_says_how_to_get_it(frame, monkeypatch):
         assert "cli.github.com" in boxes[-1]
     finally:
         dialog.Destroy()
+
+
+# -- background work keeps the turn open (#161) ----------------------------------------------
+
+
+def _answered_with_background(frame, runner, text="Started the build.", tasks=("Windows build",),
+                              denials=()):
+    runner.waiting_on_background = True
+    runner.background_tasks = list(tasks)
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent(
+        "waiting", text=text, denials=list(denials), data={"tasks": list(tasks)}))
+
+
+def test_a_reply_with_background_work_is_said_and_the_turn_stays_open(frame, env, fake_runner):
+    runner = _start(frame, fake_runner)
+    _answered_with_background(frame, runner)
+    assert env["spoken"][-1] == ("Hub probe replied. Started the build. "
+                                 "Still running in the background: Windows build.")
+    assert frame._runners["own-1"] is runner  # still running: Stop still ends it
+    assert frame.turn_status.GetLabel() == (
+        "Claude answered. Still running in the background: Windows build. "
+        "What you send goes to Claude now.")
+    frame.on_turn_status()
+    assert env["feedback"][-1] == (
+        "Hub probe: Claude answered. Still running in the background: Windows build. "
+        "The turn has run for 1 minute 15 seconds; Claude carries on when the work finishes.")
+    # When Claude carries on and finishes, the turn ends as any turn does.
+    runner.waiting_on_background = False
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("finished", text="Built."))
+    assert env["spoken"][-1] == "Hub probe replied. Built."
+    assert "own-1" not in frame._runners
+
+
+def test_send_while_waiting_on_background_work_goes_straight_to_claude(frame, env, fake_runner):
+    runner = _start(frame, fake_runner)
+    _answered_with_background(frame, runner)
+    frame.reply_text.SetValue("Meanwhile, tidy the README")
+    frame.on_send()
+    assert runner.follow_ups == [("Meanwhile, tidy the README", [])]
+    assert frame._queued == {}
+    assert frame.reply_text.GetValue() == ""
+    assert env["feedback"][-1] == "Sent to Hub probe: Meanwhile, tidy the README."
+    assert len(fake_runner.instances) == 1
+    # Claude is on it now: the next message queues as usual.
+    frame.reply_text.SetValue("And then this")
+    frame.on_send()
+    assert frame._queued == {"own-1": ["And then this"]}
+
+
+def test_messages_queued_before_the_reply_go_in_when_claude_waits(frame, env, fake_runner):
+    runner = _start(frame, fake_runner)
+    frame.reply_text.SetValue("second")
+    frame.on_send()
+    assert frame._queued == {"own-1": ["second"]}
+    _answered_with_background(frame, runner)
+    assert runner.follow_ups == [("second", None)]
+    assert frame._queued == {}
+    assert env["feedback"][-1] == "Sent your queued message. Hub probe is working."
+
+
+def test_a_queued_message_stays_queued_if_claude_already_moved_on(frame, env, fake_runner):
+    runner = _start(frame, fake_runner)
+    frame.reply_text.SetValue("second")
+    frame.on_send()
+    runner.send_follow_up = lambda prompt, images=None: False
+    _answered_with_background(frame, runner)
+    assert frame._queued == {"own-1": ["second"]}
+
+
+def test_refusals_said_with_background_work_are_not_said_again(frame, env, fake_runner):
+    runner = _start(frame, fake_runner)
+    _answered_with_background(frame, runner, denials=["Write a"])
+    assert "1 tool was refused: Write a" in env["spoken"][-1]
+    assert env["spoken"][-1].endswith("Still running in the background: Windows build.")
+    runner.waiting_on_background = False
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("finished", text="Built."))
+    assert env["spoken"][-1] == "Hub probe replied. Built."
+    # Not said again, but the session is still left needing you.
+    own = frame.store.get("own-1")
+    assert own.state == "needs you" and own.detail == "1 tool was refused"
+
+
+def test_the_list_says_a_session_answered_and_is_waiting_on_background_work(frame, env,
+                                                                         fake_runner):
+    runner = _start(frame, fake_runner)
+    _answered_with_background(frame, runner)
+
+    def row():
+        return next((frame.session_list.GetString(i)
+                     for i in range(frame.session_list.GetCount())
+                     if frame.session_list.GetString(i).startswith("Hub probe")), "")
+    assert pump(lambda: "answered, background work running" in row())
+
+
+def test_a_background_update_changes_the_turn_status(frame, env, fake_runner):
+    runner = _start(frame, fake_runner)
+    _answered_with_background(frame, runner, tasks=("Build", "Watch CI"))
+    assert "Build; Watch CI." in frame.turn_status.GetLabel()
+    runner.background_tasks = ["Watch CI"]
+    frame._on_turn_event({"id": "own-1"}, "Hub probe",
+                         TurnEvent("background", data={"tasks": ["Watch CI"]}))
+    assert "background: Watch CI. What" in frame.turn_status.GetLabel()
+
+
+def test_send_now_on_a_queued_message_while_waiting_sends_it_without_stopping(frame, env,
+                                                                          fake_runner):
+    runner = _start(frame, fake_runner)
+    frame.reply_text.SetValue("second")
+    frame.on_send()
+    runner.waiting_on_background = True
+    frame.chat_list.SetSelection(frame.chat_list.GetCount() - 1)
+    frame.send_queued_now()
+    assert runner.follow_ups == [("second", None)]
+    assert not hasattr(runner, "sent_now")
+    assert frame._queued == {}
+    assert env["feedback"][-1] == "Sent now to Hub probe."
