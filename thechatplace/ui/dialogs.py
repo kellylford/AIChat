@@ -13,6 +13,7 @@ from .. import workplaces
 from ..changes import file_text
 from ..claude_cli import (DEFAULT_PERMISSION_MODE, EFFORT_NOTE, EFFORTS, MODELS,
                           PERMISSION_MODES)
+from ..message_links import matches
 from ..sessions import DEFAULT_FIELDS, FIELD_IDS, FIELD_NAMES, clean_fields, field_short_name
 from ..speech import (ANNOUNCE_LABELS, ANNOUNCE_LEVELS, NOTIFY_LABELS, NOTIFY_LEVELS, RATE_PRESET_LABELS,
                       SpeechSettings)
@@ -178,7 +179,8 @@ class NewSessionDialog(wx.Dialog):
                            value=(CONTINUE_NOTE + "\n\n" + PERMISSION_NOTE) if continue_from
                            else PERMISSION_NOTE)
         set_accessible_name(note, about)
-        note.SetMinSize((-1, 60))
+        # Four lines: the note about permissions and effort, whole (#189).
+        note.SetMinSize((-1, self.GetCharHeight() * 4 + 12))
         outer.Add(note, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
 
         outer.Add(wx.StaticText(self, label="First &message:"), 0, wx.LEFT | wx.TOP, 10)
@@ -2325,3 +2327,121 @@ class PromptsDialog(wx.Dialog):
             return
         self.chosen = self.store.get(self._selected())
         self.EndModal(wx.ID_OK)
+
+
+class LinksDialog(wx.Dialog):
+    """View, Links (Ctrl+L, #190): every link in the loaded session, newest
+    first, each read as its words, where it goes, who wrote it and when.
+    Enter or Open opens one (and closes the dialog); Ctrl+C or Copy copies
+    its address, Copy as Markdown the link. Typing narrows the list."""
+
+    def __init__(self, parent, title: str, links, copy, feedback):
+        count = len(links)
+        super().__init__(parent, title=f"Links in {title}: {count}", size=(760, 480),
+                         style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+        self._all = list(links)
+        self._shown = list(links)
+        self._copy = copy  # (text) -> bool
+        self._feedback = feedback
+        #: The link to open once the dialog has closed, or None.
+        self.chosen = None
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer.Add(wx.StaticText(self, label="&Filter:"), 0, wx.LEFT | wx.TOP, 8)
+        self.filter = wx.TextCtrl(self, style=wx.TE_PROCESS_ENTER)
+        set_accessible_name(self.filter, "Filter links")
+        sizer.Add(self.filter, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        # The label carries the count: a list box's name, for JAWS and NVDA,
+        # is the label before it (as From GitHub's list does it).
+        self.list_label = wx.StaticText(self, label="&Links:")
+        sizer.Add(self.list_label, 0, wx.LEFT | wx.TOP, 8)
+        self.list = wx.ListBox(self, style=wx.LB_SINGLE)
+        sizer.Add(self.list, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+        row = wx.BoxSizer(wx.HORIZONTAL)
+        self.open_btn = wx.Button(self, label="&Open")
+        self.open_btn.SetDefault()
+        self.copy_btn = wx.Button(self, label="&Copy")
+        self.markdown_btn = wx.Button(self, label="Copy as &Markdown")
+        for button in (self.open_btn, self.copy_btn, self.markdown_btn):
+            row.Add(button, 0, wx.RIGHT, 6)
+        row.Add(wx.Button(self, wx.ID_CANCEL, "Clo&se"), 0)
+        sizer.Add(row, 0, wx.ALIGN_RIGHT | wx.ALL, 8)
+        self.SetSizer(sizer)
+        self.SetEscapeId(wx.ID_CANCEL)
+        self.filter.Bind(wx.EVT_TEXT, lambda e: self._apply_filter())
+        self.filter.Bind(wx.EVT_TEXT_ENTER, lambda e: self.open_selected())
+        self.filter.Bind(wx.EVT_KEY_DOWN, self._on_filter_key)
+        self.list.Bind(wx.EVT_KEY_DOWN, self._on_list_key)
+        self.list.Bind(wx.EVT_CHAR, self._on_list_char)
+        self.list.Bind(wx.EVT_LISTBOX_DCLICK, lambda e: self.open_selected())
+        self.open_btn.Bind(wx.EVT_BUTTON, lambda e: self.open_selected())
+        self.copy_btn.Bind(wx.EVT_BUTTON, lambda e: self.copy_selected())
+        self.markdown_btn.Bind(wx.EVT_BUTTON, lambda e: self.copy_selected(markdown=True))
+        self._apply_filter()
+        # Focus starts on the newest link, not the filter box.
+        wx.CallAfter(lambda: self and self.list.SetFocus())
+
+    def _apply_filter(self):
+        typed = self.filter.GetValue()
+        self._shown = [link for link in self._all if matches(link, typed)]
+        self.list.Set([link.row() for link in self._shown])
+        if self._shown:
+            self.list.SetSelection(0)
+        total = len(self._all)
+        count = (f"{total}" if len(self._shown) == total
+                 else f"{len(self._shown)} of {total}")
+        self.list_label.SetLabel(f"&Links ({count}):")
+        set_accessible_name(self.list, f"Links, {count}")  # VoiceOver's name
+
+    def selected(self):
+        index = self.list.GetSelection()
+        return self._shown[index] if 0 <= index < len(self._shown) else None
+
+    def open_selected(self):
+        link = self.selected()
+        if link is None:
+            self._feedback("No links match." if self._all else "No links.")
+            return
+        if not link.can_open:
+            self._feedback(link.why_not())
+            return
+        self.chosen = link
+        _end_modal(self, wx.ID_OK)
+
+    def copy_selected(self, markdown: bool = False):
+        link = self.selected()
+        if link is None:
+            self._feedback("No links match.")
+            return
+        text = link.markdown() if markdown else link.url
+        if not self._copy(text):
+            self._feedback("Couldn't open the clipboard.")
+            return
+        self._feedback(f"Copied {link.address} as Markdown." if markdown
+                       else f"Copied {link.address}.")
+
+    def _on_filter_key(self, event):
+        if event.GetKeyCode() in (wx.WXK_DOWN, wx.WXK_UP) and self._shown:
+            self.list.SetFocus()
+            return
+        event.Skip()
+
+    def _on_list_key(self, event):
+        key = event.GetKeyCode()
+        if key in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER):
+            self.open_selected()
+            return
+        if key == ord("C") and event.ControlDown() and not event.AltDown():
+            self.copy_selected(markdown=event.ShiftDown())
+            return
+        event.Skip()
+
+    def _on_list_char(self, event):
+        """Typing in the list narrows it: the letter goes to the filter box,
+        and focus with it."""
+        key = event.GetUnicodeKey()
+        if (key != wx.WXK_NONE and key >= 32 and chr(key).isprintable()
+                and not event.ControlDown() and not event.AltDown()):
+            self.filter.SetFocus()
+            self.filter.AppendText(chr(key))
+            return
+        event.Skip()

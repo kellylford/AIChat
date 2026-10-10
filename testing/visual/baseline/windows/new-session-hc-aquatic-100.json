@@ -249,10 +249,49 @@
   {
    "class": "StaticText",
    "name": "staticText",
-   "label": "Permission m&ode:",
+   "label": "&Effort:",
    "rect": [
     10,
     168,
+    33,
+    16
+   ],
+   "best": [
+    33,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Choice",
+   "name": "Effort",
+   "label": "",
+   "rect": [
+    241,
+    165,
+    413,
+    23
+   ],
+   "best": [
+    211,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": "Default (your Claude Code setting)"
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "Permission m&ode:",
+   "rect": [
+    10,
+    199,
     96,
     16
    ],
@@ -271,7 +310,7 @@
    "label": "",
    "rect": [
     241,
-    165,
+    196,
     413,
     23
    ],
@@ -291,7 +330,7 @@
    "label": "About &permissions:",
    "rect": [
     10,
-    198,
+    229,
     103,
     16
    ],
@@ -307,12 +346,12 @@
   {
    "class": "TextCtrl",
    "name": "About permissions",
-   "label": "The permission mode decides what Claude may do without asking. When Claude asks for permission, asks you a question or has a plan for you to approve, the turn waits: The Chat Place announces it, the session shows as needing you, and Ctrl+Shift+A answers.",
+   "label": "The permission mode decides what Claude may do without asking. When Claude asks for permission, asks you a question or has a plan for you to approve, the turn waits: The Chat Place announces it, the session shows as needing you, and Ctrl+Shift+A answers. Effort is how hard Claude thinks; models that don't support effort levels ignore it. File, Change Permission Mode and Change Effort change them later.",
    "rect": [
     12,
-    216,
+    247,
     644,
-    60
+    72
    ],
    "best": [
     127,
@@ -322,7 +361,7 @@
    "parent": -1,
    "enabled": true,
    "problems": [],
-   "value": "The permission mode decides what Claude may do without asking. When Claude asks for permission, asks you a question or has a plan for you to approve, the turn waits: The Chat Place announces it, the session shows as needing you, and Ctrl+Shift+A answers."
+   "value": "The permission mode decides what Claude may do without asking. When Claude asks for permission, asks you a question or has a plan for you to approve, the turn waits: The Chat Place announces it, the session shows as needing you, and Ctrl+Shift+A answers. Effort is how hard Claude thinks; models that don't support effort levels ignore it. File, Change Permission Mode and Change Effort change them l"
   },
   {
    "class": "StaticText",
@@ -330,7 +369,7 @@
    "label": "First &message:",
    "rect": [
     10,
-    284,
+    327,
     75,
     16
    ],
@@ -349,9 +388,9 @@
    "label": "",
    "rect": [
     12,
-    312,
+    355,
     644,
-    222
+    179
    ],
    "best": [
     127,

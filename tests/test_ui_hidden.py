@@ -7254,3 +7254,177 @@ def test_continue_here_keeps_the_chosen_effort(frame, env, fake_runner, monkeypa
     frame.on_send()
     again = fake_runner.instances[-1].command
     assert "--fork-session" in again and again[again.index("--effort") + 1] == "max"
+
+
+# -- View, Links (#190) --------------------------------------------------------------------------
+
+
+def _links_session(frame, env, records=None):
+    add_transcript(env, "C:\\G\\Repo", "cli-a", records or [
+        user_text("Where are the notes? https://example.com/old"),
+        assistant_block(text_block("Here: [release notes](https://example.com/notes) and "
+                                   "[a file](file:///C:/secret.txt)."), "m1"),
+        user_text("thanks")])
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    assert pump(lambda: frame._chat_loaded)
+
+
+def _links_dialog(monkeypatch, act):
+    """LinksDialog, shown modally by doing ``act(dialog)`` instead."""
+    from thechatplace.ui import dialogs, main_frame
+    seen = {}
+
+    class Shown(dialogs.LinksDialog):
+        def ShowModal(self):
+            seen["dialog"] = self
+            seen["title"] = self.GetTitle()
+            seen["rows"] = list(self.list.GetStrings())
+            seen["label"] = self.list_label.GetLabel()
+            act(self)
+            return self.GetReturnCode()
+    monkeypatch.setattr(main_frame, "LinksDialog", Shown)
+    return seen
+
+
+def test_links_lists_newest_first_and_opens_one(frame, env, monkeypatch):
+    _links_session(frame, env)
+    opened = []
+    monkeypatch.setattr(main_frame_paths(), "open_url", opened.append)
+    seen = _links_dialog(monkeypatch, lambda d: d.open_selected())
+    frame.on_links()
+    assert seen["title"] == "Links in Quiet one: 3"
+    assert seen["label"] == "&Links (3):"
+    assert seen["rows"] == [
+        "release notes, example.com/notes. Claude, 1 message ago",
+        "a file, file:///C:/secret.txt. Claude, 1 message ago, copy only",
+        "example.com/old. You, 2 messages ago"]
+    assert opened == ["https://example.com/notes"]
+    assert env["feedback"][-1] == "Opening example.com/notes."
+
+
+def test_a_link_that_cant_open_says_why_and_can_be_copied(frame, env, monkeypatch):
+    _links_session(frame, env)
+    opened, copied = [], []
+    monkeypatch.setattr(main_frame_paths(), "open_url", opened.append)
+    monkeypatch.setattr(frame, "_copy_text", lambda text: copied.append(text) or True)
+
+    def act(dialog):
+        dialog.list.SetSelection(1)
+        dialog.open_selected()
+        assert dialog.chosen is None  # stays open
+        dialog.copy_selected()
+        dialog.copy_selected(markdown=True)
+    _links_dialog(monkeypatch, act)
+    frame.on_links()
+    assert opened == []
+    assert env["feedback"][-3].startswith("A file: link isn't opened from here")
+    assert env["feedback"][-2] == "Copied file:///C:/secret.txt."
+    assert env["feedback"][-1] == "Copied file:///C:/secret.txt as Markdown."
+    assert copied == ["file:///C:/secret.txt", "[a file](file:///C:/secret.txt)"]
+
+
+def test_typing_narrows_the_links(frame, env, monkeypatch):
+    _links_session(frame, env)
+
+    def act(dialog):
+        dialog.filter.SetValue("old")
+        assert list(dialog.list.GetStrings()) == ["example.com/old. You, 2 messages ago"]
+        assert dialog.list_label.GetLabel() == "&Links (1 of 3):"
+        dialog.filter.SetValue("nothing like it")
+        assert dialog.list.GetCount() == 0
+        dialog.open_selected()
+    _links_dialog(monkeypatch, act)
+    frame.on_links()
+    assert env["feedback"][-1] == "No links match."
+
+
+def test_links_with_none_or_nothing_loaded_say_so(frame, env, monkeypatch):
+    monkeypatch.setattr("thechatplace.ui.main_frame.LinksDialog",
+                        lambda *a, **k: pytest.fail("no dialog"))
+    frame.on_links()
+    assert env["feedback"][-1] == "No session loaded."
+    _links_session(frame, env, [user_text("no links here"),
+                                assistant_block(text_block("none at all"), "m1")])
+    frame.on_links()
+    assert env["feedback"][-1] == "No links in this session."
+
+
+def test_links_in_tool_results_count_only_with_tool_activity(frame, env, monkeypatch):
+    _links_session(frame, env, [
+        user_text("look"),
+        assistant_block(tool_use_block("WebFetch", {"url": "https://tool.example.com/x"}, "t1"),
+                        "m1"),
+        assistant_block(text_block("done"), "m2")])
+    monkeypatch.setattr("thechatplace.ui.main_frame.LinksDialog",
+                        lambda *a, **k: pytest.fail("no dialog"))
+    frame.on_links()
+    assert env["feedback"][-1] == "No links in this session."
+    frame._set_activity(True)
+    # Not monkeypatch.undo(): that would take away the env fixture's stand-ins too.
+    seen = _links_dialog(monkeypatch, lambda d: None)
+    frame.on_links()
+    assert any("tool.example.com/x" in row for row in seen["rows"])
+
+
+def test_a_session_link_opens_here_not_in_the_browser(frame, env, monkeypatch):
+    _links_session(frame, env, [
+        user_text("see [Build](thechatplace://session/own-1)")])
+    monkeypatch.setattr(main_frame_paths(), "open_url",
+                        lambda url: pytest.fail("not the browser"))
+    followed = []
+    monkeypatch.setattr(frame, "open_link", followed.append)
+    _links_dialog(monkeypatch, lambda d: d.open_selected())
+    frame.on_links()
+    assert followed == ["thechatplace://session/own-1"]
+
+
+def main_frame_paths():
+    from thechatplace.ui import main_frame
+    return main_frame.platform_paths
+
+
+
+def test_links_keys_in_the_list(frame, env, monkeypatch):
+    """Typing in the list goes to the filter; Enter opens; Ctrl+C and
+    Ctrl+Shift+C copy; Down in the filter comes back to the list."""
+    _links_session(frame, env)
+    opened, copied = [], []
+    monkeypatch.setattr(main_frame_paths(), "open_url", opened.append)
+    monkeypatch.setattr(frame, "_copy_text", lambda text: copied.append(text) or True)
+
+    def key(dialog, code, control=False, shift=False, char=False):
+        event = wx.KeyEvent(wx.wxEVT_CHAR if char else wx.wxEVT_KEY_DOWN)
+        event.SetControlDown(control)
+        event.SetShiftDown(shift)
+        if char:
+            event.SetUnicodeKey(code)
+            dialog._on_list_char(event)
+        else:
+            event.SetKeyCode(code)
+            dialog._on_list_key(event)
+
+    def act(dialog):
+        key(dialog, ord("C"), control=True)
+        key(dialog, ord("C"), control=True, shift=True)
+        key(dialog, ord("o"), char=True)
+        assert dialog.filter.GetValue() == "o"
+        down = wx.KeyEvent(wx.wxEVT_KEY_DOWN)
+        down.SetKeyCode(wx.WXK_DOWN)
+        dialog._on_filter_key(down)
+        key(dialog, wx.WXK_RETURN)
+    _links_dialog(monkeypatch, act)
+    frame.on_links()
+    assert copied == ["https://example.com/notes", "[release notes](https://example.com/notes)"]
+    assert opened == ["https://example.com/notes"]  # "o" still matches it
+
+
+def test_a_link_the_system_refuses_is_said_not_raised(frame, env, monkeypatch):
+    _links_session(frame, env)
+
+    def refuse(url):
+        raise ValueError("embedded null character")
+    monkeypatch.setattr(main_frame_paths(), "open_url", refuse)
+    _links_dialog(monkeypatch, lambda d: d.open_selected())
+    frame.on_links()
+    assert "Couldn't open the link: embedded null character" in env["boxes"][-1]

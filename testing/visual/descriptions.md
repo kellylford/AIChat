@@ -110,7 +110,7 @@ This is a 680 by 620 dialog. At the top, a framed group, "Announcements", runs t
 
 ## new-session: File, New Session
 
-This is a 680 by 620 dialog laid out as a two-column form. The labels on the left are Folder, Work in, Branch, Title, Model and Permission mode. Every field starts at x=241, because the Branch label, "Branch (choose one, or type a new name):", is long. The Folder row has a short dropdown (227 wide) showing the end of a path, highlighted in blue, then "Browse..." and "From GitHub..." buttons. Branch and its field are greyed out. Below the form, "About permissions:" heads a 60-tall read-only box of explanation. "First message:" heads a large empty box (222 tall) that takes about a third of the dialog. "Start" (default) and "Cancel" are at the bottom right.
+This is a 680 by 620 dialog laid out as a two-column form. The labels on the left are Folder, Work in, Branch, Title, Model, Effort (#189) and Permission mode. Every field starts at x=241, because the Branch label, "Branch (choose one, or type a new name):", is long. The Folder row has a short dropdown (227 wide) showing the end of a path, highlighted in blue, then "Browse..." and "From GitHub..." buttons. Branch and its field are greyed out. Effort's dropdown shows "Default (your Claude Code setting)", like Model's. Below the form, "About permissions:" heads a read-only box four lines tall, which shows its whole explanation, effort included, with a scroll bar. "First message:" heads a large empty box (about 180 tall) that takes under a third of the dialog. "Start" (default) and "Cancel" are at the bottom right.
 
 **What looks off:** The label column is about 230 wide for mostly one-word labels, which leaves a wide empty gutter. The Folder dropdown is too narrow to show the path's start. The Title box is 2 pixels right of the dropdowns above and below it (243 against 241) (#178).
 
@@ -167,6 +167,12 @@ This is a 720 by 520 dialog laid out like From GitHub. "Search:" heads a full-wi
 This is a 660 by 640 dialog. It is a stack of labelled boxes, each the full width: "Summary (the issue's title):" with a single line (focused, blue underline), then three empty 99-tall boxes, "What happened", "What you expected (optional)" and "Steps to reproduce (optional)". Below them, "What the report includes besides your words (no session titles, folders or messages):" heads a read-only box listing the version, Windows, Python, wxPython, Claude Code and the settings. A line of small text follows, and then "Open on GitHub" (default), "Copy Report" and "Cancel" at the bottom right.
 
 **What looks off:** The note above the buttons runs past the right edge and is cut to "...email the report to", so the email address is hidden (#176; the probe flags it). The read-only box cuts its last line in half. The dialog feels crowded at the bottom.
+
+## links: View, Links (#190)
+
+This is a 760 by 480 dialog titled "Links in Fix the flaky upload test: 1". "Filter:" heads a full-width empty text box. "Links (1):" heads a white list that fills most of the dialog, with one row selected in blue: "the issue, github.com/example/repo/issues/42. Claude, 1 message ago". "Open" (the default), "Copy", "Copy as Markdown" and "Close" are in a row at the bottom right. In High Contrast Aquatic the dialog is dark, with the list, the box and the buttons outlined in the theme's text colour, the selected row in the theme's highlight, and the default button filled.
+
+**What looks off:** With one link, the list is mostly empty. Nothing else.
 
 ## code-blocks: A message's code blocks
 

@@ -638,6 +638,11 @@ def d_code_blocks(frame, env):
     return frame.on_code_blocks
 
 
+def d_links(frame, env):
+    _open(frame, "Fix the flaky upload test")
+    return frame.on_links
+
+
 def d_changes(frame, env):
     _open(frame, "Visual probe")
     return frame.on_changes
@@ -713,6 +718,7 @@ SURFACES = {
     "command-picker": ("dialog", d_command_picker, "Insert Command or Skill"),
     "bug-report": ("dialog", d_bug_report, "Help, Report a Bug"),
     "code-blocks": ("dialog", d_code_blocks, "A message's code blocks"),
+    "links": ("dialog", d_links, "View, Links"),
     "changes": ("dialog", d_changes, "View, Changed Files"),
     "usage": ("dialog", d_usage, "View, Usage and Context"),
     "about-you": ("dialog", d_about_you, "View, What Claude Knows About You"),
@@ -750,6 +756,7 @@ DIALOG_CLASSES = {
     "command-picker": "CommandPickerDialog",
     "bug-report": "BugReportDialog",
     "code-blocks": "CodeBlocksDialog",
+    "links": "LinksDialog",
     "changes": "ChangesDialog",
     "usage": "UsageDialog",
     "about-you": "AboutYouDialog",

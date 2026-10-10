@@ -44,6 +44,12 @@ def find_code_blocks(text: str) -> List[CodeBlock]:
     return [part for part in _parts(text) if isinstance(part, CodeBlock)]
 
 
+def split_code_blocks(text: str) -> List[Union[str, CodeBlock]]:
+    """The text's prose lines, with each code block as one CodeBlock in its
+    place (View, Links finds links in each differently, #190)."""
+    return _parts(text)
+
+
 def replace_code_blocks(text: str, replace: Callable[[CodeBlock], str]) -> str:
     """``text`` with each code block, fences and all, replaced by
     ``replace(block)``, so everything that skips or describes code agrees on
