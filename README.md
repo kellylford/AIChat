@@ -153,7 +153,17 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   Blocks** (**Ctrl+Shift+B**, or on the context menu) lists the message's code blocks by language
   and size, with the selected one's code in a box to read by line (Enter on a block goes there) and
   a Copy button for just that block; **Ctrl+Shift+C** copies the message's last code block straight
-  away. Question cards read as "Claude asked: Which version?" with the options in the full text,
+  away. **Links** (View, Links, **Ctrl+L**, from the session list, the messages or the reply box)
+  lists every link in the loaded session, newest first, each address once: a link reads as its
+  words and then where it goes ("release notes, github.com/…/v0.1.5"), a bare address as itself,
+  followed by who wrote it and roughly when ("Claude, 3 messages ago"), and "in code" for one in
+  a code block or inline code. Enter (or Open) opens it in your browser and closes the list;
+  Ctrl+C (or Copy) copies its address and Ctrl+Shift+C (or Copy as Markdown) the link, and the
+  list stays open. Typing narrows the list (the letters go to its Filter box); Down Arrow comes
+  back. Only web, email and session links open; anything else, such as a file: path, is marked
+  "copy only" and says why if you try. Links in tool calls and results are listed only with Show
+  Tool Activity on. With none, you hear "No links in this session." Question cards read as
+  "Claude asked: Which version?" with the options in the full text,
   then "You answered: ...". Refused tools read "Permission denied: ...". Tool calls and tool
   results are hidden unless you turn on Show Tool Activity (Ctrl+T). It's set for each session and
   remembered, so turning it on for one session leaves the others as they were. With it on, the open session's
@@ -647,6 +657,7 @@ shows it as plain text instead.
 | Messages | Enter, or Applications key / Shift+F10 then Read Full Message | Read the whole message; Escape comes back to it |
 | Messages | Ctrl+C | Copy the whole message |
 | Messages | Ctrl+Shift+B | Code blocks: list, read and copy each one |
+| Messages | Ctrl+L | Links: every link in the loaded session, to open in your browser or copy (also from the session list and the reply box) |
 | Messages | Ctrl+Shift+C | Copy the message's last code block |
 | Messages | Ctrl+T | Show or hide tool activity in the loaded session |
 | Messages | Ctrl+O | Open this session in the Claude desktop app |

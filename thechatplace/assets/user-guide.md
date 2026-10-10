@@ -123,6 +123,10 @@ Other things you can do with a message:
 - **Ctrl+C** copies the whole message.
 - **Ctrl+Shift+B** lists the message's code blocks, by language and size, with each one's code to
   read and a Copy button for just that block. **Ctrl+Shift+C** copies the last code block at once.
+- **Ctrl+L** lists every link in the session, newest first, each read as its words, where it
+  goes, and who wrote it when. Enter opens one in your browser; Ctrl+C copies its address, and
+  Ctrl+Shift+C copies it as a Markdown link. Type to narrow the list. Only web, email and session
+  links open; others, such as a file path, can only be copied.
 - **Ctrl+F** finds a message containing some text, searching each message's whole text. F3 and
   Shift+F3 find the next and previous match.
 - The Applications key (or Shift+F10) opens the message's menu.

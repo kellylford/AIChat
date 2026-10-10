@@ -35,6 +35,12 @@ _CODE = re.compile(r'<pre><code(?: class="language-([^"]+)")?>(.*?)</code></pre>
 _HREF = re.compile(r'<a href="([^"]*)"')
 _SAFE_LINK = re.compile(r"(?i)^(https?:|mailto:)")
 
+
+def opens_in_browser(href: str) -> bool:
+    """Whether a link in a message may go to the default browser: http,
+    https and mailto only (View, Links uses the same rule, #190)."""
+    return bool(_SAFE_LINK.match(href or ""))
+
 LANGUAGE_NAMES = {
     "py": "Python", "python": "Python", "js": "JavaScript", "javascript": "JavaScript",
     "ts": "TypeScript", "typescript": "TypeScript", "json": "JSON", "html": "HTML",

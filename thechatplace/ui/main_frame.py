@@ -65,6 +65,7 @@ from ..claude_cli import (DEFAULT_PERMISSION_MODE, EFFORT_NOTE, EFFORTS, MODELS,
                           normalize_permission_mode)
 from ..hub import (Snapshot, collect, fill_last_message, finished_turns,
                    forget_last_messages, last_reply_from_tail)
+from ..message_links import find_links
 from ..own_store import OwnSession, OwnSessionStore
 from ..groups import GroupStore
 from ..prompts import (MAX_NAME as PROMPT_NAME_MAX, PromptStore, clean_text as clean_prompt_text,
@@ -87,7 +88,7 @@ from .notify import Notifier
 from .statusbar import StatusParts
 from ..rendering import html_page, message_page
 from ..ui_text import markdown_as_text, shortcuts_html, update_item_label, update_item_spoken
-from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, AboutYouDialog, ChangesDialog, CodeBlocksDialog, FormattedMessageDialog,
+from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, AboutYouDialog, ChangesDialog, CodeBlocksDialog, FormattedMessageDialog, LinksDialog,
                       BugReportDialog, CommandPickerDialog, MessageDialog, NewSessionDialog, PermissionDialog, PlanDialog,
                       ManageGroupsDialog, PromptsDialog, QuestionDialog, SessionColumnsDialog,
                       SettingsDialog, ShortcutsDialog, UpdateInstalledDialog, UsageDialog,
@@ -412,6 +413,9 @@ class MainFrame(wx.Frame):
         self._item(view, "F&ind...\tCtrl+F", lambda e: self.on_find())
         self._item(view, "Find &Next\tF3", lambda e: self.find_again(True))
         self._item(view, "Find Pre&vious\tShift+F3", lambda e: self.find_again(False))
+        # Every letter of "Links" is another item's access key already, so
+        # its shortcut is the way in (#190).
+        self._item(view, "Links...\tCtrl+L", lambda e: self.on_links())
         self.activity_item = view.AppendCheckItem(wx.ID_ANY, "Show &Tool Activity\tCtrl+T")
         self.Bind(wx.EVT_MENU, self.on_toggle_activity_menu, self.activity_item)
         self._item(view, "Sto&p Running Turn\tCtrl+.", self.on_stop)
@@ -1751,6 +1755,43 @@ class MainFrame(wx.Frame):
             return
         self._modal(CodeBlocksDialog(self, blocks, self._copy_code_block))
         self.chat_list.SetFocus()
+
+    def on_links(self):
+        """View, Links (Ctrl+L, #190): the links in the loaded session's
+        messages, as the list shows them (tool calls and results only with
+        Show Tool Activity on), to open in the browser or copy."""
+        info = self._open
+        if info is None:
+            self._feedback("No session loaded.")
+            return
+        if not self._chat_loaded:
+            self._feedback("The messages are still loading.")
+            return
+        found = find_links(m for m in self._visible_messages() if m.kind != QUEUED)
+        if not found:
+            self._feedback("No links in this session.")
+            return
+        returning_to = wx.Window.FindFocus()
+        dialog = LinksDialog(self, info.title, found, self._copy_text, self._feedback)
+        try:
+            dialog.ShowModal()
+            chosen = dialog.chosen
+        finally:
+            dialog.Destroy()
+        if returning_to:
+            returning_to.SetFocus()
+        if chosen is None:
+            return
+        if chosen.is_session_link:
+            self.open_link(chosen.url)  # The Chat Place's own, never the shell
+            return
+        try:
+            platform_paths.open_url(chosen.url)
+        except OSError as exc:
+            wx.MessageBox(f"Couldn't open the link: {exc}\n\nIt's {chosen.url}", APP_NAME,
+                          wx.OK | wx.ICON_WARNING, self)
+            return
+        self._feedback(f"Opening {chosen.address}.")
 
     def on_about_you(self):
         """View, What Claude Knows About You (Ctrl+Shift+K, #92): your

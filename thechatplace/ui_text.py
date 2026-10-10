@@ -84,6 +84,9 @@ SHORTCUTS = [
                                          "text, not just the first line), then the next or "
                                          "previous one"),
         ("End", "Newest message"),
+        ("Ctrl+L", "Links: every link in the loaded session, newest first; Enter opens one "
+                   "in your browser, Ctrl+C copies its address, typing narrows the list "
+                   "(also from the session list and the reply box)"),
         ("Ctrl+T", "Show or hide tool activity in the loaded session"),
         ("Ctrl+O", "Open this session in the Claude desktop app"),
     ]),
