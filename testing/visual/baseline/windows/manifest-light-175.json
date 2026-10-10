@@ -32,9 +32,7 @@
     529
    ],
    "capture": "screen copy (stretched by Windows)",
-   "problems": [
-    "Button '1 session needs you': text cut off: smaller than its best size"
-   ],
+   "problems": [],
    "about": "Main window as it opens: session list, no session loaded"
   },
   "main-own": {
@@ -48,9 +46,7 @@
     529
    ],
    "capture": "screen copy (stretched by Windows)",
-   "problems": [
-    "Button '1 session needs you': text cut off: smaller than its best size"
-   ],
+   "problems": [],
    "about": "An own session loaded: messages and the reply box"
   },
   "main-own-working": {
@@ -64,9 +60,7 @@
     529
    ],
    "capture": "screen copy (stretched by Windows)",
-   "problems": [
-    "Button '1 session needs you': text cut off: smaller than its best size"
-   ],
+   "problems": [],
    "about": "An own session mid-turn, one more message queued and a draft typed"
   },
   "main-attachments": {
@@ -80,9 +74,7 @@
     529
    ],
    "capture": "screen copy (stretched by Windows)",
-   "problems": [
-    "Button '1 session needs you': text cut off: smaller than its best size"
-   ],
+   "problems": [],
    "about": "An own session with two files attached to the next message"
   },
   "main-desktop": {
@@ -96,9 +88,7 @@
     529
    ],
    "capture": "screen copy (stretched by Windows)",
-   "problems": [
-    "Button '1 session needs you': text cut off: smaller than its best size"
-   ],
+   "problems": [],
    "about": "A desktop app session loaded: the read-only panel instead of a reply box"
   },
   "main-activity": {
@@ -112,9 +102,7 @@
     529
    ],
    "capture": "screen copy (stretched by Windows)",
-   "problems": [
-    "Button '1 session needs you': text cut off: smaller than its best size"
-   ],
+   "problems": [],
    "about": "Show tool activity turned on"
   },
   "main-last-message": {
@@ -128,9 +116,7 @@
     529
    ],
    "capture": "screen copy (stretched by Windows)",
-   "problems": [
-    "Button '1 session needs you': text cut off: smaller than its best size"
-   ],
+   "problems": [],
    "about": "The session list with the Last message column (#146)"
   },
   "main-status-bar": {
@@ -144,11 +130,7 @@
     529
    ],
    "capture": "screen copy (stretched by Windows)",
-   "problems": [
-    "Button 'Context 42% full': text cut off: smaller than its best size",
-    "Button '1 session needs you': text cut off: smaller than its best size",
-    "Button 'Update 0.2.0 ready': text cut off: smaller than its best size"
-   ],
+   "problems": [],
    "about": "The status bar with every button showing: context, needs you, update"
   },
   "main-narrow": {
@@ -163,8 +145,7 @@
    ],
    "capture": "screen copy (stretched by Windows)",
    "problems": [
-    "StaticText 'Ready.': text cut off: smaller than its best size",
-    "Button '1 session needs you': text cut off: smaller than its best size"
+    "StaticText 'Ready.': text cut off: smaller than its best size"
    ],
    "about": "An own session in a 640 by 480 window"
   },

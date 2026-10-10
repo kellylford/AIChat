@@ -7,7 +7,7 @@
  ],
  "client": [
   984,
-  550
+  543
  ],
  "dpi": [
   96,
@@ -23,7 +23,7 @@
     0,
     0,
     984,
-    550
+    543
    ],
    "best": [
     1070,
@@ -61,7 +61,7 @@
     10,
     34,
     326,
-    510
+    503
    ],
    "best": [
     876,
@@ -125,7 +125,7 @@
     352,
     50,
     626,
-    263
+    256
    ],
    "best": [
     376,
@@ -149,7 +149,7 @@
    "label": "panel",
    "rect": [
     350,
-    319,
+    312,
     626,
     169
    ],
@@ -168,7 +168,7 @@
    "label": "About replying:",
    "rect": [
     350,
-    319,
+    312,
     83,
     16
    ],
@@ -187,7 +187,7 @@
    "label": "This session belongs to the Claude desktop app, so you reply to it in Claude. The Chat Place only reads it: sending from here while the desktop app has it open could run two turns at once and tangle the conversation. Open in Claude switches the desktop app to it. Continue Here starts a Chat Place copy of it, with the whole conversation so far, that you can reply to here; the desktop app session isn't changed.",
    "rect": [
     352,
-    341,
+    334,
     626,
     120
    ],
@@ -207,7 +207,7 @@
    "label": "Open in &Claude",
    "rect": [
     350,
-    465,
+    458,
     103,
     23
    ],
@@ -226,7 +226,7 @@
    "label": "Con&tinue Here...",
    "rect": [
     459,
-    465,
+    458,
     107,
     23
    ],
@@ -245,7 +245,7 @@
    "label": "Show tool &activity",
    "rect": [
     350,
-    496,
+    489,
     116,
     15
    ],
@@ -264,7 +264,7 @@
    "label": "&New Session...",
    "rect": [
     350,
-    519,
+    512,
     96,
     23
    ],
@@ -283,7 +283,7 @@
    "label": "&Refresh",
    "rect": [
     452,
-    519,
+    512,
     75,
     23
    ],
@@ -302,13 +302,13 @@
    "label": "",
    "rect": [
     0,
-    550,
+    543,
     984,
-    23
+    30
    ],
    "best": [
     301,
-    23
+    30
    ],
    "depth": 0,
    "parent": -1,
@@ -321,9 +321,9 @@
    "label": "Loaded Fix the flaky upload test, 4 messages.",
    "rect": [
     2,
-    554,
+    547,
     464,
-    16
+    23
    ],
    "best": [
     100,
@@ -340,9 +340,9 @@
    "label": "Fix the flaky upload test: needs you, Pick a name for the release branch",
    "rect": [
     471,
-    554,
+    547,
     312,
-    16
+    23
    ],
    "best": [
     100,
@@ -359,9 +359,9 @@
    "label": "1 session needs you",
    "rect": [
     788,
-    554,
-    154,
-    16
+    547,
+    147,
+    23
    ],
    "best": [
     111,
@@ -370,9 +370,7 @@
    "depth": 1,
    "parent": 14,
    "enabled": true,
-   "problems": [
-    "text cut off: smaller than its best size"
-   ]
+   "problems": []
   }
  ],
  "capture": "screen copy (stretched by Windows)"

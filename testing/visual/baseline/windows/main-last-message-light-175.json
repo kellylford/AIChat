@@ -7,7 +7,7 @@
  ],
  "client": [
   984,
-  447
+  440
  ],
  "dpi": [
   96,
@@ -23,7 +23,7 @@
     0,
     0,
     984,
-    447
+    440
    ],
    "best": [
     540,
@@ -61,7 +61,7 @@
     10,
     34,
     378,
-    407
+    400
    ],
    "best": [
     1182,
@@ -125,7 +125,7 @@
     404,
     50,
     574,
-    329
+    322
    ],
    "best": [
     385,
@@ -146,7 +146,7 @@
    "label": "Show tool &activity",
    "rect": [
     402,
-    393,
+    386,
     116,
     15
    ],
@@ -165,7 +165,7 @@
    "label": "&New Session...",
    "rect": [
     402,
-    416,
+    409,
     96,
     23
    ],
@@ -184,7 +184,7 @@
    "label": "&Refresh",
    "rect": [
     504,
-    416,
+    409,
     75,
     23
    ],
@@ -203,13 +203,13 @@
    "label": "",
    "rect": [
     0,
-    447,
+    440,
     984,
-    23
+    30
    ],
    "best": [
     301,
-    23
+    30
    ],
    "depth": 0,
    "parent": -1,
@@ -222,9 +222,9 @@
    "label": "4 sessions: 1 need you, 0 working.",
    "rect": [
     2,
-    451,
+    444,
     464,
-    16
+    23
    ],
    "best": [
     100,
@@ -241,9 +241,9 @@
    "label": "",
    "rect": [
     471,
-    451,
+    444,
     312,
-    16
+    23
    ],
    "best": [
     100,
@@ -260,9 +260,9 @@
    "label": "1 session needs you",
    "rect": [
     788,
-    451,
-    154,
-    16
+    444,
+    147,
+    23
    ],
    "best": [
     111,
@@ -271,9 +271,7 @@
    "depth": 1,
    "parent": 9,
    "enabled": true,
-   "problems": [
-    "text cut off: smaller than its best size"
-   ]
+   "problems": []
   }
  ],
  "capture": "screen copy (stretched by Windows)"
