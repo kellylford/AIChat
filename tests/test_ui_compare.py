@@ -231,3 +231,18 @@ def test_failures_in_a_run_without_a_tag_are_refused(app, tmp_path):
     _manifest(tmp_path / "run", "", {"settings": {"error": "the web page never drew"}})
     with pytest.raises(SystemExit, match="settings: the web page never drew"):
         ui_compare.accept(tmp_path / "run", tmp_path / "base", [])
+
+
+def test_a_partial_run_is_compared_only_with_the_surfaces_it_took(app, tmp_path):
+    for name in ("settings", "usage"):
+        _surface(tmp_path / "base", f"{name}-light-100", [])
+    _manifest(tmp_path / "base", "light-100", {"settings": {}, "usage": {}})
+    _surface(tmp_path / "run", "settings-light-100", [])
+    (tmp_path / "run" / "manifest-light-100.json").write_text(json.dumps(
+        {"tag": "light-100", "complete": False, "surfaces": {"settings": {}}}), encoding="utf-8")
+    result = ui_compare.compare(tmp_path / "run", tmp_path / "base")
+    assert result["missing"] == [] and result["unchanged"] == ["settings-light-100"]
+    # A complete run without usage is missing it.
+    (tmp_path / "run" / "manifest-light-100.json").write_text(json.dumps(
+        {"tag": "light-100", "complete": True, "surfaces": {"settings": {}}}), encoding="utf-8")
+    assert ui_compare.compare(tmp_path / "run", tmp_path / "base")["missing"] == ["usage-light-100"]

@@ -191,6 +191,10 @@ def compare(run: Path, baseline: Path) -> dict:
     # Only the variants this run took: a run of light-100 alone isn't missing
     # the other variants' pictures.
     base_stems = _stems(baseline, tags)
+    # And only the surfaces a partial run (--surface) set out to take. A
+    # complete run that lacks one is missing it: it's gone from the probe.
+    if any(m.get("complete") is False for m in _manifests(run)):
+        base_stems &= run_stems
     failed = _failed(run)
     shutil.rmtree(run / "diff", ignore_errors=True)  # an earlier comparison's
     result = {"failed": {s: failed[s] for s in sorted(failed)},

@@ -320,7 +320,7 @@
   {
    "class": "Control",
    "name": "Status",
-   "label": "Tool activity shown.",
+   "label": "Tool activity shown in Fix the flaky upload test.",
    "rect": [
     2,
     451,

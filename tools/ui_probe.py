@@ -1005,7 +1005,10 @@ def run(out: Path, tag: str, names, size) -> int:
         "wx": wx.version(), "python": platform.python_version(),
         # This Python's; a built app's own manifest may say otherwise.
         "dpi_awareness": _dpi_awareness(), "appearance": _system_appearance(),
-        "size": list(size), "surfaces": {},
+        "size": list(size),
+        # Every surface, or only some (--surface): a comparison expects only
+        # what a partial run set out to take.
+        "complete": list(names) == list(SURFACES), "surfaces": {},
     }
     started = time.time()
     # The same folder every run, not a random temporary one: its path shows
