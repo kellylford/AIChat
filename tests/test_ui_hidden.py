@@ -7782,3 +7782,41 @@ def test_the_messages_label_keeps_its_whole_text_and_key(env):
         wx.GetApp().ProcessPendingEvents()
         window.Destroy()
         wx.GetApp().ProcessPendingEvents()
+
+
+# -- a first run (#182) -----------------------------------------------------------------
+
+
+def test_with_no_sessions_the_messages_say_how_to_start_one(env):
+    from thechatplace.ui.main_frame import NO_SESSIONS_YET, MainFrame
+    store = OwnSessionStore(env["tmp"] / "own.json")
+    window = MainFrame(store=store, check_updates_at_start=False)
+    try:
+        assert pump(lambda: not window._first_snapshot)
+        settle(window)
+        assert window.session_list.GetCount() == 0
+        assert window.chat_list.GetStrings() == [NO_SESSIONS_YET]
+        assert "File, New Session (Ctrl+N)" in NO_SESSIONS_YET
+        # The first session arrives: the usual line again.
+        add_desktop(env, "local_a", "cli-a", "First one")
+        window.refresh_sessions(force=True)
+        assert pump(lambda: window.session_list.GetCount() == 1)
+        assert window.chat_list.GetStrings() == [
+            "No session loaded. Choose one in the session list and press Enter."]
+    finally:
+        window.stop_timers()
+        window._pool.shutdown(wait=True)
+        wx.GetApp().ProcessPendingEvents()
+        window.Destroy()
+        wx.GetApp().ProcessPendingEvents()
+
+
+
+
+def test_a_view_with_nothing_in_it_is_not_a_first_run(frame, env):
+    from thechatplace.ui.main_frame import NO_SESSIONS_YET
+    settle(frame)
+    assert frame._snapshot.sessions  # there are sessions, whatever the view shows
+    frame._list_keys = []
+    frame._sync_no_session_line()
+    assert frame.chat_list.GetStrings() != [NO_SESSIONS_YET]
