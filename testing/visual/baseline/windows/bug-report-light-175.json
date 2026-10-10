@@ -81,7 +81,7 @@
     10,
     73,
     628,
-    98
+    94
    ],
    "best": [
     127,
@@ -99,7 +99,7 @@
    "label": "What you &expected (optional):",
    "rect": [
     8,
-    177,
+    173,
     160,
     16
    ],
@@ -118,9 +118,9 @@
    "label": "",
    "rect": [
     10,
-    195,
+    191,
     628,
-    98
+    94
    ],
    "best": [
     127,
@@ -138,7 +138,7 @@
    "label": "S&teps to reproduce (optional):",
    "rect": [
     8,
-    299,
+    291,
     158,
     16
    ],
@@ -157,9 +157,9 @@
    "label": "",
    "rect": [
     10,
-    317,
+    309,
     628,
-    98
+    95
    ],
    "best": [
     127,
@@ -177,7 +177,7 @@
    "label": "What the report &includes besides your words (no session titles, folders or messages):",
    "rect": [
     8,
-    421,
+    410,
     442,
     16
    ],
@@ -193,12 +193,12 @@
   {
    "class": "TextCtrl",
    "name": "What the report includes",
-   "label": "The Chat Place: 0.1.5 (run from source)\r\nWindows: Windows-11-10.0.26300-SP0\r\nPython: 3.12.10\r\nwxPython: 4.3.1 msw (phoenix) wxWidgets 3.3.3\r\nClaude Code: 2.1.286 (Claude Code)\r\nAnnouncements: full, speech engine auto\r\nSession list: showing all, sorted status\r\nReading: formatted full messages\r\nSessions listed: 3 desktop app, 1 Chat Place, 0 terminal",
+   "label": "The Chat Place: 0.1.6 (run from source)\r\nWindows: Windows-11-10.0.26300-SP0\r\nPython: 3.12.10\r\nwxPython: 4.3.1 msw (phoenix) wxWidgets 3.3.3\r\nClaude Code: 2.1.286 (Claude Code)\r\nAnnouncements: full, speech engine auto\r\nSession list: showing all, sorted status\r\nReading: formatted full messages\r\nSessions listed: 3 desktop app, 1 Chat Place, 0 terminal",
    "rect": [
     10,
-    439,
+    428,
     628,
-    98
+    94
    ],
    "best": [
     127,
@@ -208,7 +208,7 @@
    "parent": -1,
    "enabled": true,
    "problems": [],
-   "value": "The Chat Place: 0.1.5 (run from source)\nWindows: Windows-11-10.0.26300-SP0\nPython: 3.12.10\nwxPython: 4.3.1 msw (phoenix) wxWidgets 3.3.3\nClaude Code: 2.1.286 (Claude Code)\nAnnouncements: full, speech engine auto\nSession list: showing all, sorted status\nReading: formatted full messages\nSessions listed: 3 desktop app, 1 Chat Place, 0 terminal"
+   "value": "The Chat Place: 0.1.6 (run from source)\nWindows: Windows-11-10.0.26300-SP0\nPython: 3.12.10\nwxPython: 4.3.1 msw (phoenix) wxWidgets 3.3.3\nClaude Code: 2.1.286 (Claude Code)\nAnnouncements: full, speech engine auto\nSession list: showing all, sorted status\nReading: formatted full messages\nSessions listed: 3 desktop app, 1 Chat Place, 0 terminal"
   },
   {
    "class": "StaticText",
@@ -216,20 +216,18 @@
    "label": "Open on GitHub needs access to the app's repository on GitHub. Without it, use Copy Report and email the report to support@theideaplace.net.",
    "rect": [
     8,
-    543,
+    528,
     628,
-    16
+    31
    ],
    "best": [
-    759,
-    16
+    614,
+    31
    ],
    "depth": 0,
    "parent": -1,
    "enabled": true,
-   "problems": [
-    "text cut off: smaller than its best size"
-   ]
+   "problems": []
   },
   {
    "class": "Button",

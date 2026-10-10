@@ -1,0 +1,144 @@
+{
+ "title": "The Chat Place: 6 results for \"the\", Find in All Sessions",
+ "class": "FindResultsDialog",
+ "size": [
+  820,
+  520
+ ],
+ "client": [
+  804,
+  481
+ ],
+ "dpi": [
+  96,
+  96
+ ],
+ "content_scale": 1.0,
+ "controls": [
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "&Results:",
+   "rect": [
+    8,
+    8,
+    41,
+    16
+   ],
+   "best": [
+    41,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "ListBox",
+   "name": "Results. 6 messages in 2 sessions contain \"the\". Searched 2 sessions. 2 had no transcript to read.",
+   "label": "",
+   "rect": [
+    10,
+    26,
+    788,
+    354
+   ],
+   "best": [
+    1091,
+    94
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "items": [
+    "Fix the flaky upload test, You, 6 October 07:00: Thanks. Which branch name should the release use?",
+    "Fix the flaky upload test, Claude, 6 October 07:00: What changed The upload test failed one run in ten because it read the progress file before the writer had flushed it. It now waits for the writer to say…",
+    "Fix the flaky upload test, Claude, 6 October 07:00: I'll look at the test and the uploader.",
+    "Fix the flaky upload test, You, 6 October 07:00: The upload test fails now and then. Can you find out why?",
+    "Visual probe, Claude, 6 October 07:00: What changed The upload test failed one run in ten because it read the progress file before the writer had flushed it. It now waits for the writer to say…",
+    "Visual probe, You, 6 October 07:00: Make the uploader flush before it signals."
+   ],
+   "selection": 0
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "&Searched:",
+   "rect": [
+    8,
+    386,
+    52,
+    16
+   ],
+   "best": [
+    52,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "TextCtrl",
+   "name": "Searched",
+   "label": "6 messages in 2 sessions contain \"the\". Searched 2 sessions. 2 had no transcript to read.",
+   "rect": [
+    10,
+    404,
+    788,
+    40
+   ],
+   "best": [
+    127,
+    83
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": "6 messages in 2 sessions contain \"the\". Searched 2 sessions. 2 had no transcript to read."
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Go to Message",
+   "rect": [
+    616,
+    450,
+    99,
+    23
+   ],
+   "best": [
+    99,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "C&lose",
+   "rect": [
+    721,
+    450,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  }
+ ],
+ "capture": "PrintWindow"
+}

@@ -23,18 +23,16 @@
     8,
     8,
     608,
-    16
+    31
    ],
    "best": [
-    766,
-    16
+    574,
+    31
    ],
    "depth": 0,
    "parent": -1,
    "enabled": true,
-   "problems": [
-    "text cut off: smaller than its best size"
-   ]
+   "problems": []
   },
   {
    "class": "StaticText",
@@ -42,7 +40,7 @@
    "label": "A&vailable columns:",
    "rect": [
     8,
-    32,
+    47,
     101,
     16
    ],
@@ -61,9 +59,9 @@
    "label": "",
    "rect": [
     10,
-    54,
+    69,
     296,
-    280
+    265
    ],
    "best": [
     220,
@@ -84,7 +82,7 @@
    "label": "&Shown columns, in the order they're read:",
    "rect": [
     320,
-    32,
+    47,
     221,
     16
    ],
@@ -103,9 +101,9 @@
    "label": "",
    "rect": [
     322,
-    54,
+    69,
     296,
-    280
+    265
    ],
    "best": [
     241,

@@ -26,8 +26,8 @@
     439
    ],
    "best": [
-    1070,
-    617
+    540,
+    632
    ],
    "depth": 0,
    "parent": -1,
@@ -60,7 +60,7 @@
    "rect": [
     10,
     34,
-    326,
+    378,
     399
    ],
    "best": [
@@ -84,14 +84,14 @@
    "name": "staticText",
    "label": "Fix the flaky upload test, AIChat, needs you: Pick a name for the release branch. Claude desktop app session, read-only.",
    "rect": [
-    350,
+    402,
     8,
-    626,
-    16
+    574,
+    31
    ],
    "best": [
-    626,
-    16
+    525,
+    31
    ],
    "depth": 1,
    "parent": 0,
@@ -103,13 +103,13 @@
    "name": "staticText",
    "label": "&Messages in Fix the flaky upload test (needs you: Pick a name for the release branch, read-only):",
    "rect": [
-    350,
-    32,
-    504,
+    402,
+    47,
+    574,
     16
    ],
    "best": [
-    504,
+    55,
     16
    ],
    "depth": 1,
@@ -122,10 +122,10 @@
    "name": "Messages in Fix the flaky upload test (needs you: Pick a name for the release branch, read-only)",
    "label": "",
    "rect": [
-    352,
-    50,
-    626,
-    152
+    404,
+    65,
+    574,
+    137
    ],
    "best": [
     376,
@@ -150,9 +150,9 @@
    "name": "panel",
    "label": "panel",
    "rect": [
-    350,
+    402,
     208,
-    626,
+    574,
     169
    ],
    "best": [
@@ -169,7 +169,7 @@
    "name": "staticText",
    "label": "About replying:",
    "rect": [
-    350,
+    402,
     208,
     83,
     16
@@ -188,9 +188,9 @@
    "name": "About replying",
    "label": "This session belongs to the Claude desktop app, so you reply to it in Claude. The Chat Place only reads it: sending from here while the desktop app has it open could run two turns at once and tangle the conversation. Open in Claude switches the desktop app to it. Continue Here starts a Chat Place copy of it, with the whole conversation so far, that you can reply to here; the desktop app session isn't changed.",
    "rect": [
-    352,
+    404,
     230,
-    626,
+    574,
     120
    ],
    "best": [
@@ -208,7 +208,7 @@
    "name": "button",
    "label": "Open in &Claude",
    "rect": [
-    350,
+    402,
     354,
     103,
     23
@@ -227,7 +227,7 @@
    "name": "button",
    "label": "Con&tinue Here...",
    "rect": [
-    459,
+    511,
     354,
     107,
     23
@@ -246,7 +246,7 @@
    "name": "check",
    "label": "Show tool &activity",
    "rect": [
-    350,
+    402,
     385,
     116,
     15
@@ -265,7 +265,7 @@
    "name": "button",
    "label": "&New Session...",
    "rect": [
-    350,
+    402,
     408,
     96,
     23
@@ -284,7 +284,7 @@
    "name": "button",
    "label": "&Refresh",
    "rect": [
-    452,
+    504,
     408,
     75,
     23

@@ -135,10 +135,49 @@
   {
    "class": "StaticText",
    "name": "staticText",
-   "label": "Permission m&ode:",
+   "label": "&Effort:",
    "rect": [
     10,
     106,
+    33,
+    16
+   ],
+   "best": [
+    33,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Choice",
+   "name": "Effort",
+   "label": "",
+   "rect": [
+    114,
+    103,
+    540,
+    23
+   ],
+   "best": [
+    211,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": "Default (your Claude Code setting)"
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "Permission m&ode:",
+   "rect": [
+    10,
+    137,
     96,
     16
    ],
@@ -157,7 +196,7 @@
    "label": "",
    "rect": [
     114,
-    103,
+    134,
     540,
     23
    ],
@@ -177,7 +216,7 @@
    "label": "About &continuing:",
    "rect": [
     10,
-    136,
+    167,
     98,
     16
    ],
@@ -193,12 +232,12 @@
   {
    "class": "TextCtrl",
    "name": "About continuing",
-   "label": "This starts a Chat Place session that is a copy of this session, with its whole conversation so far, so you can carry on and reply here. The original, in the desktop app or a terminal, isn't changed, and replies here don't appear in it.\r\n\r\nThe permission mode decides what Claude may do without asking. When Claude asks for permission, asks you a question or has a plan for you to approve, the turn waits: The Chat Place announces it, the session shows as needing you, and Ctrl+Shift+A answers.",
+   "label": "This starts a Chat Place session that is a copy of this session, with its whole conversation so far, so you can carry on and reply here. The original, in the desktop app or a terminal, isn't changed, and replies here don't appear in it.\r\n\r\nThe permission mode decides what Claude may do without asking. When Claude asks for permission, asks you a question or has a plan for you to approve, the turn waits: The Chat Place announces it, the session shows as needing you, and Ctrl+Shift+A answers. Effort is how hard Claude thinks; models that don't support effort levels ignore it. File, Change Permission Mode and Change Effort change them later.",
    "rect": [
     12,
-    154,
+    185,
     644,
-    60
+    72
    ],
    "best": [
     127,
@@ -216,7 +255,7 @@
    "label": "First &message:",
    "rect": [
     10,
-    222,
+    265,
     75,
     16
    ],
@@ -235,9 +274,9 @@
    "label": "",
    "rect": [
     12,
-    250,
+    293,
     644,
-    284
+    241
    ],
    "best": [
     127,
