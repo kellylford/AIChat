@@ -244,7 +244,9 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   read-only, as desktop app sessions are. Each row says "terminal session" and names the folder
   you started it in. Its title is the name you gave it with `/rename`, or else the one Claude Code
   gave it, or else the start of your first message. View, Show Sessions, Terminal Sessions lists
-  only them, and Ctrl+F in the list finds them by "terminal". Enter reads the conversation. The
+  only them, and Ctrl+F in the list finds them by "terminal". Enter reads the conversation.
+  Claude often makes many tool calls in a terminal session: they're hidden unless you turn on Show
+  Tool Activity (Ctrl+T), which also speaks each one as it happens, and Ctrl+T hides them again. The
   list shows one as working while Claude works in it, and as needing you while it waits on you in
   the terminal (a permission or a question), and both are announced. You reply to it in its
   terminal, or carry it on here with Continue Here; Open in Claude isn't offered, since the

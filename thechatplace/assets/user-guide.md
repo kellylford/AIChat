@@ -179,6 +179,10 @@ working while Claude works in it, and as needing you while it waits on you in th
 permission or a question), and announces both. When it needs you, its line says what for, such as
 "needs you: dialog open".
 
+Claude often makes many tool calls in a terminal session. Their messages are hidden unless you
+turn on **Show Tool Activity** (Ctrl+T), which also speaks each one as it happens; press Ctrl+T
+again to hide them.
+
 You reply to a terminal session in its terminal, or carry it on here with **Continue Here**. The
 desktop app doesn't list terminal sessions, so Open in Claude isn't offered for them. Sessions
 that scripts run with `claude -p`, and those of the VS Code extension, aren't listed.
