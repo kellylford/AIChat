@@ -5363,7 +5363,8 @@ def test_columns_dialog_moves_says_where_and_stays_on_the_column(frame, monkeypa
     try:
         assert dialog.shown.GetString(0) == "Title"
         # Started (#209) and Last message (#146) aren't shown by default.
-        assert list(dialog.available.GetStrings()) == ["Started (when the session began)", "Last message"]
+        assert list(dialog.available.GetStrings()) == [
+            "Started (when the session began)", "Last message"]
         assert dialog.preview.GetValue().startswith("Blocked one, Repo, needs you")
         dialog.shown.SetSelection(2)  # Status
         dialog.move_to_end(top=True)
@@ -5417,7 +5418,8 @@ def test_columns_dialog_add_remove_and_reset(frame, monkeypatch):
         dialog.reset()
         assert said[-1] == "Columns reset to the default: 10 shown, title first."
         assert dialog.fields()[0] == "title" and len(dialog.fields()) == 10
-        assert list(dialog.available.GetStrings()) == ["Started (when the session began)", "Last message"]
+        assert list(dialog.available.GetStrings()) == [
+            "Started (when the session began)", "Last message"]
         dialog.available.SetSelection(0)
         dialog.add()
         assert said[-1] == "Started added, 11 of 11."
@@ -6479,6 +6481,23 @@ def test_a_new_last_message_on_your_row_waits_while_it_works(frame, env, monkeyp
     quiet.last_activity_ms -= 3 * 60_000  # a clock tick alone: left alone
     frame._refresh_list_in_place()
     assert row() == before
+
+
+def test_the_started_column_is_a_clock_too_and_never_rereads_your_row(frame, env,
+                                                                     monkeypatch):
+    """#209 review: Started moves with the clock ("started 5 minutes ago",
+    then 6), and the row you're on mustn't be read again for that."""
+    select(frame, "Quiet one")
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    quiet = _session(frame, "Quiet one")
+    quiet.created_ms = int(time.time() * 1000) - 5 * 60_000
+    _choose_columns(monkeypatch, ["title", "status", "started"])
+    frame.on_session_columns()  # rewrites the rows, with the new column
+    before = frame.session_list.GetStringSelection()
+    assert before.endswith("started 5 minutes ago")
+    quiet.created_ms -= 3 * 60_000  # three minutes on
+    frame._refresh_list_in_place()
+    assert frame.session_list.GetStringSelection() == before
 
 
 def test_adding_last_message_on_a_working_session_fills_your_row_at_once(frame, env,

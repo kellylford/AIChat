@@ -125,10 +125,9 @@ class SessionInfo:
         session on every refresh of the list."""
         if not self.cli_session_id or not platform_paths.is_safe_id(self.cli_session_id):
             return 0
-        root = (self.claude_home / "projects" if self.claude_home is not None
-                else platform_paths.projects_dir())
+        root = self.claude_home / "projects" if self.claude_home is not None else None
         try:
-            path = root / platform_paths.encode_cwd(self.cwd) / f"{self.cli_session_id}.jsonl"
+            path = platform_paths.direct_transcript_path(self.cwd, self.cli_session_id, root)
             return os.stat(path).st_mtime_ns // 1_000_000
         except (OSError, ValueError):
             return 0

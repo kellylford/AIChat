@@ -831,7 +831,10 @@ class _FactsReader:
             if not line.strip():
                 continue
             self.records += 1
-            if self.head_read and not any(marker in line for marker in _TITLE_RECORDS):
+            # Past its start, only titles matter, and the session's start
+            # time if no record so far had one (#209).
+            if (self.head_read and not any(marker in line for marker in _TITLE_RECORDS)
+                    and (self.facts.started_ms or b'"timestamp"' not in line)):
                 continue
             record = _json_line(line)
             if record is not None:
