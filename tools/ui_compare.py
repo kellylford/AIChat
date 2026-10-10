@@ -111,7 +111,12 @@ def compare(run: Path, baseline: Path) -> dict:
     run_names = {p.stem for p in run.glob("*.json") if not p.stem.startswith("manifest")}
     base_names = {p.stem for p in baseline.glob("*.json") if not p.stem.startswith("manifest")} \
         if baseline.is_dir() else set()
-    result = {"new": sorted(run_names - base_names), "missing": sorted(base_names - run_names),
+    # Only the variants this run took: a run of light-100 alone isn't missing
+    # the other variants' pictures.
+    tags = {p.stem[len("manifest-"):] for p in run.glob("manifest-*.json")}
+    if tags:
+        base_names = {n for n in base_names if any(n.endswith(f"-{tag}") for tag in tags)}
+    result ={"new": sorted(run_names - base_names), "missing": sorted(base_names - run_names),
               "unchanged": [], "changed": {}}
     for stem in sorted(run_names & base_names):
         old = json.loads((baseline / f"{stem}.json").read_text(encoding="utf-8"))
@@ -132,7 +137,7 @@ def compare(run: Path, baseline: Path) -> dict:
 
 
 def report(result: dict) -> str:
-    lines = [f"# Probe compared with the baseline", "",
+    lines = ["# Probe compared with the baseline", "",
              f"{len(result['changed'])} changed, {len(result['unchanged'])} unchanged, "
              f"{len(result['new'])} new, {len(result['missing'])} missing.", ""]
     if result["changed"]:
@@ -150,6 +155,11 @@ def report(result: dict) -> str:
 def accept(run: Path, baseline: Path, names) -> list:
     baseline.mkdir(parents=True, exist_ok=True)
     stems = names or sorted(p.stem for p in run.glob("*.json") if not p.stem.startswith("manifest"))
+    if not names:
+        # Accepting a whole run keeps its manifests: which Windows, scaling
+        # and theme the baseline was taken in.
+        for manifest in run.glob("manifest-*.json"):
+            shutil.copy2(manifest, baseline / manifest.name)
     for stem in stems:
         for suffix in (".png", ".json"):
             source = run / f"{stem}{suffix}"

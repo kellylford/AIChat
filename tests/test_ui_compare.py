@@ -110,3 +110,22 @@ def test_new_and_missing_surfaces_and_accepting(app, tmp_path):
                             "--accept", "fresh-light-100"]) == 0
     assert (tmp_path / "base" / "fresh-light-100.png").exists()
     assert not (tmp_path / "base" / "manifest-light-100.json").exists()
+
+
+def test_a_run_of_one_variant_is_compared_only_with_that_variant(app, tmp_path):
+    _surface(tmp_path / "base", "settings-light-100", [])
+    _surface(tmp_path / "base", "settings-dark-100", [])
+    _surface(tmp_path / "run", "settings-light-100", [])
+    (tmp_path / "run" / "manifest-light-100.json").write_text("{}", encoding="utf-8")
+    result = ui_compare.compare(tmp_path / "run", tmp_path / "base")
+    assert result["missing"] == [] and result["unchanged"] == ["settings-light-100"]
+
+
+def test_accepting_a_whole_run_keeps_its_manifests(app, tmp_path):
+    _surface(tmp_path / "run", "usage-dark-100", [])
+    (tmp_path / "run" / "manifest-dark-100.json").write_text('{"tag": "dark-100"}',
+                                                              encoding="utf-8")
+    assert ui_compare.main([str(tmp_path / "run"), "--baseline", str(tmp_path / "base"),
+                            "--accept"]) == 0
+    assert (tmp_path / "base" / "manifest-dark-100.json").exists()
+    assert (tmp_path / "base" / "usage-dark-100.png").exists()

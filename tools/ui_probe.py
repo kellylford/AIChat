@@ -33,6 +33,7 @@ import ctypes
 import json
 import os
 import platform
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -992,26 +993,32 @@ def run(out: Path, tag: str, names, size) -> int:
         "size": list(size), "surfaces": {},
     }
     started = time.time()
-    with tempfile.TemporaryDirectory(prefix="tcp-probe-", ignore_cleanup_errors=True) as tmp:
-        # One WebView2 profile for the run (the runtime keeps using the first
-        # one it was given), and none of it in the real local app data.
-        os.environ["WEBVIEW2_USER_DATA_FOLDER"] = str(Path(tmp) / "webview2")
-        for name in names:
-            stem = f"{name}-{tag}" if tag else name
-            print(f"  {stem}", flush=True)
-            entry = photograph(name, out, stem, size, Path(tmp) / name)
-            if str(entry.get("error", "")).startswith(NEVER_DREW):
-                # WebView2 now and then never draws a page in a fresh VM
-                # ("WebViewCreated ... Operation aborted"); a new window
-                # usually does. Still blank twice is reported.
-                print(f"  {stem} (again: its page never drew)", flush=True)
-                entry = photograph(name, out, stem, size, Path(tmp) / f"{name}-again")
-                entry["retried"] = True
-            manifest["surfaces"][name] = entry
-            manifest["seconds"] = round(time.time() - started, 1)
-            # Written after every surface, so a crash keeps what was done.
-            manifest_path.write_text(json.dumps(manifest, indent=1, ensure_ascii=False),
-                                     encoding="utf-8")
+    # The same folder every run, not a random temporary one: its path shows
+    # in New Session and elsewhere, and a path that changed every run would
+    # show as a change against the baseline.
+    tmp = Path(tempfile.gettempdir()) / "tcp-probe"
+    shutil.rmtree(tmp, ignore_errors=True)
+    tmp.mkdir(parents=True, exist_ok=True)
+    # One WebView2 profile for the run (the runtime keeps using the first
+    # one it was given), and none of it in the real local app data.
+    os.environ["WEBVIEW2_USER_DATA_FOLDER"] = str(tmp / "webview2")
+    for name in names:
+        stem = f"{name}-{tag}" if tag else name
+        print(f"  {stem}", flush=True)
+        entry = photograph(name, out, stem, size, tmp / name)
+        if str(entry.get("error", "")).startswith(NEVER_DREW):
+            # WebView2 now and then never draws a page in a fresh VM
+            # ("WebViewCreated ... Operation aborted"); a new window
+            # usually does. Still blank twice is reported.
+            print(f"  {stem} (again: its page never drew)", flush=True)
+            shutil.rmtree(tmp / name, ignore_errors=True)
+            entry = photograph(name, out, stem, size, tmp / name)
+            entry["retried"] = True
+        manifest["surfaces"][name] = entry
+        manifest["seconds"] = round(time.time() - started, 1)
+        # Written after every surface, so a crash keeps what was done.
+        manifest_path.write_text(json.dumps(manifest, indent=1, ensure_ascii=False),
+                                 encoding="utf-8")
     results = manifest["surfaces"]
     failed = [n for n, r in results.items() if r.get("error")]
     flagged = [n for n, r in results.items() if r.get("problems")]
