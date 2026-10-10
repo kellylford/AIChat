@@ -1,6 +1,6 @@
 # The Chat Place keyboard shortcuts
 
-One window, three parts, in Tab order: the session list; the messages of the loaded session; and the reply box with Send and Stop (for a Claude desktop app session, a read-only note, Open in Claude and Continue Here in the same place). Shift+Tab goes back the same way.
+One window, three parts, in Tab order: the session list; the messages of the loaded session; and the reply box with Send and Stop (for a desktop app or terminal session, a read-only note saying where you reply, with Open in Claude and Continue Here as they apply, in the same place). Shift+Tab goes back the same way.
 
 ## Moving around
 
@@ -9,7 +9,7 @@ One window, three parts, in Tab order: the session list; the messages of the loa
 | Tab, Shift+Tab | Session list, messages, reply box, and back |
 | Ctrl+1 | Go to the session list |
 | Ctrl+2 | Go to the messages |
-| Ctrl+3 | Go to the reply box (or the note, for a desktop session) |
+| Ctrl+3 | Go to the reply box (or the note, for a read-only session) |
 | F6, Shift+F6 | Next or previous part of the window: session list, messages, reply box (when a session is loaded), status bar, and round again |
 | Ctrl+9 | Go to the status bar: what was last said, the loaded session, and buttons for how full the context is, sessions that need you and an update; Left and Right move between them, Tab leaves |
 | Escape in the messages or the reply box | Back to the session list, on the same session |
