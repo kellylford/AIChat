@@ -258,7 +258,11 @@ def describe(window: wx.TopLevelWindow) -> dict:
                      "label": _label(child), "rect": rect, "best": [best.width, best.height],
                      "depth": depth, "parent": parent_index, "enabled": child.IsEnabled(),
                      "problems": []}
-            if isinstance(child, _TEXT_CONTROLS) and entry["label"]:
+            # A label that ends in "..." on purpose (ST_ELLIPSIZE_*) shows
+            # that it's shortened, and screen readers get it whole.
+            ellipsized = isinstance(child, wx.StaticText) and child.HasFlag(
+                wx.ST_ELLIPSIZE_START | wx.ST_ELLIPSIZE_MIDDLE | wx.ST_ELLIPSIZE_END)
+            if isinstance(child, _TEXT_CONTROLS) and entry["label"] and not ellipsized:
                 if best.width > screen.width + 1 or best.height > screen.height + 1:
                     entry["problems"].append("text cut off: smaller than its best size")
             if isinstance(child, wx.ListBox):

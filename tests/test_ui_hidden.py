@@ -7648,3 +7648,72 @@ def test_a_result_in_a_session_without_its_transcript_forgets_the_target(frame, 
 def main_frame_module():
     from thechatplace.ui import main_frame
     return main_frame
+
+
+# -- long labels wrap (#176) ----------------------------------------------------------
+
+
+def test_a_wrapping_label_wraps_to_its_width_and_keeps_its_text(frame):
+    from thechatplace.ui.dialogs import WrappingText
+    dialog = wx.Dialog(frame, size=(400, 300))
+    try:
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        text = "A sentence long enough that it needs more than one line in a narrow dialog. " * 3
+        note = WrappingText(dialog, text)
+        sizer.Add(note, 0, wx.EXPAND | wx.ALL, 8)
+        dialog.SetSizer(sizer)
+        dialog.Layout()
+        one_line = note.GetTextExtent("Ag").height
+        assert note.GetSize().width <= 400
+        assert note.GetBestSize().width <= note.GetSize().width + 1
+        assert note.GetSize().height >= 2 * one_line  # wrapped onto several lines
+        assert note.GetLabel() == text  # without the breaks Wrap put in
+        note.set_text("Short.")
+        dialog.Layout()
+        assert note.GetLabel() == "Short." and note.GetSize().height < 2 * one_line
+    finally:
+        dialog.Destroy()
+
+
+def test_remote_control_wraps_but_says_all_it_says(frame):
+    from thechatplace.ui.dialogs import SettingsDialog
+    dialog = SettingsDialog(frame, speech.SpeechSettings(), speech.default_options())
+    try:
+        dialog.Layout()
+        label = dialog.remote_control.GetLabel()
+        # Several lines, so it fits; the same words, so it's read the same.
+        assert label.count("\n") >= 1
+        assert " ".join(label.split()) == (
+            "Turn on Remote &Control for The Chat Place's sessions, so you can reach them "
+            "from claude.ai and other devices. Their conversations are copied to claude.ai "
+            "and kept there. (File, Remote Control changes one session.)")
+        box = dialog.remote_control
+        assert box.GetBestSize().width <= box.GetSize().width + 1
+        assert box.GetRect().GetRight() <= dialog.GetClientSize().width
+    finally:
+        dialog.Destroy()
+
+
+def test_usage_is_wide_enough_for_its_longest_line(frame):
+    from thechatplace.ui.dialogs import UsageDialog
+    long_line = ("Visual probe: Context: 1 tokens used; the window's size isn't known until "
+                 "this session or another on the same model runs a turn here.")
+    dialog = UsageDialog(frame, [long_line, "Five-hour limit: 12% used."], lambda t, o: None)
+    try:
+        dialog.Layout()
+        needed = dialog.GetTextExtent(long_line).width
+        screen = wx.Display(0).GetClientArea().width
+        assert dialog.list.GetSize().width >= min(needed, screen - 100)
+    finally:
+        dialog.Destroy()
+
+
+def test_settings_is_no_taller_than_its_controls(frame):
+    from thechatplace.ui.dialogs import SettingsDialog
+    dialog = SettingsDialog(frame, speech.SpeechSettings(), speech.default_options())
+    try:
+        dialog.Layout()
+        spare = dialog.GetClientSize().height - dialog.GetSizer().GetMinSize().height
+        assert 0 <= spare <= 2
+    finally:
+        dialog.Destroy()

@@ -90,7 +90,7 @@ from .statusbar import StatusParts
 from ..rendering import html_page, message_page
 from ..ui_text import markdown_as_text, shortcuts_html, update_item_label, update_item_spoken
 from .dialogs import (ALLOW, ALLOW_SESSION, ID_PLAIN_TEXT, AboutYouDialog, ChangesDialog, CodeBlocksDialog, FindResultsDialog,
-                      FormattedMessageDialog, LinksDialog,
+                      FormattedMessageDialog, LinksDialog, WrappingText,
                       BugReportDialog, CommandPickerDialog, MessageDialog, NewSessionDialog, PermissionDialog, PlanDialog,
                       ManageGroupsDialog, PromptsDialog, QuestionDialog, SessionColumnsDialog,
                       SettingsDialog, ShortcutsDialog, UpdateInstalledDialog, UsageDialog,
@@ -493,11 +493,17 @@ class MainFrame(wx.Frame):
         outer.Add(left, 2, wx.EXPAND)
 
         vsizer = wx.BoxSizer(wx.VERTICAL)
-        self.session_heading = wx.StaticText(root, label="")
-        vsizer.Add(self.session_heading, 0, wx.LEFT | wx.TOP | wx.RIGHT, 8)
+        # The heading wraps, and the messages label (which repeats the
+        # session's title) ends in "..." when it doesn't fit: as single lines
+        # both ran past the window's edge with a long title (#176). Screen
+        # readers read both in full.
+        self.session_heading = WrappingText(root)
+        vsizer.Add(self.session_heading, 0, wx.EXPAND | wx.LEFT | wx.TOP | wx.RIGHT, 8)
 
-        self.messages_label = wx.StaticText(root, label="&Messages:")
-        vsizer.Add(self.messages_label, 0, wx.LEFT | wx.TOP, 8)
+        self.messages_label = wx.StaticText(root, label="&Messages:",
+                                            style=wx.ST_ELLIPSIZE_END | wx.ST_NO_AUTORESIZE)
+        self.messages_label.SetMinSize((1, -1))
+        vsizer.Add(self.messages_label, 0, wx.EXPAND | wx.LEFT | wx.TOP | wx.RIGHT, 8)
         self.chat_list = wx.ListBox(root, style=wx.LB_SINGLE, name="Messages")
         self.chat_list.SetMinSize((LIST_MIN_WIDTH, -1))  # see session_list
         set_accessible_name(self.chat_list, "Messages")
@@ -1321,7 +1327,7 @@ class MainFrame(wx.Frame):
         self.chat_list.Set(["No session loaded. Choose one in the session list and "
                             "press Enter."])
         self.chat_list.SetSelection(0)
-        self.session_heading.SetLabel("")
+        self.session_heading.set_text("")
         if hasattr(self, "status_parts"):
             self._update_status_session()
             self._update_status_context()
@@ -1375,7 +1381,7 @@ class MainFrame(wx.Frame):
         elif info.remote:
             kind += ", on Remote Control in the desktop app"
         state = info.state + (f": {info.detail}" if info.detail else "")
-        self.session_heading.SetLabel(f"{info.title}, {info.repo}, {state}. {kind}.")
+        self.session_heading.set_text(f"{info.title}, {info.repo}, {state}. {kind}.")
         self._update_messages_label()
         self._update_status_session()
 
