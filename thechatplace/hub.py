@@ -101,6 +101,11 @@ def collect(own: Iterable[OwnSession], running_own_ids: Set[str],
         sessions.append(info)
     listed = desktop.desktop_cli_ids | desktop.cowork_cli_ids | {o.cli_session_id for o in own}
     sessions.extend(load_terminal_sessions(terminal_projects_dir(), live, listed, TERMINAL_FACTS))
+    for info in sessions:
+        # Last activity follows Claude's work (#209): the desktop app's time,
+        # and an own session's (set when The Chat Place starts or ends a
+        # turn), stand still through a long turn or one run elsewhere.
+        info.last_activity_ms = max(info.last_activity_ms, info.transcript_written_ms())
     if last_messages:
         fill_last_messages(sessions)
     folders = [desktop_dir] if desktop_dir is not None else platform_paths.desktop_sessions_dirs()

@@ -41,6 +41,7 @@ import os
 import re
 import threading
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -770,6 +771,9 @@ class SessionFacts:
     first_prompt: str = ""
     #: When the file last changed, in milliseconds.
     modified_ms: int = 0
+    #: When the session began: its first record's time, in milliseconds
+    #: since the epoch (0 if none says). The session list's Started (#209).
+    started_ms: int = 0
 
     @property
     def title(self) -> str:
@@ -858,6 +862,8 @@ class _FactsReader:
             return
         if record.get("isSidechain"):
             return
+        if not facts.started_ms:
+            facts.started_ms = record_time_ms(record)
         if not facts.entrypoint and isinstance(record.get("entrypoint"), str):
             facts.entrypoint = record["entrypoint"]
         if not facts.cwd and isinstance(record.get("cwd"), str) and record["cwd"]:
@@ -881,6 +887,21 @@ def _edge(handle, offset: int, size: int = 64) -> bytes:
     start = max(0, offset - size)
     handle.seek(start)
     return handle.read(offset - start)
+
+
+def record_time_ms(record: dict) -> int:
+    """A record's ``timestamp`` (ISO 8601, "Z" for UTC) in milliseconds since
+    the epoch, or 0 if it has none that can be read."""
+    stamp = record.get("timestamp")
+    if not isinstance(stamp, str) or not stamp:
+        return 0
+    try:
+        moment = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except ValueError:
+        return 0
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return int(moment.timestamp() * 1000)
 
 
 def _json_line(line: bytes) -> Optional[dict]:

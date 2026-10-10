@@ -5362,8 +5362,8 @@ def test_columns_dialog_moves_says_where_and_stays_on_the_column(frame, monkeypa
     dialog, said, focused = _columns_dialog(frame)
     try:
         assert dialog.shown.GetString(0) == "Title"
-        # Last message (#146) is the one column not shown by default.
-        assert list(dialog.available.GetStrings()) == ["Last message"]
+        # Started (#209) and Last message (#146) aren't shown by default.
+        assert list(dialog.available.GetStrings()) == ["Started (when the session began)", "Last message"]
         assert dialog.preview.GetValue().startswith("Blocked one, Repo, needs you")
         dialog.shown.SetSelection(2)  # Status
         dialog.move_to_end(top=True)
@@ -5417,13 +5417,16 @@ def test_columns_dialog_add_remove_and_reset(frame, monkeypatch):
         dialog.reset()
         assert said[-1] == "Columns reset to the default: 10 shown, title first."
         assert dialog.fields()[0] == "title" and len(dialog.fields()) == 10
-        assert list(dialog.available.GetStrings()) == ["Last message"]
+        assert list(dialog.available.GetStrings()) == ["Started (when the session began)", "Last message"]
+        dialog.available.SetSelection(0)
+        dialog.add()
+        assert said[-1] == "Started added, 11 of 11."
         # Adding the last one left moves you to Shown, on it.
         dialog.available.SetSelection(0)
         focused.clear()
         dialog.add()
-        assert said[-1] == "Last message added, 11 of 11."
-        assert focused[-1] == "shown" and dialog.shown.GetSelection() == 10
+        assert said[-1] == "Last message added, 12 of 12."
+        assert focused[-1] == "shown" and dialog.shown.GetSelection() == 11
         assert list(dialog.available.GetStrings()) == ["Every column is shown."]
         dialog.add()
         assert said[-1] == "Every column is shown already."
