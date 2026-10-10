@@ -166,8 +166,9 @@ def claude_link(info: SessionInfo) -> str:
 #: (see session_list in _build_ui).
 LIST_MIN_WIDTH = 200
 #: The messages list's line when there are no sessions to choose (#182).
-NO_SESSIONS_YET = ("There are no sessions yet. To start one, use File, New Session (Ctrl+N), "
-                   "or start one in the Claude desktop app or a terminal.")
+NO_SESSIONS_YET = ("There are no sessions yet. To start one, use File, New Session ("
+                   + ("Cmd+N" if wx.Platform == "__WXMAC__" else "Ctrl+N")
+                   + "), or start one in the Claude desktop app or a terminal.")
 
 
 class MainFrame(wx.Frame):

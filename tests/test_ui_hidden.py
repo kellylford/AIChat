@@ -4,6 +4,7 @@ No window appears on screen: the frame is created hidden and destroyed at the
 end, and speech is replaced by a recorder. The real look and sound with JAWS
 and NVDA is checked by hand (see the README).
 """
+import dataclasses
 import json
 import threading
 import time
@@ -7796,7 +7797,7 @@ def test_with_no_sessions_the_messages_say_how_to_start_one(env):
         settle(window)
         assert window.session_list.GetCount() == 0
         assert window.chat_list.GetStrings() == [NO_SESSIONS_YET]
-        assert "File, New Session (Ctrl+N)" in NO_SESSIONS_YET
+        assert "File, New Session (" in NO_SESSIONS_YET
         # The first session arrives: the usual line again.
         add_desktop(env, "local_a", "cli-a", "First one")
         window.refresh_sessions(force=True)
@@ -7813,10 +7814,53 @@ def test_with_no_sessions_the_messages_say_how_to_start_one(env):
 
 
 
-def test_a_view_with_nothing_in_it_is_not_a_first_run(frame, env):
+def test_hiding_every_session_is_not_a_first_run(frame, env, monkeypatch):
     from thechatplace.ui.main_frame import NO_SESSIONS_YET
     settle(frame)
-    assert frame._snapshot.sessions  # there are sessions, whatever the view shows
-    frame._list_keys = []
+    usual = frame.chat_list.GetStrings()
+    for title in ("Blocked one", "Hub probe", "Quiet one"):
+        select(frame, title)
+        frame.on_hide()
+        settle(frame)
+    frame.refresh_sessions(force=True)
+    assert pump(lambda: frame.session_list.GetCount() == 0)
+    settle(frame)
+    # The list is empty, but there are sessions: hidden ones.
+    assert frame.chat_list.GetStrings() == usual != [NO_SESSIONS_YET]
+
+
+def test_a_loaded_session_is_left_alone_when_the_sessions_go(frame, env):
+    from thechatplace.ui.main_frame import NO_SESSIONS_YET
+    _load_reply(frame, env, "Only one message here.")
+    before = frame.chat_list.GetStrings()
+    frame._snapshot = dataclasses.replace(frame._snapshot, sessions=[])
     frame._sync_no_session_line()
-    assert frame.chat_list.GetStrings() != [NO_SESSIONS_YET]
+    assert frame.chat_list.GetStrings() == before != [NO_SESSIONS_YET]
+
+
+def test_when_the_last_session_goes_the_first_run_line_comes_back(env):
+    import shutil
+    from thechatplace.ui.main_frame import NO_SESSIONS_YET, MainFrame
+    add_desktop(env, "local_a", "cli-a", "Only one")
+    window = MainFrame(store=OwnSessionStore(env["tmp"] / "own.json"),
+                       check_updates_at_start=False)
+    try:
+        assert pump(lambda: window.session_list.GetCount() == 1)
+        assert window.chat_list.GetStrings() != [NO_SESSIONS_YET]
+        shutil.rmtree(env["desktop"] / "local_a")  # deleted in the desktop app
+        window.refresh_sessions(force=True)
+        assert pump(lambda: window.session_list.GetCount() == 0)
+        settle(window)
+        assert window.chat_list.GetStrings() == [NO_SESSIONS_YET]
+    finally:
+        window.stop_timers()
+        window._pool.shutdown(wait=True)
+        wx.GetApp().ProcessPendingEvents()
+        window.Destroy()
+        wx.GetApp().ProcessPendingEvents()
+
+
+def test_the_first_run_line_names_this_platform_s_key():
+    from thechatplace.ui.main_frame import NO_SESSIONS_YET
+    key = "Cmd+N" if wx.Platform == "__WXMAC__" else "Ctrl+N"
+    assert f"File, New Session ({key})" in NO_SESSIONS_YET

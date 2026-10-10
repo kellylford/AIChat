@@ -71,7 +71,8 @@ Ctrl+9 goes straight to the status bar. Escape in the messages or the reply box 
 the session list, on the same session.
 
 If you haven't used Claude Code yet, the session list is empty and the messages say so: start a
-session with File, New Session (Ctrl+N), or in the Claude desktop app or a terminal, and it
+session with File, New Session (Ctrl+N, or Cmd+N on a Mac), or in the Claude desktop app or a
+terminal, and it
 appears in the list.
 
 ### On a Mac
