@@ -2,6 +2,11 @@
 own and the desktop app's alike. Nothing about the session itself changes;
 the list just leaves it out, except in View, Show Sessions, Hidden, where
 File, Bring Back Session shows it again. Kept in ``hidden.json``.
+
+``ToolActivityStore`` is the same kind of file, ``tool_activity.json``: the
+sessions you've turned Show Tool Activity on for (#162). It's a setting of
+each session, so turning it on to look at one session's tool calls doesn't
+fill every other session with them.
 """
 from __future__ import annotations
 
@@ -14,9 +19,20 @@ from typing import List, Optional, Set
 from . import platform_paths
 
 
-class HiddenStore:
+class KeySetStore:
+    """A saved set of session keys, in ``<app data>/<FILE>`` as
+    ``{"version": 1, FIELD: [...]}``."""
+    FILE = ""
+    FIELD = ""
+    #: For the messages when the file can't be used: "Couldn't read <READ>
+    #: (path)" and "<FILE_WORDS> (path) isn't in the expected format".
+    READ = ""
+    FILE_WORDS = ""
+
     def __init__(self, path: Optional[Path] = None) -> None:
-        self.path = Path(path) if path else platform_paths.app_data_dir() / "hidden.json"
+        if not (self.FILE and self.FIELD):
+            raise TypeError("A KeySetStore needs a FILE and a FIELD.")
+        self.path = Path(path) if path else platform_paths.app_data_dir() / self.FILE
         self._keys: Set[str] = set()
         self.load_error = ""
         self.load()
@@ -29,11 +45,11 @@ class HiddenStore:
         except FileNotFoundError:
             return
         except (OSError, ValueError) as exc:
-            self.load_error = f"Couldn't read your hidden sessions ({self.path}): {exc}"
+            self.load_error = f"Couldn't read {self.READ} ({self.path}): {exc}"
             return
-        keys = raw.get("hidden") if isinstance(raw, dict) else None
+        keys = raw.get(self.FIELD) if isinstance(raw, dict) else None
         if not isinstance(keys, list):
-            self.load_error = (f"Your hidden sessions file ({self.path}) isn't in the "
+            self.load_error = (f"{self.FILE_WORDS} ({self.path}) isn't in the "
                                "expected format, so The Chat Place won't change it.")
             return
         self._keys = {k for k in keys if isinstance(k, str) and k}
@@ -44,11 +60,14 @@ class HiddenStore:
     def __contains__(self, key: str) -> bool:
         return key in self._keys
 
-    def hide(self, key: str) -> None:
-        self._change(self._keys | {key})
+    def add(self, key: str) -> None:
+        if key not in self._keys:
+            self._change(self._keys | {key})
 
-    def show(self, key: str) -> None:
-        self._change(self._keys - {key})
+    def discard(self, key: str) -> None:
+        # Nothing to save when it isn't there: off is already what's kept.
+        if key in self._keys:
+            self._change(self._keys - {key})
 
     def rename_key(self, old: str, new: str) -> None:
         if old in self._keys:
@@ -59,10 +78,10 @@ class HiddenStore:
         if self.load_error:
             raise OSError(f"Not saving over the unreadable {self.path}.")
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(prefix="hidden-", suffix=".tmp", dir=str(self.path.parent))
+        fd, tmp = tempfile.mkstemp(prefix=self.FIELD + "-", suffix=".tmp", dir=str(self.path.parent))
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                json.dump({"version": 1, "hidden": sorted(keys)}, handle, indent=2)
+                json.dump({"version": 1, self.FIELD: sorted(keys)}, handle, indent=2)
             os.replace(tmp, self.path)
         except OSError:
             try:
@@ -71,3 +90,24 @@ class HiddenStore:
                 pass
             raise
         self._keys = set(keys)
+
+
+class HiddenStore(KeySetStore):
+    FILE = "hidden.json"
+    FIELD = "hidden"
+    READ = "your hidden sessions"
+    FILE_WORDS = "Your hidden sessions file"
+
+    def hide(self, key: str) -> None:
+        self.add(key)
+
+    def show(self, key: str) -> None:
+        self.discard(key)
+
+
+class ToolActivityStore(KeySetStore):
+    """The sessions Show Tool Activity is on for (#162)."""
+    FILE = "tool_activity.json"
+    FIELD = "show_activity"
+    READ = "which sessions show tool activity"
+    FILE_WORDS = "Your Show Tool Activity file"

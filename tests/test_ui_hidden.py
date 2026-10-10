@@ -360,11 +360,120 @@ def test_tool_activity_toggle_keeps_the_place(frame, env):
     assert list(frame.chat_list.GetStrings()) == ["You: q", "Tool: Bash: ls",
                                                   "Claude: done", "You: thanks"]
     assert frame.chat_list.GetStringSelection() == "You: q"
-    assert env["feedback"][-1] == "Tool activity shown."
+    assert env["feedback"][-1] == "Tool activity shown in Quiet one."
     frame.chat_list.SetSelection(1)  # on the tool call, then hide tools
     frame._set_activity(False)
     assert frame.chat_list.GetCount() == 3
     assert frame.chat_list.GetStringSelection() == "You: q"  # nearest before it
+
+
+def test_tool_activity_is_each_sessions_own_and_remembered(frame, env):
+    """#162: turning it on for one session leaves the others as they were,
+    and it's back on when the session is loaded again, even after a restart."""
+    from thechatplace.hidden import ToolActivityStore
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [
+        user_text("q"), assistant_block(tool_use_block("Bash", {"command": "ls"}, "t1"), "m1"),
+        assistant_block(text_block("done"), "m2")])
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    assert pump(lambda: frame._chat_loaded)
+    frame._set_activity(True)
+    assert frame.chat_list.GetCount() == 3
+    quiet = frame._open.key
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    assert not frame._show_activity
+    assert not frame.activity_item.IsChecked() and not frame.activity_check.GetValue()
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    assert pump(lambda: frame._chat_loaded)
+    assert frame._show_activity and frame.activity_item.IsChecked()
+    assert frame.activity_check.GetValue()
+    assert frame.chat_list.GetCount() == 3  # the tool call is shown again
+    assert ToolActivityStore().keys() == [quiet]  # kept on disk for next time
+    frame._set_activity(False)
+    assert ToolActivityStore().keys() == []
+    assert env["feedback"][-1] == "Tool activity hidden in Quiet one."
+
+
+def test_tool_activity_with_no_session_loaded_says_so(frame, env):
+    frame._set_activity(True)
+    assert not frame._show_activity and not frame.activity_item.IsChecked()
+    assert not frame.activity_check.GetValue()
+    assert env["feedback"][-1] == ("No session loaded. Show Tool Activity is set for "
+                                   "each session.")
+
+
+def test_tool_activity_from_the_menu_with_no_session_stays_unchecked(frame, env):
+    """wx checks the item before the handler runs; the handler must win."""
+    frame.activity_item.Check(True)
+    frame.on_toggle_activity_menu(None)
+    assert not frame.activity_item.IsChecked() and not frame.activity_check.GetValue()
+    frame.activity_check.SetValue(True)
+    frame.on_toggle_activity_check(None)
+    assert not frame.activity_check.GetValue() and not frame.activity_item.IsChecked()
+
+
+def test_unloading_a_session_unchecks_tool_activity(frame, env):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame._set_activity(True)
+    frame.unload_session()
+    assert not frame._show_activity
+    assert not frame.activity_item.IsChecked() and not frame.activity_check.GetValue()
+    assert "own:own-1" in frame.tool_activity  # still kept for next time
+
+
+def test_tool_activity_follows_a_session_given_a_new_id(frame, env, fake_runner):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame._set_activity(True)
+    frame.reply_text.SetValue("go")
+    frame.on_send()
+    frame._on_turn_event({"id": "own-1"}, "Hub probe",
+                         TurnEvent("started", session_id="own-9"))
+    assert frame.tool_activity.keys() == ["own:own-9"]
+    assert frame._show_activity and frame.activity_check.GetValue()
+
+
+def test_deleting_a_session_forgets_its_tool_activity(frame, env):
+    add_transcript(env, "C:\\G\\Scratch", "own-1", [user_text("hi")])
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame._set_activity(True)
+    frame.on_delete_permanently()  # MessageBox stub answers Yes
+    assert "own:own-1" not in frame.tool_activity
+
+
+def test_export_of_a_session_not_loaded_uses_its_own_tool_activity(frame, env, monkeypatch):
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [
+        user_text("q"), assistant_block(tool_use_block("Bash", {"command": "ls"}, "t1"), "m1"),
+        assistant_block(text_block("done"), "m2")])
+    select(frame, "Quiet one")  # selected, not loaded
+    target = env["tmp"] / "plain.md"
+    _fake_save_dialog(monkeypatch, target)
+    frame.on_export()
+    assert pump(lambda: env["feedback"][-1].startswith("Exported"))
+    assert "ls" not in target.read_text(encoding="utf-8")
+    frame.tool_activity.add(frame._list_keys[frame.session_list.GetSelection()])
+    target = env["tmp"] / "tools.md"
+    _fake_save_dialog(monkeypatch, target)
+    frame.on_export()
+    assert pump(lambda: "tools.md" in env["feedback"][-1])
+    assert "ls" in target.read_text(encoding="utf-8")
+
+
+def test_tool_activity_that_cant_be_saved_still_shows_and_says_so(frame, env, monkeypatch):
+    select(frame, "Hub probe")
+    frame.on_open_session()
+
+    def refuse(_key):
+        raise OSError("disk full")
+    monkeypatch.setattr(frame.tool_activity, "add", refuse)
+    frame._set_activity(True)
+    assert frame._show_activity
+    assert env["feedback"][-1] == ("Tool activity shown in Hub probe. The Chat Place couldn't "
+                                   "save this, so it won't be remembered.")
 
 
 # -- own sessions ------------------------------------------------------------------------
@@ -1699,6 +1808,23 @@ def test_continue_here_forks_a_desktop_session(frame, env, fake_runner, monkeypa
     again = fake_runner.instances[-1].command
     assert again[again.index("--resume") + 1] == "cli-c" and "--fork-session" in again
     assert again[again.index("--session-id") + 1] == new_id
+
+
+def test_continue_here_keeps_showing_tool_activity(frame, env, fake_runner, monkeypatch):
+    """#162: carried on here, the tool calls you were following stay shown."""
+    folder = env["tmp"] / "repo"
+    folder.mkdir()
+    add_desktop(env, "local_c", "cli-c", "Desktop work", cwd=str(folder))
+    add_transcript(env, str(folder), "cli-c", [user_text("Earlier question")])
+    frame.refresh_sessions(force=True, resort=True)
+    settle(frame)
+    select(frame, "Desktop work")
+    frame.on_open_session()
+    frame._set_activity(True)
+    _continue(frame, env, monkeypatch)
+    assert frame._open.cli_session_id != "cli-c"
+    assert frame._show_activity and frame.activity_check.GetValue()
+    assert frame._open.key in frame.tool_activity
 
 
 def test_continue_here_needs_a_transcript_and_a_desktop_session(frame, env, fake_runner,

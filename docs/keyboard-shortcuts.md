@@ -48,7 +48,7 @@ One window, three parts, in Tab order: the session list; the messages of the loa
 | Ctrl+Shift+B, or Applications key / Shift+F10 then Code Blocks | List, read and copy each code block |
 | Ctrl+F, then F3 and Shift+F3 | Find a message containing some text (its whole text, not just the first line), then the next or previous one |
 | End | Newest message |
-| Ctrl+T | Show or hide tool activity |
+| Ctrl+T | Show or hide tool activity in the loaded session |
 | Ctrl+O | Open this session in the Claude desktop app |
 
 ## Reply box

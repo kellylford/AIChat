@@ -67,7 +67,7 @@ from ..own_store import OwnSession, OwnSessionStore
 from ..groups import GroupStore
 from ..prompts import (MAX_NAME as PROMPT_NAME_MAX, PromptStore, clean_text as clean_prompt_text,
                        suggested_name)
-from ..hidden import HiddenStore
+from ..hidden import HiddenStore, ToolActivityStore
 from ..titles import MAX_TITLE, TitleStore, clean_title
 from ..sessions import (FIELD_ACTIVITY, FIELD_LAST_MESSAGE, GROUP_VIEW_PREFIX, IDLE,
                         DESKTOP, NEEDS_YOU, OWN, SORT_ORDERS,
@@ -167,6 +167,8 @@ class MainFrame(wx.Frame):
         self.groups = GroupStore()
         self.prompts = PromptStore()  # saved prompts (#131)
         self.hidden = HiddenStore()
+        # The sessions Show Tool Activity is on for: it's each session's own (#162).
+        self.tool_activity = ToolActivityStore()
         self.titles = TitleStore()  # names given to desktop app sessions (#93)
         self.updates = updates or UpdateService(__version__)
         self._update_busy = False
@@ -296,6 +298,9 @@ class MainFrame(wx.Frame):
                          wx.OK | wx.ICON_WARNING, self)
         if self.hidden.load_error:
             wx.CallAfter(wx.MessageBox, self.hidden.load_error, APP_NAME,
+                         wx.OK | wx.ICON_WARNING, self)
+        if self.tool_activity.load_error:
+            wx.CallAfter(wx.MessageBox, self.tool_activity.load_error, APP_NAME,
                          wx.OK | wx.ICON_WARNING, self)
         if self.titles.load_error:
             wx.CallAfter(wx.MessageBox, self.titles.load_error, APP_NAME,
@@ -1162,6 +1167,10 @@ class MainFrame(wx.Frame):
                 self.hidden.show(info.key)
             except OSError:
                 pass
+        try:
+            self.tool_activity.discard(info.key)
+        except OSError:
+            pass  # a key nothing has any more; harmless
         # Nothing of it may linger: an unsent draft would hold back updates
         # (_unsent_text) for a reply box that no longer exists.
         for per_session in (self._attachments, self._drafts, self._queued,
@@ -1219,6 +1228,7 @@ class MainFrame(wx.Frame):
         self._save_draft()
         self._clear_activity()  # another session's tool calls aren't news here
         self._open = info
+        self._sync_activity_controls(info.key in self.tool_activity)
         self.reply_text.SetValue(self._drafts.get(info.cli_session_id, "") if info.is_own else "")
         self._open_generation += 1
         self._reader = None
@@ -1265,6 +1275,7 @@ class MainFrame(wx.Frame):
         self._clear_activity()
         self._spoken.clear()
         self._open = None
+        self._sync_activity_controls(False)
         self._open_generation += 1
         self._reader = None
         self._chat_messages = []
@@ -1894,17 +1905,41 @@ class MainFrame(wx.Frame):
     def on_toggle_activity_check(self, _event):
         self._set_activity(self.activity_check.GetValue())
 
-    def _set_activity(self, show: bool):
+    def _sync_activity_controls(self, show: bool):
+        """The loaded session's Show Tool Activity, on the menu and the check
+        box, without saying anything (loading a session)."""
         self._show_activity = show
-        if not show:
-            self._clear_activity()
         self.activity_item.Check(show)
         self.activity_check.SetValue(show)
-        if self._open is not None and self._chat_loaded and self._chat_messages:
+
+    def _set_activity(self, show: bool):
+        """Show Tool Activity (Ctrl+T), for the loaded session only and kept
+        with it (#162)."""
+        info = self._open
+        if info is None:
+            self._sync_activity_controls(False)
+            self._feedback("No session loaded. Show Tool Activity is set for each session.")
+            return
+        self._sync_activity_controls(show)
+        if not show:
+            self._clear_activity()
+        kept = True
+        try:
+            if show:
+                self.tool_activity.add(info.key)
+            else:
+                self.tool_activity.discard(info.key)
+        except OSError:
+            kept = False  # still shown (or hidden) now, just not remembered
+        if self._chat_loaded and self._chat_messages:
             index = self.chat_list.GetSelection()
             keep = self._chat_keys[index] if 0 <= index < len(self._chat_keys) else None
             self._rebuild_chat_list(keep_key=keep or "")
-        self._feedback("Tool activity shown." if show else "Tool activity hidden.")
+        said = (f"Tool activity shown in {info.title}." if show
+                else f"Tool activity hidden in {info.title}.")
+        if not kept:
+            said += " The Chat Place couldn't save this, so it won't be remembered."
+        self._feedback(said)
 
     # ------------------------------------------------------- open in Claude
 
@@ -1960,7 +1995,10 @@ class MainFrame(wx.Frame):
                     wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION, self) != wx.YES:
                 return
         self._feedback(f"Exporting {info.title}.")
-        show_activity = self._show_activity
+        # As the screen shows it for the loaded session (even if saving the
+        # setting failed); as kept, for any other.
+        show_activity = (self._show_activity if self._open is not None
+                         and info.key == self._open.key else info.key in self.tool_activity)
         title, folder = info.title, info.cwd
 
         def work():
@@ -2934,6 +2972,12 @@ class MainFrame(wx.Frame):
                          remote_control=remote_control)
         if not self._store_write(self.store.add, own):
             return
+        if info.key in self.tool_activity:
+            # Carried on here, it shows the tool calls you were following.
+            try:
+                self.tool_activity.add(own.to_info().key)
+            except OSError:
+                pass
         self._start_turn(new_id, command, info.cwd, message, title)
         self.open_session(own.to_info())
         self.refresh_sessions()
@@ -3107,6 +3151,10 @@ class MainFrame(wx.Frame):
                     self.hidden.rename_key(f"own:{session_id}", f"own:{reported}")
                 except OSError:
                     pass  # it shows again; nothing else is lost
+                try:
+                    self.tool_activity.rename_key(f"own:{session_id}", f"own:{reported}")
+                except OSError:
+                    pass  # its tool activity is hidden next time; nothing else is lost
                 self._runners[reported] = self._runners.pop(session_id)
                 self._denials[reported] = self._denials.pop(session_id, [])
                 for per_session in (self._drafts, self._queued, self._pending,

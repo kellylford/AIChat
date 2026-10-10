@@ -155,7 +155,8 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   a Copy button for just that block; **Ctrl+Shift+C** copies the message's last code block straight
   away. Question cards read as "Claude asked: Which version?" with the options in the full text,
   then "You answered: ...". Refused tools read "Permission denied: ...". Tool calls and tool
-  results are hidden unless you turn on Show Tool Activity (Ctrl+T). With it on, the open session's
+  results are hidden unless you turn on Show Tool Activity (Ctrl+T). It's set for each session and
+  remembered, so turning it on for one session leaves the others as they were. With it on, the open session's
   tool calls are also **spoken as they happen**, so a long turn isn't silent: "Using Bash: git
   status; Read: main.py." In The Chat Place's own sessions, what Claude writes between tool calls
   ("Let me check the build.") is spoken too. A run of calls is gathered for a moment and said
@@ -369,7 +370,7 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   Context), how many sessions need you (goes to the first), and an available update. Tab leaves
   the status bar. Your screen reader's read-status-bar key reads all the parts.
 - **Answers to what you do are spoken too**, briefly and without cutting off your screen reader:
-  "Tool activity shown.", "Message copied.", and so on (unless announcements are set to silent).
+  "Tool activity shown in Build.", "Message copied.", and so on (unless announcements are set to silent).
 - **Your own message is read back when it's sent**, so you hear what actually went to Claude,
   and where: "Sent to Hub probe: Fix the build." During a turn it's "Queued for Hub probe: …",
   and when the queued message goes out you hear only "Sent your queued message", not the
@@ -639,7 +640,7 @@ shows it as plain text instead.
 | Messages | Ctrl+C | Copy the whole message |
 | Messages | Ctrl+Shift+B | Code blocks: list, read and copy each one |
 | Messages | Ctrl+Shift+C | Copy the message's last code block |
-| Messages | Ctrl+T | Show or hide tool activity |
+| Messages | Ctrl+T | Show or hide tool activity in the loaded session |
 | Messages | Ctrl+O | Open this session in the Claude desktop app |
 | Reply box | Ctrl+Enter | Send (Chat Place sessions only); you stay in the reply box |
 | Reply box | Ctrl+Shift+Enter | Send, and save the message as a prompt (asks for its name first) |
