@@ -16,8 +16,9 @@ from . import platform_paths
 from .desktop_groups import DesktopGroups, load_desktop_groups
 from .own_store import OwnSession
 from .sessions import (NEEDS_YOU, SORT_STATUS, WORKING, DesktopLoadResult, LiveStatus, SessionInfo,
-                       load_desktop_sessions, load_live_status, sort_sessions)
-from .transcript import LastMessages, TranscriptParser, split_jsonl
+                       load_desktop_sessions, load_live_status, load_terminal_sessions,
+                       sort_sessions)
+from .transcript import LastMessages, SessionFactsCache, TranscriptParser, split_jsonl
 # The row's words for it: plain text, no wx, so this stays plain data.
 from .ui_text import last_message_line
 
@@ -31,6 +32,15 @@ LAST_MESSAGES = LastMessages()
 _NO_TRANSCRIPT: Dict[str, Tuple[int, float]] = {}
 _NO_TRANSCRIPT_LOCK = threading.Lock()
 NO_TRANSCRIPT_RETRY = 60.0
+#: What each transcript says about its session, for finding terminal sessions
+#: (#158): read once, then only what's added.
+TERMINAL_FACTS = SessionFactsCache()
+
+
+def terminal_projects_dir() -> Path:
+    """Where terminal sessions' transcripts are. Tests point it elsewhere,
+    so none of them lists the real ones."""
+    return platform_paths.projects_dir()
 
 
 def forget_last_messages() -> None:
@@ -72,6 +82,7 @@ def collect(own: Iterable[OwnSession], running_own_ids: Set[str],
                                                        alive=alive, started=started)
     sessions = list(desktop.sessions)
     waiting = waiting or {}
+    own = list(own)
     for item in own:
         info = item.to_info()
         if item.cli_session_id in running_own_ids and waiting.get(item.cli_session_id):
@@ -83,6 +94,8 @@ def collect(own: Iterable[OwnSession], running_own_ids: Set[str],
             # Someone resumed it elsewhere (a terminal); it is busy there.
             info.state, info.detail = WORKING, "running outside The Chat Place"
         sessions.append(info)
+    listed = desktop.desktop_cli_ids | desktop.cowork_cli_ids | {o.cli_session_id for o in own}
+    sessions.extend(load_terminal_sessions(terminal_projects_dir(), live, listed, TERMINAL_FACTS))
     if last_messages:
         fill_last_messages(sessions)
     folders = [desktop_dir] if desktop_dir is not None else platform_paths.desktop_sessions_dirs()

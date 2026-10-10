@@ -62,7 +62,8 @@ The window has three parts, in Tab order:
 1. The **session list**: every session, one per line.
 2. The **messages** of the session you've loaded.
 3. The **reply box**, with Send and Stop. For a Claude desktop app session, the same place holds
-   a short note saying why you reply in Claude, with Open in Claude and Continue Here buttons.
+   a short note saying why you reply in Claude, with Open in Claude and Continue Here buttons. For
+   a terminal session, the note says you reply in its terminal, with a Continue Here button.
 
 Tab and Shift+Tab move between them, and Ctrl+1, Ctrl+2 and Ctrl+3 go straight to each one. F6
 and Shift+F6 move between the parts and the **status bar**, which holds whatever was said last;
@@ -149,10 +150,10 @@ question card.
 **The Chat Place's own sessions** are ones you start here. You read and reply to them entirely in
 The Chat Place, and they don't appear in the desktop app.
 
-If you'd like to carry on a desktop app session here, use **Continue Here** (Ctrl+Shift+N, or the
+If you'd like to carry on a desktop app or terminal session here, use **Continue Here** (Ctrl+Shift+N, or the
 button beside Open in Claude). It makes a new Chat Place session in the same folder, with the
 whole conversation so far, and you type its first message. Its title starts as the original's,
-followed by "(continued)". The desktop app session isn't changed, and what you do in the copy
+followed by "(continued)". The original session isn't changed, and what you do in the copy
 doesn't appear in it.
 
 ### Cowork sessions
@@ -169,6 +170,21 @@ the session menu it's unavailable). Whether The Chat Place can tell that a Cowor
 working, and so announce when it answers, depends on the version of Claude Code the desktop app
 runs it with; older versions don't record it. The desktop app's Chat conversations are kept on
 Anthropic's servers rather than on your computer, so they aren't listed.
+
+### Terminal sessions
+
+Sessions you started by typing `claude` in a terminal are listed too, and like the desktop app's
+they're read-only here. Each one's line says "terminal session" and names the folder you started
+it in. Its title is the name you gave it with `/rename`, or else the one Claude Code gave it, or
+else the start of your first message. To find them in a long list, press **Ctrl+F** and type
+"terminal", or choose View, Show Sessions, **Terminal Sessions**. Press **Enter** to read the
+conversation. The list shows one as working while Claude works in it, and announces when it
+answers.
+
+You reply to a terminal session in its terminal, or carry it on here with **Continue Here**
+(Ctrl+Shift+N). The desktop app doesn't list terminal sessions, so Open in Claude isn't offered for
+them. Sessions that scripts run with `claude -p`, and those of the VS Code extension, aren't
+listed.
 
 ## Starting a session and replying
 
@@ -285,7 +301,7 @@ With many sessions, these keep the list manageable.
 **View, Show Sessions** (Alt+V, H) chooses what the list shows: all sessions; the ones that need
 you or are working; just the ones that need you; just the working ones; the ones with a new reply
 you haven't read yet; the idle ones; desktop app sessions (Code and Cowork); just
-Cowork sessions; The Chat Place's own; Remote Control sessions; ungrouped sessions; archived
+Cowork sessions; The Chat Place's own; terminal sessions; Remote Control sessions; ungrouped sessions; archived
 ones; hidden ones; or one of your groups.
 **View, Sort Sessions** (Alt+V, O) chooses the order: by status, newest first, oldest first, by
 title, or by folder. Both choices are remembered, and you stay on the same session when it's
@@ -297,8 +313,8 @@ still listed.
 what order. Move Status to the top, for example, and each line starts with "needs you", "working"
 or "idle", so you can stop on the one you want before hearing its title.
 
-The parts are called columns: Title, Folder, Status, New reply, Last activity, Kind (Chat Place
-or Cowork session), Remote Control, Archived, Hidden and Groups, all read at first, and Last
+The parts are called columns: Title, Folder, Status, New reply, Last activity, Kind (Chat Place,
+Cowork or terminal session), Remote Control, Archived, Hidden and Groups, all read at first, and Last
 message, which is read only once you add it. A column with nothing to say for a session, such as
 New reply when there isn't one, is simply left out of that line.
 

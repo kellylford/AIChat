@@ -26,7 +26,7 @@ One window, three parts, in Tab order: the session list; the messages of the loa
 | Ctrl+Shift+N | Continue the selected desktop app session here, as a copy you can reply to (the desktop app session isn't changed) |
 | F5 | Refresh the list now and put it back in order (it also refreshes itself every few seconds, without moving rows while you're in it) |
 | Alt+V, O | Sort Sessions: by status, newest first, oldest first, by title or by folder; the choice is remembered |
-| Alt+V, H | Show Sessions: all, needs you or working, needs you, working, with a new reply, idle, desktop app, Cowork, The Chat Place, Remote Control, ungrouped (in no group), archived, or one of your groups |
+| Alt+V, H | Show Sessions: all, needs you or working, needs you, working, with a new reply, idle, desktop app, Cowork, The Chat Place, terminal, Remote Control, ungrouped (in no group), archived, or one of your groups |
 | Alt+V, E | Session List Columns: choose what each session's line says and in what order, such as status first; in the dialog, Enter adds, Delete removes, and Alt+Up, Alt+Down, Alt+Home and Alt+End move |
 | Ctrl+E | Export the selected (or loaded) session as Markdown, a web page or plain text |
 | F2 | Rename the selected session (a desktop app session's new name shows only in The Chat Place) |

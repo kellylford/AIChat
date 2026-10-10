@@ -726,3 +726,177 @@ class LastMessages:
         with self._lock:
             for name in [n for n in self._entries if n not in keep]:
                 del self._entries[name]
+
+
+# ---------------------------------------------------------------------------
+# Sessions started in a terminal (#158)
+# ---------------------------------------------------------------------------
+
+#: The ``entrypoint`` Claude Code records for a session someone started by
+#: typing ``claude`` in a terminal. ``claude -p`` (scripts, and The Chat
+#: Place's own turns) records "sdk-cli", the desktop app "claude-desktop", and
+#: the VS Code extension "claude-vscode".
+TERMINAL_ENTRYPOINT = "cli"
+#: Records that name a session, which can come anywhere in it: ``/rename``
+#: writes a custom title, and Claude Code an ai-title of its own.
+_TITLE_RECORDS = (b'"custom-title"', b'"ai-title"')
+#: Read at a time. A transcript that isn't a terminal session's says so in its
+#: first records, so until it's known whose a transcript is, only a small
+#: piece is read; most are left after that, however long they are.
+_FACTS_CHUNK = 1024 * 1024
+_FACTS_FIRST_CHUNK = 16 * 1024
+#: A first prompt not found in this many records isn't looked for further.
+_FIRST_PROMPT_RECORDS = 400
+
+
+@dataclass
+class SessionFacts:
+    """What a transcript says about its session, for listing one that no
+    metadata file describes: how it was started, its folder and its title."""
+    entrypoint: str = ""
+    cwd: str = ""
+    custom_title: str = ""
+    ai_title: str = ""
+    first_prompt: str = ""
+
+    @property
+    def title(self) -> str:
+        return self.custom_title or self.ai_title or self.first_prompt
+
+    @property
+    def terminal(self) -> bool:
+        return self.entrypoint == TERMINAL_ENTRYPOINT
+
+
+class _FactsReader:
+    """One transcript's facts, read as the file grows (whole lines only)."""
+
+    def __init__(self) -> None:
+        self.facts = SessionFacts()
+        self.offset = 0
+        self.records = 0
+        self.stamp: Tuple[int, int] = (-1, -1)
+        self._parser: Optional[TranscriptParser] = TranscriptParser()
+
+    @property
+    def done(self) -> bool:
+        """Not a terminal session's: nothing more in it matters."""
+        return bool(self.facts.entrypoint) and not self.facts.terminal
+
+    def feed(self, data: bytes) -> None:
+        for line in data.split(b"\n"):
+            if self.done:
+                return
+            if not line.strip():
+                continue
+            self.records += 1
+            looking = (not self.facts.entrypoint or not self.facts.cwd
+                       or self._parser is not None)
+            if not looking and not any(marker in line for marker in _TITLE_RECORDS):
+                continue
+            try:
+                record = json.loads(line.decode("utf-8", errors="replace"))
+            except ValueError:
+                continue
+            if isinstance(record, dict):
+                self._record(record, line)
+
+    def _record(self, record: dict, line: bytes) -> None:
+        facts = self.facts
+        kind = record.get("type")
+        if kind == "custom-title":
+            facts.custom_title = _one_line(record.get("customTitle"))
+            return
+        if kind == "ai-title":
+            facts.ai_title = _one_line(record.get("aiTitle"))
+            return
+        if record.get("isSidechain"):
+            return
+        if not facts.entrypoint and isinstance(record.get("entrypoint"), str):
+            facts.entrypoint = record["entrypoint"]
+        if not facts.cwd and isinstance(record.get("cwd"), str):
+            facts.cwd = record["cwd"]
+        if self._parser is None:
+            return
+        if kind == USER:
+            for message in self._parser.feed([line.decode("utf-8", errors="replace")]):
+                if message.kind == USER:
+                    facts.first_prompt = message.first_line(120)
+                    self._parser = None
+                    return
+        if self._parser is not None and self.records >= _FIRST_PROMPT_RECORDS:
+            self._parser = None
+
+
+def _one_line(value) -> str:
+    return " ".join(str(value or "").split())
+
+
+class SessionFactsCache:
+    """``SessionFacts`` for each transcript, remembered by file size and
+    modification time and read on from where it left off, so a refresh
+    reads only what was added. Safe to use from the background thread that
+    gathers the session list."""
+
+    def __init__(self, chunk: int = _FACTS_CHUNK,
+                 first_chunk: int = _FACTS_FIRST_CHUNK) -> None:
+        self._chunk = chunk
+        self._first_chunk = min(first_chunk, chunk)
+        self._lock = threading.Lock()
+        self._readers: Dict[str, _FactsReader] = {}
+        #: Bytes read from files (not answered from memory); for tests.
+        self.bytes_read = 0
+
+    def get(self, path: Path) -> Optional[SessionFacts]:
+        """Its facts, or None when it can't be read."""
+        name = str(path)
+        with self._lock:
+            reader = self._readers.get(name)
+        try:
+            info = os.stat(path)
+            stamp = (info.st_size, info.st_mtime_ns)
+            if reader is not None and (reader.stamp == stamp or reader.done):
+                return reader.facts
+            if reader is None or info.st_size < reader.offset:
+                reader = _FactsReader()  # new, or rewritten: start over
+            with open(path, "rb") as handle:
+                handle.seek(reader.offset)
+                while not reader.done:
+                    want = self._chunk if reader.facts.entrypoint else self._first_chunk
+                    data = handle.read(want)
+                    if not data:
+                        break
+                    end = data.rfind(b"\n")
+                    if end < 0:
+                        if len(data) < want:
+                            break  # a last line still being written
+                        # One line longer than a chunk: skip past it, once
+                        # it has been written to its end.
+                        rest = handle.readline()
+                        if not rest.endswith(b"\n"):
+                            break
+                        reader.offset += len(data) + len(rest)
+                        self.bytes_read += len(data) + len(rest)
+                        continue
+                    reader.offset += end + 1
+                    self.bytes_read += end + 1
+                    reader.feed(data[:end + 1])
+                    handle.seek(reader.offset)
+            reader.stamp = stamp
+        except FileNotFoundError:
+            with self._lock:
+                self._readers.pop(name, None)
+            return None
+        except OSError:
+            # Busy for a moment: keep what it said before.
+            return reader.facts if reader is not None and reader.offset else None
+        with self._lock:
+            self._readers[name] = reader
+        return reader.facts
+
+    def keep_only(self, paths: Iterable[Path]) -> None:
+        """Forget files not in ``paths``: transcripts gone from the folder."""
+        keep = {str(p) for p in paths}
+        with self._lock:
+            for name in [n for n in self._readers if n not in keep]:
+                del self._readers[name]

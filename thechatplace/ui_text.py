@@ -42,8 +42,8 @@ SHORTCUTS = [
         ("Alt+V, O", "Sort Sessions: by status, newest first, oldest first, by title or "
                      "by folder; the choice is remembered"),
         ("Alt+V, H", "Show Sessions: all, needs you or working, needs you, working, with a "
-                     "new reply, idle, desktop app, Cowork, The Chat Place, Remote Control, "
-                     "ungrouped (in no group), archived, or one of your groups"),
+                     "new reply, idle, desktop app, Cowork, The Chat Place, terminal, Remote "
+                     "Control, ungrouped (in no group), archived, or one of your groups"),
         ("Alt+V, E", "Session List Columns: choose what each session's line says and in "
                      "what order, such as status first; in the dialog, Enter adds, Delete "
                      "removes, and Alt+Up, Alt+Down, Alt+Home and Alt+End move"),

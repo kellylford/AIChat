@@ -1,11 +1,14 @@
 """The session list: where its entries come from, their state, and their order.
 
-Two sources:
+Three sources:
 
 * **Desktop app sessions**, from the Claude desktop app's metadata files
   (``local_<id>.json``): its Code sessions and its Cowork sessions (#91).
   Read-only, always: The Chat Place never writes there.
 * **The Chat Place's own sessions**, from its own store (``own_store``).
+* **Terminal sessions** (#158): ones started by typing ``claude`` in a
+  terminal, which no metadata file describes, found from their transcripts in
+  ``~/.claude/projects``. Read-only, as desktop app sessions are.
 
 Live state comes from ``~/.claude/sessions/<pid>.json`` (``status`` busy or
 idle) for desktop sessions, and from The Chat Place's own running turns for its
@@ -22,6 +25,7 @@ from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional, Set
 
 from . import platform_paths
+from .transcript import SessionFactsCache
 
 WORKING = "working"
 NEEDS_YOU = "needs you"
@@ -35,12 +39,13 @@ _NEEDS_YOU_CATEGORIES = {"blocked", "review_ready", "needs_input", "waiting",
 
 DESKTOP = "desktop"
 OWN = "own"
+TERMINAL = "terminal"
 
 
 @dataclass
 class SessionInfo:
-    source: str                 # DESKTOP or OWN
-    key: str                    # unique in the list: local_ id, or own:<cli id>
+    source: str                 # DESKTOP, OWN or TERMINAL
+    key: str                    # unique in the list: local_ id, own:<cli id> or terminal:<cli id>
     title: str
     cwd: str
     cli_session_id: str         # transcript file name / --resume id
@@ -76,6 +81,10 @@ class SessionInfo:
     @property
     def is_own(self) -> bool:
         return self.source == OWN
+
+    @property
+    def is_terminal(self) -> bool:
+        return self.source == TERMINAL
 
     @property
     def repo(self) -> str:
@@ -128,6 +137,8 @@ class SessionInfo:
             kind.append("Chat Place session")
         if self.cowork:
             kind.append("Cowork session")
+        if self.is_terminal:
+            kind.append("terminal session")
         groups = ""
         if self.groups:
             groups = (("group " if len(self.groups) == 1 else "groups ")
@@ -169,7 +180,7 @@ FIELDS = [
     (FIELD_STATUS, "Status (needs you, working or idle)"),
     (FIELD_NEW_REPLY, "New reply"),
     (FIELD_ACTIVITY, "Last activity"),
-    (FIELD_KIND, "Kind (Chat Place or Cowork)"),
+    (FIELD_KIND, "Kind (Chat Place, Cowork or terminal)"),
     (FIELD_REMOTE, "Remote Control"),
     (FIELD_ARCHIVED, "Archived"),
     (FIELD_HIDDEN, "Hidden"),
@@ -262,6 +273,7 @@ VIEW_IDLE = "idle"
 VIEW_DESKTOP = "desktop"
 VIEW_COWORK = "cowork"
 VIEW_OWN = "own"
+VIEW_TERMINAL = "terminal"
 VIEW_REMOTE = "remote"
 VIEW_UNGROUPED = "ungrouped"
 VIEW_ARCHIVED = "archived"
@@ -277,6 +289,7 @@ VIEWS = [
     (VIEW_DESKTOP, "&Desktop App Sessions"),
     (VIEW_COWORK, "C&owork Sessions"),
     (VIEW_OWN, "&Chat Place Sessions"),
+    (VIEW_TERMINAL, "&Terminal Sessions"),
     (VIEW_REMOTE, "&Remote Control Sessions"),
     (VIEW_UNGROUPED, "&Ungrouped"),
     (VIEW_ARCHIVED, "Archi&ved"),
@@ -288,7 +301,8 @@ VIEW_SPOKEN = {VIEW_ALL: "all sessions", VIEW_ACTIVE: "needs you or working",
                VIEW_NEW_REPLY: "sessions with a new reply", VIEW_IDLE: "idle sessions",
                VIEW_DESKTOP: "desktop app sessions",
                VIEW_COWORK: "Cowork sessions",
-               VIEW_OWN: "Chat Place sessions", VIEW_REMOTE: "Remote Control sessions",
+               VIEW_OWN: "Chat Place sessions", VIEW_TERMINAL: "terminal sessions",
+               VIEW_REMOTE: "Remote Control sessions",
                VIEW_UNGROUPED: "ungrouped sessions",
                VIEW_ARCHIVED: "archived sessions", VIEW_HIDDEN: "hidden sessions"}
 
@@ -328,11 +342,13 @@ def in_view(info: SessionInfo, view: str) -> bool:
     if view == VIEW_IDLE:
         return info.state not in (NEEDS_YOU, WORKING)
     if view == VIEW_DESKTOP:
-        return not info.is_own
+        return info.source == DESKTOP
     if view == VIEW_COWORK:
         return info.cowork
     if view == VIEW_OWN:
         return info.is_own
+    if view == VIEW_TERMINAL:
+        return info.is_terminal
     if view == VIEW_REMOTE:
         return info.remote
     if view == VIEW_UNGROUPED:
@@ -621,3 +637,38 @@ def _int(value) -> int:
         return int(value)
     except (TypeError, ValueError):
         return 0
+
+
+def load_terminal_sessions(projects: Path, live: Dict[str, LiveStatus],
+                           listed: Set[str], facts: SessionFactsCache) -> List[SessionInfo]:
+    """Sessions started by typing ``claude`` in a terminal (#158), from their
+    transcripts in ``projects`` (``~/.claude/projects``). ``listed`` are the
+    cli ids already in the list (the desktop app's, archived ones included,
+    and The Chat Place's own), which aren't listed again. Transcripts of
+    ``claude -p`` runs, the desktop app's and subagents' aren't sessions
+    someone typed into, so they aren't listed. A terminal session is working
+    while its live file says busy, and idle otherwise: its transcript doesn't
+    say when it is waiting on you."""
+    sessions: List[SessionInfo] = []
+    seen: List[Path] = []
+    try:
+        # Subagents' transcripts are a level deeper (<session>/subagents/).
+        paths = sorted(projects.glob("*/*.jsonl"))
+    except OSError:
+        paths = []
+    for path in paths:
+        cli_id = path.stem
+        if cli_id in listed or not platform_paths.is_safe_id(cli_id):
+            continue
+        seen.append(path)
+        about = facts.get(path)
+        if about is None or not about.terminal:
+            continue
+        status = live.get(cli_id)
+        sessions.append(SessionInfo(
+            source=TERMINAL, key=f"terminal:{cli_id}", title=about.title,
+            cwd=about.cwd, cli_session_id=cli_id,
+            last_activity_ms=int(_mtime(path) * 1000),
+            state=WORKING if status is not None and status.status == "busy" else IDLE))
+    facts.keep_only(seen)
+    return sessions

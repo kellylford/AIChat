@@ -16,3 +16,13 @@ def _fresh_last_messages(monkeypatch):
     from thechatplace.transcript import LastMessages
     monkeypatch.setattr(hub, "LAST_MESSAGES", LastMessages())
     monkeypatch.setattr(hub, "_NO_TRANSCRIPT", {})
+
+
+@pytest.fixture(autouse=True)
+def _no_real_terminal_sessions(monkeypatch, tmp_path):
+    """No test lists the terminal sessions (#158) of the computer it runs
+    on; one that wants some points ``hub.terminal_projects_dir`` at its own."""
+    from thechatplace import hub
+    from thechatplace.transcript import SessionFactsCache
+    monkeypatch.setattr(hub, "TERMINAL_FACTS", SessionFactsCache())
+    monkeypatch.setattr(hub, "terminal_projects_dir", lambda: tmp_path / "no-terminal-sessions")
