@@ -1169,20 +1169,20 @@ class TurnRunner:
                 while ceiling:
                     ceiling.pop().cancel()
             #: True from saying Claude answered with background work running
-            #: until the next result: a turn Claude starts when the work
-            #: finishes is new work, however long it takes, not a stuck
-            #: finish for the ceiling to end (#161).
-            woken = False
+            #: until the next result. Meanwhile, a turn Claude starts when the
+            #: work finishes is new work, however long it takes, not a stuck
+            #: finish for the ceiling to end; and if the turn ends with no
+            #: result since, the reply was said already (#161).
+            said_while_waiting = False
 
             def settle(outcome: str, final_event: TurnEvent) -> None:
-                """After ``_end_or_wait``: the turn ended, or it now waits for
-                background work (said once, with the reply so far)."""
-                nonlocal woken
-                if outcome == "unanswered":
-                    return
+                """After ``_end_or_wait`` said "closed" or "…waiting": the turn
+                ended, or it now waits for background work (said once, with
+                the reply so far)."""
+                nonlocal said_while_waiting
                 disarm_ceiling()
                 if outcome == "started waiting":
-                    woken = True
+                    said_while_waiting = True
                     self.last_activity = ("waiting for background work: "
                                           + "; ".join(self.background_tasks))
                     self._emit(TurnEvent("waiting", text=final_event.text,
@@ -1300,7 +1300,7 @@ class TurnRunner:
                             # Read without the lock on purpose: a Send Now
                             # landing just after only meets the ceiling that
                             # checks again before closing.
-                            if self._unanswered or woken:
+                            if self._unanswered or said_while_waiting:
                                 # On the Send Now message, or on what the
                                 # background work brought back.
                                 disarm_ceiling()
@@ -1308,7 +1308,8 @@ class TurnRunner:
                                 arm_ceiling()
                         continue
                     if event.kind == "finished":
-                        woken = False
+                        follows_waiting = said_while_waiting
+                        said_while_waiting = False
                         # The latest result is the turn's, carrying every
                         # refusal and error of the turn. With state events,
                         # more can follow (a background agent's notification
@@ -1321,6 +1322,12 @@ class TurnRunner:
                             # new message's own error, once nothing later is
                             # waiting, is a real one and stands.
                             event.is_error = False
+                        if (final is not None and not follows_waiting and not event.is_error
+                                and not (event.text or "").strip()):
+                            # An empty result after the real answer (Claude
+                            # Code sends one after a background agent's
+                            # follow-up): the answer is still the turn's.
+                            event.text = final.text
                         if final is not None:
                             event.denials = list(final.denials) + [
                                 d for d in event.denials if d not in final.denials]
@@ -1329,19 +1336,20 @@ class TurnRunner:
                         idle = states_seen and last_state == "idle"
                         if not replaced and states_seen and not idle:
                             arm_ceiling()  # idle should follow
-                        elif replaced or (outcome := self._end_or_wait()) == "unanswered":
-                            # A Send Now message is still to be answered
-                            # (one may have gone just now). Claude moves on to
-                            # it; if it has already said idle, "running"
-                            # should follow, and the ceiling stands behind it.
-                            if idle:
+                        else:
+                            # Answered, and idle (or no state events): closed,
+                            # or kept open for background work. Unless a Send
+                            # Now message is still to be answered (one may
+                            # have gone just now): Claude moves on to it; if
+                            # it has already said idle, "running" should
+                            # follow, and the ceiling stands behind it.
+                            outcome = "unanswered" if replaced else self._end_or_wait()
+                            if outcome != "unanswered":
+                                settle(outcome, final)
+                            elif idle:
                                 arm_ceiling(unanswered_too=True)
                             else:
                                 disarm_ceiling()
-                        else:
-                            # Answered, and idle (or no state events): closed,
-                            # or kept open for background work.
-                            settle(outcome, final)
                     else:
                         self._emit(event)
                 self._refuse_unsupported()
@@ -1351,12 +1359,21 @@ class TurnRunner:
             self._close_stdin()
             process.wait()
             err_thread.join(timeout=2)
-            if self._cancelled and woken:
-                # Stopped while waiting on background work, or while Claude
-                # carried on after it: the reply so far was said when Claude
-                # went idle, and saying it again would hide that Stop ended
-                # the work (#161).
-                final = None
+            if said_while_waiting and final is not None:
+                # Over with no result since the reply was said, with the
+                # background work running (#161): don't say it again.
+                if self._cancelled:
+                    final = None  # "Stopped.": Stop ended the work
+                elif process.returncode:
+                    # Claude Code died while it waited.
+                    detail = next((x for x in reversed(stderr_lines) if x.strip()), "")
+                    final = TurnEvent("failed", text=exit_message(process.returncode, detail),
+                                      is_error=True, session_id=self.parser.session_id)
+                else:
+                    # The work finished and no turn came after it (the
+                    # BACKGROUND_DONE_WAIT): nothing new to say.
+                    final = TurnEvent("finished", session_id=final.session_id,
+                                      raw_type=final.raw_type)
             if final is None:
                 if self._cancelled:
                     final = TurnEvent("failed", text="Stopped.", is_error=True,

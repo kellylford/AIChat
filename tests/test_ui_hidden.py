@@ -6938,3 +6938,42 @@ def test_refusals_said_with_background_work_are_not_said_again(frame, env, fake_
     runner.waiting_on_background = False
     frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("finished", text="Built."))
     assert env["spoken"][-1] == "Hub probe replied. Built."
+    # Not said again, but the session is still left needing you.
+    own = frame.store.get("own-1")
+    assert own.state == "needs you" and own.detail == "1 tool was refused"
+
+
+def test_the_list_says_a_session_answered_and_is_waiting_on_background_work(frame, env,
+                                                                         fake_runner):
+    runner = _start(frame, fake_runner)
+    _answered_with_background(frame, runner)
+
+    def row():
+        return next((frame.session_list.GetString(i)
+                     for i in range(frame.session_list.GetCount())
+                     if frame.session_list.GetString(i).startswith("Hub probe")), "")
+    assert pump(lambda: "answered, background work running" in row())
+
+
+def test_a_background_update_changes_the_turn_status(frame, env, fake_runner):
+    runner = _start(frame, fake_runner)
+    _answered_with_background(frame, runner, tasks=("Build", "Watch CI"))
+    assert "Build; Watch CI." in frame.turn_status.GetLabel()
+    runner.background_tasks = ["Watch CI"]
+    frame._on_turn_event({"id": "own-1"}, "Hub probe",
+                         TurnEvent("background", data={"tasks": ["Watch CI"]}))
+    assert "background: Watch CI. What" in frame.turn_status.GetLabel()
+
+
+def test_send_now_on_a_queued_message_while_waiting_sends_it_without_stopping(frame, env,
+                                                                          fake_runner):
+    runner = _start(frame, fake_runner)
+    frame.reply_text.SetValue("second")
+    frame.on_send()
+    runner.waiting_on_background = True
+    frame.chat_list.SetSelection(frame.chat_list.GetCount() - 1)
+    frame.send_queued_now()
+    assert runner.follow_ups == [("second", None)]
+    assert not hasattr(runner, "sent_now")
+    assert frame._queued == {}
+    assert env["feedback"][-1] == "Sent now to Hub probe."

@@ -1574,7 +1574,9 @@ def test_background_work_done_with_no_turn_after_it_still_ends_the_turn(tmp_path
         timer.cancelled = True
         timer.function()
     assert box["done"].wait(5)
-    assert events[-1].kind == "finished" and events[-1].text == "Sleeping."
+    # Said when Claude went idle; not said again.
+    assert events[-1].kind == "finished" and events[-1].text == ""
+    assert not events[-1].is_error
 
 
 def test_an_old_claude_code_without_the_task_list_ends_at_idle_as_before(tmp_path):
@@ -1626,3 +1628,31 @@ def test_stop_while_waiting_on_background_work_says_stopped(tmp_path):
     assert box["done"].wait(5)
     # Not the reply again: it was said already, and Stop ended the work.
     assert events[-1].kind == "failed" and events[-1].text == "Stopped."
+
+
+def test_claude_code_dying_while_waiting_on_background_work_is_a_failure(tmp_path):
+    process = FakeProcess([
+        RUNNING, INIT, _tasks("Build"),
+        ev(type="result", subtype="success", result="Started."), IDLE],
+        returncode=3, stderr_lines=["crashed"])
+    _runner, events, _ = run_turn(process, tmp_path)
+    assert [e.kind for e in events if e.kind == "waiting"] == ["waiting"]
+    assert events[-1].kind == "failed" and events[-1].is_error
+    assert "exit code 3" in events[-1].text and "crashed" in events[-1].text
+
+
+def test_an_empty_result_after_the_answer_keeps_the_answer(tmp_path):
+    # After a background agent finishes, Claude Code sends the follow-up's
+    # answer and then a result with no text (seen on 2.1.296).
+    process = FakeProcess([
+        RUNNING, INIT, ev(type="result", subtype="success", result="Agent started."),
+        INIT, ev(type="result", subtype="success", result="DONE"),
+        INIT, ev(type="result", subtype="success", result=""), IDLE])
+    _runner, events, _ = run_turn(process, tmp_path)
+    assert events[-1].kind == "finished" and events[-1].text == "DONE"
+    # A real error with no text still stands as the error.
+    process = FakeProcess([
+        RUNNING, INIT, ev(type="result", subtype="success", result="DONE"),
+        ev(type="result", subtype="error_during_execution", is_error=True, result=""), IDLE])
+    _runner, events, _ = run_turn(process, tmp_path)
+    assert events[-1].is_error and events[-1].text != "DONE"

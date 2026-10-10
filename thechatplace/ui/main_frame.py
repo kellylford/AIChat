@@ -193,6 +193,10 @@ class MainFrame(wx.Frame):
         self._row_basis: Dict[str, Tuple[str, str]] = {}
         self._runners: Dict[str, TurnRunner] = {}
         self._denials: Dict[str, List[str]] = {}
+        #: What needed you (refusals, an error) in a reply said while the
+        #: turn waited on background work (#161): not said again at the
+        #: turn's end, but the session is still left needing you.
+        self._said_problems: Dict[str, str] = {}
         self._pending_refresh: Optional[bool] = None
         # Set once the window is closing (_on_close). Its destruction waits
         # for idle time, so a menu VO+Shift+M scheduled just before Cmd+Q
@@ -733,6 +737,8 @@ class MainFrame(wx.Frame):
         self._snapshot_busy = True
         own = [OwnSession(**vars(s)) for s in self.store.all()]
         running = set(self._runners)
+        background = {sid for sid, runner in self._runners.items()
+                      if getattr(runner, "waiting_on_background", False)}
         waiting = self._waiting()
         order = self.speech.session_order
         # Each transcript's end is read only while the column is shown (#146).
@@ -741,7 +747,7 @@ class MainFrame(wx.Frame):
         def work():
             try:
                 snap = collect(own, running, waiting=waiting, order=order,
-                               last_messages=last_messages)
+                               last_messages=last_messages, background=background)
                 ended = finished_turns(self._previous_states, snap.sessions)
                 replies = {}
                 if not self._first_snapshot and self.speech.announce_all_sessions:
@@ -2449,6 +2455,13 @@ class MainFrame(wx.Frame):
         words, and ``said`` tells you what happened instead. It isn't queued
         either, where it would show and be editable as if you'd typed it."""
         session_id = info.cli_session_id
+        runner = self._runners.get(session_id)
+        if runner is not None and runner.waiting_on_background:
+            # Answered and only waiting on background work (#161): it goes in.
+            if runner.send_follow_up(message):
+                self._update_send_state()
+                self._feedback(said)
+                return
         if session_id in self._runners:
             self._feedback(f"{info.title} is working. Use Other Machines again when "
                            "the turn ends.")
@@ -2948,8 +2961,11 @@ class MainFrame(wx.Frame):
                 self.reply_text.SetValue("")
                 self._drafts.pop(session_id, None)
                 self._update_send_state()
-                self._feedback(announce.sent_text(info.title, message, self.speech.announce,
-                                                  self.speech.announce_own))
+                said = announce.sent_text(info.title, message, self.speech.announce,
+                                          self.speech.announce_own)
+                if images:
+                    said += f" With {len(images)} image{'s' if len(images) != 1 else ''}."
+                self._feedback(said)
                 self.reply_text.SetFocus()
                 return
             # Claude started on the finished work just now: queue it.
@@ -3086,7 +3102,8 @@ class MainFrame(wx.Frame):
                     pass  # it shows again; nothing else is lost
                 self._runners[reported] = self._runners.pop(session_id)
                 self._denials[reported] = self._denials.pop(session_id, [])
-                for per_session in (self._drafts, self._queued, self._pending):
+                for per_session in (self._drafts, self._queued, self._pending,
+                                    self._said_problems):
                     if session_id in per_session:
                         per_session[reported] = per_session.pop(session_id)
                 if self._open is not None and self._open.cli_session_id == session_id:
@@ -3218,6 +3235,10 @@ class MainFrame(wx.Frame):
                 detail = f"{count} tool{'s were' if count != 1 else ' was'} refused"
             else:
                 state, detail = IDLE, ""
+            said_problem = self._said_problems.pop(session_id, "")
+            if state == IDLE and said_problem:
+                # Said when Claude answered; still needs you (#161).
+                state, detail = NEEDS_YOU, said_problem
             self._store_write(self.store.update, session_id, state=state, detail=detail,
                               unread=not is_open,
                               last_activity_ms=int(time.time() * 1000))
@@ -3270,6 +3291,11 @@ class MainFrame(wx.Frame):
         background = announce.background_text((event.data or {}).get("tasks") or [])
         denials = event.denials or self._denials.get(session_id, [])
         self._denials[session_id] = []  # said now, not again at the turn's end
+        if event.is_error:
+            self._said_problems[session_id] = announce.status_text(event.text or "error", 120)
+        elif denials:
+            count = len(denials)
+            self._said_problems[session_id] =                 f"{count} tool{'s were' if count != 1 else ' was'} refused"
         if is_open:
             self._clear_activity()
         self._store_write(self.store.update, session_id, unread=not is_open,
@@ -3367,6 +3393,16 @@ class MainFrame(wx.Frame):
         if runner is None or not 0 <= index < len(waiting):
             return
         text = waiting[index]
+        if runner.waiting_on_background and runner.send_follow_up(text):
+            # Claude is idle, waiting on background work (#161): nothing to
+            # stop, so it simply goes as the next message.
+            del waiting[index]
+            if not waiting:
+                self._queued.pop(info.cli_session_id, None)
+            self._rebuild_chat_list()
+            self._update_send_state()
+            self._feedback(f"Sent now to {info.title}.")
+            return
         if not runner.send_now(text):
             self._feedback("The turn is already ending: the message stays queued and goes "
                            "when it's done.")
