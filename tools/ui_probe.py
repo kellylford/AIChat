@@ -57,6 +57,7 @@ SETTLE_SECONDS = 0.8
 WEBVIEW_SETTLE_SECONDS = 2.5
 DIALOG_TIMEOUT_SECONDS = 20.0
 DEFAULT_SIZE = (1000, 720)
+NEVER_DREW = "the web page never drew"
 
 
 # -- capture ------------------------------------------------------------------------------
@@ -552,7 +553,10 @@ def d_github_repos(frame, env):
     """New Session, From GitHub: opened from inside New Session, so built
     here directly, as New Session builds it."""
     from thechatplace.ui.dialogs import GitHubRepoDialog
-    return lambda: frame._modal(GitHubRepoDialog(frame, "gh.exe", env["folders"]["AIChat"]))
+    # A GitHub folder like a real one: the temporary folder's long path would
+    # make "Cloned into ..." fit or not depending on the machine.
+    github = r"C:\Users\probe\GitHub" if IS_WINDOWS else "/Users/probe/GitHub"
+    return lambda: frame._modal(GitHubRepoDialog(frame, "gh.exe", github))
 
 
 def d_continue_here(frame, env):
@@ -839,7 +843,7 @@ def photograph_dialog(opener, out: Path, stem: str) -> dict:
         except Exception as exc:  # noqa: BLE001
             result["error"] = f"capture failed: {exc}"
         if not drawn:
-            result["error"] = (f"the web page never drew: photographed blank after "
+            result["error"] = (f"{NEVER_DREW}: photographed blank after "
                                f"{DIALOG_TIMEOUT_SECONDS:.0f} seconds")
         dialog.EndModal(wx.ID_CANCEL)
 
@@ -995,7 +999,15 @@ def run(out: Path, tag: str, names, size) -> int:
         for name in names:
             stem = f"{name}-{tag}" if tag else name
             print(f"  {stem}", flush=True)
-            manifest["surfaces"][name] = photograph(name, out, stem, size, Path(tmp) / name)
+            entry = photograph(name, out, stem, size, Path(tmp) / name)
+            if str(entry.get("error", "")).startswith(NEVER_DREW):
+                # WebView2 now and then never draws a page in a fresh VM
+                # ("WebViewCreated ... Operation aborted"); a new window
+                # usually does. Still blank twice is reported.
+                print(f"  {stem} (again: its page never drew)", flush=True)
+                entry = photograph(name, out, stem, size, Path(tmp) / f"{name}-again")
+                entry["retried"] = True
+            manifest["surfaces"][name] = entry
             manifest["seconds"] = round(time.time() - started, 1)
             # Written after every surface, so a crash keeps what was done.
             manifest_path.write_text(json.dumps(manifest, indent=1, ensure_ascii=False),
