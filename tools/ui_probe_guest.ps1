@@ -40,8 +40,10 @@ public static class ProbeDisplay {
         SendMessageTimeout((IntPtr)0xffff, 0x001A, UIntPtr.Zero, what, 2, 5000, out result);
     }
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    struct HIGHCONTRAST { public uint cbSize; public uint dwFlags; public string lpszDefaultScheme; }
+    // The scheme name is a pointer Windows owns: as a string, .NET would
+    // free it after the call and corrupt the heap.
+    [StructLayout(LayoutKind.Sequential)]
+    struct HIGHCONTRAST { public uint cbSize; public uint dwFlags; public IntPtr lpszDefaultScheme; }
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     static extern bool SystemParametersInfo(uint action, uint param, ref HIGHCONTRAST hc, uint winIni);
@@ -90,6 +92,58 @@ public static class ProbeDisplay {
                                                                    ref uint modes, [Out] MODE_INFO[] m, IntPtr topology);
     [DllImport("user32.dll")] static extern int DisplayConfigGetDeviceInfo(ref DPI_GET packet);
     [DllImport("user32.dll")] static extern int DisplayConfigSetDeviceInfo(ref DPI_SET packet);
+
+    // ---- screen resolution: the VM starts at 1024x768, too small for the
+    // main window at more than 100%, so the run uses the largest mode ----
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct DEVMODE {
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
+        public short dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra;
+        public int dmFields;
+        public int dmPositionX, dmPositionY, dmDisplayOrientation, dmDisplayFixedOutput;
+        public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
+        public short dmLogPixels;
+        public int dmBitsPerPel, dmPelsWidth, dmPelsHeight, dmDisplayFlags, dmDisplayFrequency;
+        public int dmICMMethod, dmICMIntent, dmMediaType, dmDitherType, dmReserved1, dmReserved2,
+                   dmPanningWidth, dmPanningHeight;
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    static extern bool EnumDisplaySettings(string device, int mode, ref DEVMODE dm);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    static extern int ChangeDisplaySettings(ref DEVMODE dm, int flags);
+    [DllImport("user32.dll")]
+    static extern int ChangeDisplaySettings(IntPtr dm, int flags);
+
+    static DEVMODE NewMode() {
+        var dm = new DEVMODE();
+        dm.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
+        return dm;
+    }
+
+    public static string Resolution() {
+        var dm = NewMode();
+        EnumDisplaySettings(null, -1, ref dm);
+        return dm.dmPelsWidth + "x" + dm.dmPelsHeight;
+    }
+
+    // The largest mode the display offers, for this session only.
+    public static string UseLargestResolution() {
+        DEVMODE best = NewMode(), dm = NewMode();
+        for (int i = 0; EnumDisplaySettings(null, i, ref dm); i++) {
+            if ((long)dm.dmPelsWidth * dm.dmPelsHeight > (long)best.dmPelsWidth * best.dmPelsHeight) best = dm;
+            dm = NewMode();
+        }
+        if (best.dmPelsWidth == 0) throw new Exception("the display lists no modes");
+        best.dmFields = 0x80000 | 0x100000;  // DM_PELSWIDTH | DM_PELSHEIGHT
+        int result = ChangeDisplaySettings(ref best, 0);
+        if (result != 0) throw new Exception("couldn't change the resolution (" + result + ")");
+        return Resolution();
+    }
+
+    public static void RestoreResolution() { ChangeDisplaySettings(IntPtr.Zero, 0); }
 
     static readonly int[] Steps = { 100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500 };
 
@@ -197,8 +251,11 @@ function Reset-Display {
 }
 
 New-Item $Out -ItemType Directory -Force | Out-Null
-"Display before: scaling (current,recommended,max) $([ProbeDisplay]::Scaling()); High Contrast $([ProbeDisplay]::HighContrastOn())"
+"Display before: $([ProbeDisplay]::Resolution()), scaling (current,recommended,max) $([ProbeDisplay]::Scaling()); High Contrast $([ProbeDisplay]::HighContrastOn())"
+$code = 1
 try {
+    "Resolution for the run: $([ProbeDisplay]::UseLargestResolution())"
+    Start-Sleep -Seconds 2
     Reset-Display
     switch ($Theme) {
         'dark' { Set-AppsTheme $true }
@@ -212,5 +269,6 @@ try {
     $code = $LASTEXITCODE
 } finally {
     Reset-Display
+    [ProbeDisplay]::RestoreResolution()
 }
 exit $code

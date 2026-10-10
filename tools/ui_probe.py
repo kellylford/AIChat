@@ -197,6 +197,14 @@ def capture(window: wx.TopLevelWindow, path: Path) -> str:
 _TEXT_CONTROLS = (wx.StaticText, wx.Button, wx.CheckBox, wx.RadioButton, wx.StaticBox)
 
 
+def _class_name(control) -> str:
+    """wx's own name for the control's class: wxPython can hand back the wrong
+    Python class for a control it didn't create itself (a StaticBoxSizer's
+    group box comes back as a StatusBar)."""
+    name = control.GetClassName()
+    return name[2:] if name.startswith("wx") else name or type(control).__name__
+
+
 def _label(control) -> str:
     try:
         return control.GetLabel()
@@ -219,7 +227,7 @@ def describe(window: wx.TopLevelWindow) -> dict:
             screen = child.GetScreenRect()
             rect = [screen.x - origin.x, screen.y - origin.y, screen.width, screen.height]
             best = child.GetBestSize()
-            entry = {"class": type(child).__name__, "name": child.GetName(),
+            entry = {"class": _class_name(child), "name": child.GetName(),
                      "label": _label(child), "rect": rect, "best": [best.width, best.height],
                      "depth": depth, "parent": parent_index, "enabled": child.IsEnabled(),
                      "problems": []}

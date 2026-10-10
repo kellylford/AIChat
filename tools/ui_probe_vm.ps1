@@ -36,6 +36,8 @@ New-Item $Out -ItemType Directory -Force | Out-Null
 # The VM's Python, by its full path: PATH in vmtest's runs doesn't catch up with an install.
 $guestPython = 'C:\Users\vmuser\AppData\Local\Programs\Python\Python312\python.exe'
 $venvPython = 'C:\vmtest\tcp-venv\Scripts\python.exe'
+# No spaces and no double quotes: Windows PowerShell drops inner quotes on the way to vmtest.
+$readyCheck = "$venvPython -c __import__('wx');__import__('markdown')"
 
 function Invoke-Vm([string]$Command, [int]$Timeout = 600, [switch]$Elevated) {
     # vmtest's output goes to the screen; only the exit code comes back.
@@ -75,7 +77,7 @@ try {
     Invoke-Command -Session $session -ScriptBlock { Expand-Archive C:\vmtest\tcp-source.zip C:\vmtest\tcp -Force }
 
     # Ready means wx imports, not just that the venv is there: a half-finished install isn't.
-    if ((Invoke-Vm "$venvPython -c `"import wx, markdown`"") -ne 0) {
+    if ((Invoke-Vm $readyCheck) -ne 0) {
         "Installing Python and the app's packages in the VM (first run only)..."
         if ((Invoke-Vm "$guestPython --version") -ne 0) {
             Invoke-Vm 'winget install --id Python.Python.3.12 -e --architecture x64 --scope user --silent --accept-source-agreements --accept-package-agreements' 900 | Out-Null
@@ -86,7 +88,7 @@ try {
         if ((Invoke-Vm "$venvPython -m pip install -q -r C:\vmtest\tcp\requirements-dev.txt" 2400) -ne 0) {
             throw "Couldn't install the app's packages in the VM."
         }
-        if ((Invoke-Vm "$venvPython -c `"import wx, markdown`"") -ne 0) { throw "wxPython still doesn't import in the VM." }
+        if ((Invoke-Vm $readyCheck) -ne 0) { throw "wxPython still doesn't import in the VM." }
     }
 
     foreach ($v in $variants) {
@@ -98,7 +100,7 @@ try {
         if ($names) { $command += " -Surface " + ($names -join ',') }
         if ((Invoke-Vm $command 1800) -ne 0) { $failed += $v.tag }
     }
-    if (Invoke-Command -Session $session -ScriptBlock { Test-Path C:\vmtest\probe-out }) {
+    if (Invoke-Command -Session $session -ScriptBlock { Get-ChildItem C:\vmtest\probe-out -File -ErrorAction SilentlyContinue }) {
         Copy-Item C:\vmtest\probe-out\* -Destination $Out -FromSession $session -Recurse -Force
     }
 } finally {

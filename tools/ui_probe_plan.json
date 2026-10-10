@@ -3,7 +3,7 @@
   "windows": [
     {"tag": "light-100", "theme": "light", "scale": 100},
     {"tag": "light-150", "theme": "light", "scale": 150},
-    {"tag": "light-200", "theme": "light", "scale": 200},
+    {"tag": "light-175", "theme": "light", "scale": 175},
     {"tag": "dark-100", "theme": "dark", "scale": 100},
     {"tag": "hc-aquatic-100", "theme": "high-contrast", "hc_theme": "aquatic", "scale": 100},
     {"tag": "hc-desert-100", "theme": "high-contrast", "hc_theme": "desert", "scale": 100}
