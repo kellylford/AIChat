@@ -120,6 +120,23 @@ def test_a_long_session_is_read_at_its_start_and_end_only(tmp_path):
     assert facts.cwd == moved and facts.modified_ms > 0
 
 
+def test_a_moved_session_ending_in_records_without_a_folder(tmp_path):
+    """Claude Code ends a write with titles and such, which name no folder:
+    the folder is the newest record's that does, however far back."""
+    moved = "D:\\wt"
+    for tail in (None, 64 * 1024):
+        middle = [assistant_block(text_block("z" * 2000), f"m{i}") for i in range(40 if tail
+                                                                               else 1)]
+        path = write(tmp_path, f"t-{tail}", user_text("Start"), *middle)
+        append(path, dict(user_text("Moved", entrypoint="cli"), cwd=moved),
+               other("relocated", relocatedCwd=moved), other("ai-title", aiTitle="T"),
+               other("custom-title", customTitle="Named"), other("agent-name", agentName="a"),
+               other("mode", mode="default"))
+        cache = SessionFactsCache(tail=tail) if tail else SessionFactsCache()
+        facts = cache.get(path)
+        assert facts.cwd == moved and facts.title == "Named"
+
+
 def test_a_file_replaced_with_one_the_same_size_is_read_again(tmp_path):
     path = write(tmp_path, "t1", user_text("Hi"), other("custom-title", customTitle="AAAA"))
     cache = SessionFactsCache()

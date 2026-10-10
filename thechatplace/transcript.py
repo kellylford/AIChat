@@ -817,11 +817,17 @@ class _FactsReader:
             if record is not None:
                 self._record(record, line)
         if self.head_read:
-            # The folder it works in now, from the newest record that says.
-            for line in reversed(data.split(b"\n")[-4:]):
-                record = _json_line(line) if b'"cwd"' in line else None
-                if record and not record.get("isSidechain") and isinstance(record.get("cwd"), str):
-                    latest_cwd = record["cwd"]
+            # The folder it works in now, from the newest record that says:
+            # a write often ends with records that don't (titles and such).
+            for line in reversed(data.split(b"\n")):
+                if b'"cwd"' not in line and b'"relocatedCwd"' not in line:
+                    continue
+                record = _json_line(line)
+                if record is None or record.get("isSidechain"):
+                    continue
+                cwd = record.get("relocatedCwd") or record.get("cwd")
+                if isinstance(cwd, str) and cwd:
+                    latest_cwd = cwd
                     break
             if latest_cwd:
                 self.facts.cwd = latest_cwd
@@ -875,9 +881,10 @@ def _one_line(value) -> str:
 class SessionFactsCache:
     """``SessionFacts`` for each transcript, remembered by file size and
     modification time and read on from where it left off, so a refresh
-    reads only what was added. Claude Code only ever adds to a transcript; one
-    that shrinks, or whose first bytes change, was replaced and is read
-    again. For one caller at a time (the thread that gathers the session
+    reads only what was added. A terminal session's transcript is read at its
+    start and its last ``_FACTS_TAIL`` bytes, not its middle. Claude Code only
+    ever adds to a transcript; one that shrinks, or whose bytes before where
+    reading stopped change, was replaced and is read again. For one caller at a time (the thread that gathers the session
     list): each file's reader isn't locked while it reads."""
 
     def __init__(self, chunk: int = _FACTS_CHUNK,
@@ -945,7 +952,8 @@ class SessionFactsCache:
                     and size - reader.offset > self._tail):
                 # Its middle says nothing the end doesn't: skip to the end,
                 # at the start of a line.
-                handle.seek(size - self._tail)
+                # From the byte before, so a line starting just there is kept.
+                handle.seek(size - self._tail - 1)
                 handle.readline()
                 reader.offset = handle.tell()
             else:
