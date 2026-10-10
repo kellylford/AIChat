@@ -25,7 +25,7 @@ BuildAndRelease/MacBuilds/build_macos.sh           # tests, app, Velopack osx fe
 BuildAndRelease\WinBuilds\build_windows.cmd         # Windows: tests, app, Velopack installer and feed (always unsigned)
 python tools/check_version.py [vTAG]               # print version / check a tag against it
 powershell -File tools\ui_probe_vm.ps1 [-Variant light-100] [-Surface settings]  # visual probe, in the test VM (vmtest begin first)
-python tools/ui_compare.py RUN_FOLDER [--accept]   # what changed against testing/visual/baseline/windows
+.venv/bin/python tools/ui_compare.py RUN_FOLDER [--accept]   # what changed against testing/visual/baseline/windows
 ```
 
 - Tests of Windows-only behaviour (made-up `C:\` paths, MSAA via `wx.Accessible`) are marked with
