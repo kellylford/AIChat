@@ -640,6 +640,7 @@ shows it as plain text instead.
 | Anywhere | Alt+V, H | Show Sessions: choose which sessions are listed |
 | Anywhere | Alt+V, E | Session List Columns: choose what each session's line says, and in what order |
 | Anywhere | Ctrl+Shift+N | Continue the selected (or loaded) desktop app or terminal session here, as a copy |
+| Anywhere | Ctrl+Shift+O | Change Permission Mode for the selected (or loaded) Chat Place session, from its next turn |
 | Session list | F5 | Refresh the list now and put it in order |
 | Session list | Delete | Hide the selected session (View, Show Sessions, Hidden lists it; File, Bring Back Session returns it) |
 | Session list | Shift+Delete | Delete one of The Chat Place's own sessions permanently, after you confirm |

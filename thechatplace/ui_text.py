@@ -39,8 +39,8 @@ SHORTCUTS = [
         ("Ctrl+Shift+N", "Continue the selected desktop app or terminal session here, as a "
                          "copy you can reply to (the original isn't changed)"),
         ("Ctrl+Shift+O", "Change Permission Mode: auto, accept edits, manual or plan for the "
-                         "selected Chat Place session, from its next turn (File, Change Effort "
-                         "and Change Model are beside it)"),
+                         "selected (or loaded) Chat Place session, from its next turn (File, "
+                         "Change Effort and Change Model are beside it)"),
         ("F5", "Refresh the list now and put it back in order (it also refreshes itself "
                "every few seconds, without moving rows while you're in it)"),
         ("Alt+V, O", "Sort Sessions: by status, newest first, oldest first, by title or "

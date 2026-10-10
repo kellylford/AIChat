@@ -54,7 +54,8 @@ from ..changes import by_file, summary_text
 from ..codeblocks import find_code_blocks
 from .. import (__version__, about_you, announce, attachments, bugreport, signin, export, hub, links,
                platform_paths, remote, usage, workplaces)
-from ..claude_cli import (DEFAULT_PERMISSION_MODE, EFFORT_NOTE, EFFORTS, MODELS, PERMISSION_MODES, PermissionRequest, ResumeRefused, TurnEvent,
+from ..claude_cli import (DEFAULT_PERMISSION_MODE, EFFORT_NOTE, EFFORTS, MODELS,
+                          PERMISSION_MODES, PermissionRequest, ResumeRefused, TurnEvent,
                           TurnRunner, allow_response, answer_questions_response,
                           build_fork_command, build_new_command, build_resume_command,
                           SESSION_INJECTED_PREFIXES, STRIPPED_VARS, child_environment,
@@ -2614,9 +2615,9 @@ class MainFrame(wx.Frame):
             return None
         return values[index]
 
-    def _from_next_turn(self, info: SessionInfo) -> str:
+    def _from_next_turn(self, own: OwnSession) -> str:
         """When a change to a session's setting starts to count."""
-        if info.cli_session_id in self._runners:
+        if own.cli_session_id in self._runners:
             return "from its next turn; the turn running now carries on as it started"
         return "from its next turn"
 
@@ -2632,7 +2633,9 @@ class MainFrame(wx.Frame):
                                      MODELS, own.model)
         if model is None:
             return
-        if not self._store_write(self.store.update, info.cli_session_id, model=model):
+        # own's id, not info's: Claude may have given the session another id
+        # while the list was open (rename_id changes own itself).
+        if not self._store_write(self.store.update, own.cli_session_id, model=model):
             return
         self._update_heading()
         self._feedback(f"{info.title} now uses {model_label(model)}, from its next turn.")
@@ -2652,11 +2655,11 @@ class MainFrame(wx.Frame):
             PERMISSION_MODES, now)
         if mode is None:
             return
-        if not self._store_write(self.store.update, info.cli_session_id, permission_mode=mode):
+        if not self._store_write(self.store.update, own.cli_session_id, permission_mode=mode):
             return
         self._update_heading()
         self._feedback(f"Permission mode for {info.title}: {mode_label(mode)}, "
-                       f"{self._from_next_turn(info)}.")
+                       f"{self._from_next_turn(own)}.")
 
     def on_change_effort(self):
         """File, Change Effort (#189): how hard Claude thinks in this
@@ -2671,11 +2674,11 @@ class MainFrame(wx.Frame):
             EFFORTS, own.effort)
         if effort is None:
             return
-        if not self._store_write(self.store.update, info.cli_session_id, effort=effort):
+        if not self._store_write(self.store.update, own.cli_session_id, effort=effort):
             return
         self._update_heading()
         self._feedback(f"Effort for {info.title}: {effort_label(effort)}, "
-                       f"{self._from_next_turn(info)}.")
+                       f"{self._from_next_turn(own)}.")
 
     def _check_model(self, session_id: str, title: str, actual: str):
         """Say once if Claude Code runs another model than the session chose
@@ -2790,7 +2793,11 @@ class MainFrame(wx.Frame):
                 dialog.Destroy()
         if request.is_plan:
             modes = [(value, label) for value, label in PERMISSION_MODES if value != "plan"]
-            dialog = PlanDialog(self, title, request, modes, "acceptEdits")
+            # It starts on the mode chosen for the session (Change
+            # Permission Mode, #189), unless that's plan itself.
+            stored = normalize_permission_mode(own.permission_mode) if own is not None else ""
+            dialog = PlanDialog(self, title, request, modes,
+                                stored if stored in dict(modes) else "acceptEdits")
             try:
                 if dialog.ShowModal() != wx.ID_OK:
                     return None

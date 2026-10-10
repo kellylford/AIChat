@@ -7168,3 +7168,89 @@ def test_new_session_starts_with_the_chosen_effort(frame, env, fake_runner, monk
     assert command[command.index("--effort") + 1] == "low"
     own = [s for s in frame.store.all() if s.title == "Effortful"][0]
     assert own.effort == "low"
+
+
+
+def test_a_new_id_while_the_list_is_open_still_saves_the_change(frame, env, fake_runner,
+                                                                 monkeypatch):
+    """#189 review: Claude can give a new session another id while Change
+    Effort's list is open; the change must go to the session, renamed."""
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    frame.reply_text.SetValue("go")
+    frame.on_send()
+
+    def choose(title, prompt, choices, selection=None):
+        frame._on_turn_event({"id": "own-1"}, "Hub probe",
+                             TurnEvent("started", session_id="own-9"))
+        return [c.split(" (now)")[0] for c in choices].index("Low")
+    monkeypatch.setattr(frame, "_choose", choose)
+    frame.on_change_effort()
+    assert frame.store.get("own-9").effort == "low"
+    assert env["feedback"][-1].endswith("the turn running now carries on as it started.")
+
+
+def test_an_old_default_mode_reads_as_manual(frame, env, monkeypatch):
+    frame.store.update("own-1", permission_mode="default", effort="high")
+    select(frame, "Hub probe")
+    frame.on_open_session()
+    assert frame.session_heading.GetLabel().endswith(
+        "on the default model at high effort, manual mode.")
+    offered = _chooser(monkeypatch, frame, None)
+    frame.on_change_permission_mode()
+    _title, prompt, choices, selection = offered[0]
+    assert prompt == "Permission mode for Hub probe, now manual:"
+    assert choices[selection].startswith("Manual:") and choices[selection].endswith("(now)")
+
+
+def test_approving_a_plan_starts_on_the_mode_chosen_for_the_session(frame, env, monkeypatch):
+    from thechatplace.ui import main_frame
+    frame.store.update("own-1", permission_mode="manual")
+    seen = []
+
+    class Plan:
+        def __init__(self, parent, title, request, modes, default):
+            seen.append(default)
+
+        def ShowModal(self):
+            return wx.ID_CANCEL
+
+        def Destroy(self):
+            pass
+    monkeypatch.setattr(main_frame, "PlanDialog", Plan)
+    request = type("R", (), {"is_question": False, "is_plan": True})()
+    frame._ask("Hub probe", request, frame.store.get("own-1"))
+    frame.store.update("own-1", permission_mode="plan")
+    frame._ask("Hub probe", request, frame.store.get("own-1"))
+    assert seen == ["manual", "acceptEdits"]
+
+
+def test_continue_here_keeps_the_chosen_effort(frame, env, fake_runner, monkeypatch):
+    folder = env["tmp"] / "repo"
+    folder.mkdir()
+    add_desktop(env, "local_c", "cli-c", "Desktop work", cwd=str(folder))
+    add_transcript(env, str(folder), "cli-c", [user_text("Earlier question")])
+    frame.refresh_sessions(force=True, resort=True)
+    settle(frame)
+    select(frame, "Desktop work")
+    frame.on_open_session()
+    from thechatplace.ui import dialogs
+
+    class Fills(dialogs.NewSessionDialog):
+        def ShowModal(self):
+            self.message.SetValue("Carry on")
+            self.effort_choice.SetStringSelection("Max")
+            return wx.ID_OK
+    monkeypatch.setattr("thechatplace.ui.main_frame.NewSessionDialog", Fills)
+    frame.on_continue_here()
+    command = fake_runner.instances[-1].command
+    assert command[command.index("--effort") + 1] == "max"
+    new_id = command[command.index("--session-id") + 1]
+    assert frame.store.get(new_id).effort == "max"
+    # A first turn that never got going is started again with it.
+    frame._on_turn_event({"id": new_id}, "Desktop work (continued)",
+                         TurnEvent("failed", text="not signed in", is_error=True))
+    frame.reply_text.SetValue("again")
+    frame.on_send()
+    again = fake_runner.instances[-1].command
+    assert "--fork-session" in again and again[again.index("--effort") + 1] == "max"
