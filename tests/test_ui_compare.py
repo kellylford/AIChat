@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import wx
 
 wx = pytest.importorskip("wx")
 
@@ -246,3 +247,51 @@ def test_a_partial_run_is_compared_only_with_the_surfaces_it_took(app, tmp_path)
     (tmp_path / "run" / "manifest-light-100.json").write_text(json.dumps(
         {"tag": "light-100", "complete": True, "surfaces": {"settings": {}}}), encoding="utf-8")
     assert ui_compare.compare(tmp_path / "run", tmp_path / "base")["missing"] == ["usage-light-100"]
+
+
+
+def test_accepting_part_of_a_run_keeps_the_baselines_other_screens(tmp_path):
+    """Accepting a run of some surfaces (-Surface) once replaced the
+    baseline's manifest with the run's, dropping every other screen."""
+    import json
+    baseline, run = tmp_path / "baseline", tmp_path / "run"
+    baseline.mkdir()
+    run.mkdir()
+    full = {"tag": "light-100", "os": "old", "surfaces": {"a": {"png": "a.png"},
+                                                           "b": {"png": "b.png"}}}
+    (baseline / "manifest-light-100.json").write_text(json.dumps(full), encoding="utf-8")
+    part = {"tag": "light-100", "os": "new", "complete": False,
+            "surfaces": {"b": {"png": "b2.png"}, "c": {"png": "c.png"}}}
+    (run / "manifest-light-100.json").write_text(json.dumps(part), encoding="utf-8")
+    ui_compare._merge_manifest(run / "manifest-light-100.json",
+                               baseline / "manifest-light-100.json")
+    merged = json.loads((baseline / "manifest-light-100.json").read_text(encoding="utf-8"))
+    assert merged["surfaces"] == {"a": {"png": "a.png"}, "b": {"png": "b2.png"},
+                                  "c": {"png": "c.png"}}
+    assert merged["os"] == "old" and "complete" not in merged
+    whole = {"tag": "light-100", "os": "newer", "surfaces": {"a": {"png": "a3.png"}}}
+    (run / "manifest-light-100.json").write_text(json.dumps(whole), encoding="utf-8")
+    ui_compare._merge_manifest(run / "manifest-light-100.json",
+                               baseline / "manifest-light-100.json")
+    merged = json.loads((baseline / "manifest-light-100.json").read_text(encoding="utf-8"))
+    # A complete run is the probe's whole list now: screens gone from it go.
+    assert merged["os"] == "newer" and set(merged["surfaces"]) == {"a"}
+
+
+def test_accepting_by_name_adds_those_screens_to_the_manifest(app, tmp_path):
+    import json
+    baseline, run = tmp_path / "baseline", tmp_path / "run"
+    for folder in (baseline, run):
+        folder.mkdir()
+    (baseline / "manifest-light-100.json").write_text(json.dumps(
+        {"tag": "light-100", "surfaces": {"a": {"png": "a-light-100.png"}}}), encoding="utf-8")
+    (run / "manifest-light-100.json").write_text(json.dumps(
+        {"tag": "light-100", "complete": False,
+         "surfaces": {"b": {"png": "b-light-100.png"}, "c": {"png": "c-light-100.png"}}}),
+        encoding="utf-8")
+    for stem in ("b-light-100", "c-light-100"):
+        wx.Bitmap(4, 4).SaveFile(str(run / f"{stem}.png"), wx.BITMAP_TYPE_PNG)
+        (run / f"{stem}.json").write_text("{}", encoding="utf-8")
+    ui_compare.accept(run, baseline, ["b-light-100"])
+    merged = json.loads((baseline / "manifest-light-100.json").read_text(encoding="utf-8"))
+    assert set(merged["surfaces"]) == {"a", "b"} and "complete" not in merged

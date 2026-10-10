@@ -118,6 +118,19 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   all again. In the messages it finds the next message containing the text, searching each
   message's whole text, not just the first line you see; F3 and Shift+F3 find the next and
   previous, going round from the other end when they reach one (and saying so).
+- **Find in All Sessions** (Ctrl+Shift+S, View, Find in All Sessions) answers "which session did
+  we talk about that in?". It asks for some text and searches the whole text of every message in
+  every session the list shows (its Show Sessions view, and any Ctrl+F text), in the background,
+  ignoring case; tool calls and results count only in sessions with Show Tool Activity on. You
+  hear "Searching 32 sessions" (and, in a long search, how far it's got every ten seconds;
+  Ctrl+Shift+S again stops it), and then a list of the messages found, each read as the session,
+  who wrote it, when, and the words around the match ("Build, Claude, yesterday 10:42: …the
+  database migration ran…"), newest first within each session. The list's name says how many
+  sessions were searched and how many couldn't be read (a transcript no longer on disk, say).
+  Enter (or Go to Message) loads that session on that message. If you've moved on by the time
+  it finishes (to another dialog, another place in the window, or another app), the list waits:
+  you hear how many were found and "Press Ctrl+Shift+S to see them" (for ten minutes, until the
+  list's view changes or you start another search). With no match, you hear so and no list opens. It stops at 500 messages.
 - **Groups**, like groups in Claude on the web: **Ctrl+G** (File, Add to Group) puts the
   selected session in a group, or a new one; File, Remove from Group takes it out; File,
   Manage Groups lists your groups with how many sessions each has, to make, rename or delete
@@ -625,6 +638,7 @@ shows it as plain text instead.
 
 | Where | Key | What it does |
 |---|---|---|
+| Anywhere | Ctrl+Shift+S | Find in All Sessions: search every listed session's messages, then load one on the message found |
 | Anywhere | Tab, Shift+Tab | Session list, messages, reply box, and back |
 | Anywhere | Ctrl+1, Ctrl+2, Ctrl+3 | Go to the session list, the messages, the reply box |
 | Anywhere | F6, Shift+F6 | Next or previous part: session list, messages, reply box, status bar |

@@ -129,6 +129,10 @@ Other things you can do with a message:
   links open; others, such as a file path, can only be copied.
 - **Ctrl+F** finds a message containing some text, searching each message's whole text. F3 and
   Shift+F3 find the next and previous match.
+- **Ctrl+Shift+S** (View, Find in All Sessions) searches the messages of every session in the
+  list, for when you can't remember which session something was in. It lists each message found
+  with its session, who wrote it, when, and the words around the match. Enter loads that session
+  on that message.
 - The Applications key (or Shift+F10) opens the message's menu.
 
 Claude's questions to you appear as "Claude asked: …" followed by "You answered: …". Tools Claude
