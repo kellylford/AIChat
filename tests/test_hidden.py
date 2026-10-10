@@ -37,3 +37,24 @@ def test_tool_activity_store_is_its_own_file(tmp_path):
     assert '"show_activity"' in path.read_text(encoding="utf-8")
     store.discard("own:b")
     assert "own:b" not in ToolActivityStore(path)
+
+
+
+def test_an_unreadable_tool_activity_file_is_reported_and_never_saved_over(tmp_path):
+    from thechatplace.hidden import ToolActivityStore
+    path = tmp_path / "tool_activity.json"
+    path.write_text('{"version": 1, "show_activity": "own:a"}', encoding="utf-8")
+    store = ToolActivityStore(path)
+    assert store.load_error.startswith("Your Show Tool Activity file (")
+    store.discard("own:a")  # off is already what's kept: nothing to save, no error
+    with pytest.raises(OSError):
+        store.add("own:a")
+    assert "show_activity" in path.read_text(encoding="utf-8")
+
+
+def test_the_hidden_file_messages_are_unchanged(tmp_path):
+    path = tmp_path / "hidden.json"
+    path.write_text("[]", encoding="utf-8")
+    assert HiddenStore(path).load_error.startswith("Your hidden sessions file (")
+    path.write_text("{", encoding="utf-8")
+    assert HiddenStore(path).load_error.startswith("Couldn't read your hidden sessions (")

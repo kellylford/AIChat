@@ -640,7 +640,7 @@ shows it as plain text instead.
 | Messages | Ctrl+C | Copy the whole message |
 | Messages | Ctrl+Shift+B | Code blocks: list, read and copy each one |
 | Messages | Ctrl+Shift+C | Copy the message's last code block |
-| Messages | Ctrl+T | Show or hide tool activity |
+| Messages | Ctrl+T | Show or hide tool activity in the loaded session |
 | Messages | Ctrl+O | Open this session in the Claude desktop app |
 | Reply box | Ctrl+Enter | Send (Chat Place sessions only); you stay in the reply box |
 | Reply box | Ctrl+Shift+Enter | Send, and save the message as a prompt (asks for its name first) |

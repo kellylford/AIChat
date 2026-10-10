@@ -24,9 +24,14 @@ class KeySetStore:
     ``{"version": 1, FIELD: [...]}``."""
     FILE = ""
     FIELD = ""
-    WHAT = ""  # for messages: "your hidden sessions"
+    #: For the messages when the file can't be used: "Couldn't read <READ>
+    #: (path)" and "<FILE_WORDS> (path) isn't in the expected format".
+    READ = ""
+    FILE_WORDS = ""
 
     def __init__(self, path: Optional[Path] = None) -> None:
+        if not (self.FILE and self.FIELD):
+            raise TypeError("A KeySetStore needs a FILE and a FIELD.")
         self.path = Path(path) if path else platform_paths.app_data_dir() / self.FILE
         self._keys: Set[str] = set()
         self.load_error = ""
@@ -40,11 +45,11 @@ class KeySetStore:
         except FileNotFoundError:
             return
         except (OSError, ValueError) as exc:
-            self.load_error = f"Couldn't read {self.WHAT} ({self.path}): {exc}"
+            self.load_error = f"Couldn't read {self.READ} ({self.path}): {exc}"
             return
         keys = raw.get(self.FIELD) if isinstance(raw, dict) else None
         if not isinstance(keys, list):
-            self.load_error = (f"The file of {self.WHAT} ({self.path}) isn't in the "
+            self.load_error = (f"{self.FILE_WORDS} ({self.path}) isn't in the "
                                "expected format, so The Chat Place won't change it.")
             return
         self._keys = {k for k in keys if isinstance(k, str) and k}
@@ -56,10 +61,13 @@ class KeySetStore:
         return key in self._keys
 
     def add(self, key: str) -> None:
-        self._change(self._keys | {key})
+        if key not in self._keys:
+            self._change(self._keys | {key})
 
     def discard(self, key: str) -> None:
-        self._change(self._keys - {key})
+        # Nothing to save when it isn't there: off is already what's kept.
+        if key in self._keys:
+            self._change(self._keys - {key})
 
     def rename_key(self, old: str, new: str) -> None:
         if old in self._keys:
@@ -87,7 +95,8 @@ class KeySetStore:
 class HiddenStore(KeySetStore):
     FILE = "hidden.json"
     FIELD = "hidden"
-    WHAT = "your hidden sessions"
+    READ = "your hidden sessions"
+    FILE_WORDS = "Your hidden sessions file"
 
     def hide(self, key: str) -> None:
         self.add(key)
@@ -100,4 +109,5 @@ class ToolActivityStore(KeySetStore):
     """The sessions Show Tool Activity is on for (#162)."""
     FILE = "tool_activity.json"
     FIELD = "show_activity"
-    WHAT = "the sessions you show tool activity for"
+    READ = "which sessions show tool activity"
+    FILE_WORDS = "Your Show Tool Activity file"

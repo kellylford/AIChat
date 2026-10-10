@@ -81,7 +81,7 @@ SHORTCUTS = [
                                          "text, not just the first line), then the next or "
                                          "previous one"),
         ("End", "Newest message"),
-        ("Ctrl+T", "Show or hide tool activity"),
+        ("Ctrl+T", "Show or hide tool activity in the loaded session"),
         ("Ctrl+O", "Open this session in the Claude desktop app"),
     ]),
     ("Reply box", [

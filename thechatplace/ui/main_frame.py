@@ -1167,6 +1167,10 @@ class MainFrame(wx.Frame):
                 self.hidden.show(info.key)
             except OSError:
                 pass
+        try:
+            self.tool_activity.discard(info.key)
+        except OSError:
+            pass  # a key nothing has any more; harmless
         # Nothing of it may linger: an unsent draft would hold back updates
         # (_unsent_text) for a reply box that no longer exists.
         for per_session in (self._attachments, self._drafts, self._queued,
@@ -1224,7 +1228,7 @@ class MainFrame(wx.Frame):
         self._save_draft()
         self._clear_activity()  # another session's tool calls aren't news here
         self._open = info
-        self._show_activity_check(info.key in self.tool_activity)
+        self._sync_activity_controls(info.key in self.tool_activity)
         self.reply_text.SetValue(self._drafts.get(info.cli_session_id, "") if info.is_own else "")
         self._open_generation += 1
         self._reader = None
@@ -1271,7 +1275,7 @@ class MainFrame(wx.Frame):
         self._clear_activity()
         self._spoken.clear()
         self._open = None
-        self._show_activity_check(False)
+        self._sync_activity_controls(False)
         self._open_generation += 1
         self._reader = None
         self._chat_messages = []
@@ -1901,7 +1905,7 @@ class MainFrame(wx.Frame):
     def on_toggle_activity_check(self, _event):
         self._set_activity(self.activity_check.GetValue())
 
-    def _show_activity_check(self, show: bool):
+    def _sync_activity_controls(self, show: bool):
         """The loaded session's Show Tool Activity, on the menu and the check
         box, without saying anything (loading a session)."""
         self._show_activity = show
@@ -1913,10 +1917,10 @@ class MainFrame(wx.Frame):
         with it (#162)."""
         info = self._open
         if info is None:
-            self._show_activity_check(False)
+            self._sync_activity_controls(False)
             self._feedback("No session loaded. Show Tool Activity is set for each session.")
             return
-        self._show_activity_check(show)
+        self._sync_activity_controls(show)
         if not show:
             self._clear_activity()
         kept = True
@@ -1991,7 +1995,10 @@ class MainFrame(wx.Frame):
                     wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION, self) != wx.YES:
                 return
         self._feedback(f"Exporting {info.title}.")
-        show_activity = info.key in self.tool_activity
+        # As the screen shows it for the loaded session (even if saving the
+        # setting failed); as kept, for any other.
+        show_activity = (self._show_activity if self._open is not None
+                         and info.key == self._open.key else info.key in self.tool_activity)
         title, folder = info.title, info.cwd
 
         def work():
@@ -2965,6 +2972,12 @@ class MainFrame(wx.Frame):
                          remote_control=remote_control)
         if not self._store_write(self.store.add, own):
             return
+        if info.key in self.tool_activity:
+            # Carried on here, it shows the tool calls you were following.
+            try:
+                self.tool_activity.add(own.to_info().key)
+            except OSError:
+                pass
         self._start_turn(new_id, command, info.cwd, message, title)
         self.open_session(own.to_info())
         self.refresh_sessions()
