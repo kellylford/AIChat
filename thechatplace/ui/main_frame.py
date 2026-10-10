@@ -113,6 +113,8 @@ CHAT_REFRESH_MS = 2000
 ACTIVITY_DELAY_MS = 1200
 #: How often a long Find in All Sessions says how far it's got (#109).
 FIND_ALL_PROGRESS_MS = 10_000
+#: How long results said but not yet looked at wait for Ctrl+Shift+S (#109).
+FIND_ALL_KEEP_S = 600
 
 _REPLY_KINDS = (ASSISTANT, QUESTION, PLAN, ERROR)
 
@@ -241,7 +243,11 @@ class MainFrame(wx.Frame):
         self._find_all_cancel = False
         self._find_all_done = 0
         self._find_all_focus = None
-        self._find_all_waiting = None  # results said but not yet shown
+        # Results said but not yet shown: (when, results). They're kept for
+        # FIND_ALL_KEEP_S, and dropped when the list's view changes.
+        self._find_all_waiting = None
+        self._find_all_run = 0
+        self._find_all_timer = None
         self._select_on_load = None  # a search result, until its session loads
         # Usage limits and context (#19): the latest limits any turn reported
         # (they're the account's), each own session's context window, and
@@ -3767,6 +3773,7 @@ class MainFrame(wx.Frame):
     def on_view(self, view: str):
         """View, Show Sessions: list only these, and remember it."""
         shown = self._apply_view(view)
+        self._find_all_waiting = None  # they were for the sessions listed before
         count = "no sessions" if not shown else (
             "1 session" if len(shown) == 1 else f"{len(shown)} sessions")
         self._feedback(f"Showing {view_spoken(view)}: {count}.")
@@ -3846,12 +3853,16 @@ class MainFrame(wx.Frame):
         session on that message. Pressed while searching, it stops; pressed
         when results are waiting, it shows them."""
         if self._find_all_busy:
-            self._find_all_cancel = True
-            self._feedback("Stopped searching.")
+            if not self._find_all_cancel:
+                self._find_all_cancel = True
+                self._stop_find_all_timer()
+                self._feedback("Stopped searching.")
+            else:
+                self._feedback("Stopping. It ends after the session it's reading.")
             return
-        if self._find_all_waiting is not None:
-            results, self._find_all_waiting = self._find_all_waiting, None
-            self._open_find_results(results)
+        waiting, self._find_all_waiting = self._find_all_waiting, None
+        if waiting is not None and time.monotonic() - waiting[0] < FIND_ALL_KEEP_S:
+            self._open_find_results(waiting[1])
             return
         returning_to = wx.Window.FindFocus()
         text = self._ask_text("Find in All Sessions",
@@ -3874,12 +3885,17 @@ class MainFrame(wx.Frame):
         self._find_all_busy = True
         self._find_all_cancel = False
         self._find_all_done = 0
+        # Which search this is: a progress timer of an earlier one says nothing.
+        self._find_all_run += 1
+        run = self._find_all_run
         # Where you were: the results open there only if you still are.
         self._find_all_focus = returning_to
         count = len(targets)
         self._feedback(f'Searching {count} session{"s" if count != 1 else ""} for "{text}". '
                        "Ctrl+Shift+S again stops.")
-        wx.CallLater(FIND_ALL_PROGRESS_MS, self._say_find_all_progress, count)
+        self._stop_find_all_timer()
+        self._find_all_timer = wx.CallLater(FIND_ALL_PROGRESS_MS, self._say_find_all_progress,
+                                            run, count)
 
         def progress(done):
             self._find_all_done = done  # an int, read on the window's thread
@@ -3893,19 +3909,31 @@ class MainFrame(wx.Frame):
                 wx.CallAfter(self._find_all_failed, exc)
                 return
             wx.CallAfter(self._find_all_finished, results)
-        self._pool.submit(work)
+        # A thread of its own, not the pool's: a long search mustn't hold up
+        # the snapshots and chat loads the pool's few threads are for.
+        threading.Thread(target=work, name="find-all", daemon=True).start()
 
-    def _say_find_all_progress(self, count: int):
+    def _stop_find_all_timer(self):
+        if self._find_all_timer is not None:
+            self._find_all_timer.Stop()
+            self._find_all_timer = None
+
+    def _say_find_all_progress(self, run: int, count: int):
         """A long search says how far it's got, now and then, so it isn't
-        silent."""
-        if self._gone() or not self._find_all_busy or self._find_all_cancel:
+        silent. Only the search running now: ``run`` is the one this timer
+        was started for."""
+        self._find_all_timer = None
+        if (self._gone() or run != self._find_all_run or not self._find_all_busy
+                or self._find_all_cancel):
             return
         self._feedback(f"Searched {self._find_all_done} of {count} sessions.")
-        wx.CallLater(FIND_ALL_PROGRESS_MS, self._say_find_all_progress, count)
+        self._find_all_timer = wx.CallLater(FIND_ALL_PROGRESS_MS, self._say_find_all_progress,
+                                            run, count)
 
     def _find_all_failed(self, exc):
         self._find_all_busy = False
-        if not self._gone():
+        self._stop_find_all_timer()
+        if not self._gone() and not self._find_all_cancel:
             self._say(f"Couldn't search the sessions: {exc}")
 
     def _find_all_finished(self, results):
@@ -3914,6 +3942,7 @@ class MainFrame(wx.Frame):
         said and wait for Ctrl+Shift+S, so a list never jumps in front of
         what you've gone on to do."""
         self._find_all_busy = False
+        self._stop_find_all_timer()
         if self._gone() or self._find_all_cancel:
             return
         if not results.matches:
@@ -3925,7 +3954,7 @@ class MainFrame(wx.Frame):
         if here:
             self._open_find_results(results)
             return
-        self._find_all_waiting = results
+        self._find_all_waiting = (time.monotonic(), results)
         self._say(f"{results.summary()} Press Ctrl+Shift+S to see them.")
 
     def _open_find_results(self, results):
@@ -3972,7 +4001,8 @@ class MainFrame(wx.Frame):
         where = f"Loaded {match.title}. " if loaded else ""
         if row is None or row >= self.chat_list.GetCount():
             count = sum(1 for m in visible if m.kind != QUEUED)
-            self._feedback(f"{where}{count} messages. The message found isn't in the list now; "
+            self._feedback(f"{where}{count} message{'s' if count != 1 else ''}. The message "
+                           "found isn't in the list now; "
                            "if it was a tool call, Ctrl+T shows them.")
             return False
         self.chat_list.SetSelection(row)
@@ -5046,7 +5076,7 @@ class MainFrame(wx.Frame):
         self._chat_timer.Stop()
         self._link_timer.Stop()
         for name in ("_startup_sign_in", "_startup_update_check",
-                     "_startup_update_notice", "_update_notice_wait"):
+                     "_startup_update_notice", "_update_notice_wait", "_find_all_timer"):
             timer = getattr(self, name, None)
             if timer is not None:
                 timer.Stop()

@@ -129,8 +129,8 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   sessions were searched and how many couldn't be read (a transcript no longer on disk, say).
   Enter (or Go to Message) loads that session on that message. If you've moved on by the time
   it finishes (to another dialog, another place in the window, or another app), the list waits:
-  you hear how many were found and "Press Ctrl+Shift+S to see them". With no match, you hear so
-  and no list opens. It stops at 500 messages.
+  you hear how many were found and "Press Ctrl+Shift+S to see them" (for ten minutes, until the
+  list's view changes or you start another search). With no match, you hear so and no list opens. It stops at 500 messages.
 - **Groups**, like groups in Claude on the web: **Ctrl+G** (File, Add to Group) puts the
   selected session in a group, or a new one; File, Remove from Group takes it out; File,
   Manage Groups lists your groups with how many sessions each has, to make, rename or delete

@@ -2,7 +2,9 @@
 
 Each listed session's transcript is read (off the window's thread) and its
 messages searched for the text, the whole text of each message, ignoring
-case, as Find in Messages does. A match is the session, the message's time
+case. (Not quite as Find in Messages does: it casefolds, so "STRASSE" finds
+"Straße" there; here the offsets must be in the text itself, for the snippet,
+so it's a case-insensitive match, which doesn't.) A match is the session, the message's time
 and a snippet around the words. Sessions whose transcript isn't on disk,
 or can't be read, are counted, so the result can say how many weren't
 searched.

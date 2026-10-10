@@ -5,6 +5,7 @@ end, and speech is replaced by a recorder. The real look and sound with JAWS
 and NVDA is checked by hand (see the README).
 """
 import json
+import threading
 import time
 
 import pytest
@@ -7539,3 +7540,110 @@ def test_results_that_arrive_while_you_are_elsewhere_wait(frame, env, monkeypatc
     assert frame._last_announcement == ('1 message in 1 session contains "needle". Searched 1 '
                                         "session. 2 had no transcript to read. Press "
                                         "Ctrl+Shift+S to see them.")
+
+
+
+def test_results_open_at_once_when_you_are_still_there(frame, env, monkeypatch):
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [user_text("the needle")])
+    monkeypatch.setattr(frame, "IsActive", lambda: True)
+    monkeypatch.setattr(frame, "_modal_open", lambda: False)
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    opened = []
+    monkeypatch.setattr(frame, "_open_find_results", opened.append)
+    monkeypatch.setattr(frame, "_ask_text", lambda *a: "needle")
+    frame.on_find_all()
+    assert pump(lambda: not frame._find_all_busy)
+    assert len(opened) == 1 and frame._find_all_waiting is None
+
+
+def test_results_wait_while_a_dialog_is_up_and_go_stale(frame, env, monkeypatch):
+    from thechatplace.ui import main_frame
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [user_text("the needle")])
+    monkeypatch.setattr(frame, "IsActive", lambda: True)
+    monkeypatch.setattr(frame, "_modal_open", lambda: True)  # Settings, say
+    monkeypatch.setattr(wx.Window, "FindFocus", staticmethod(lambda: frame.session_list))
+    opened = []
+    monkeypatch.setattr(frame, "_open_find_results", opened.append)
+    monkeypatch.setattr(frame, "_ask_text", lambda *a: "needle")
+    frame.on_find_all()
+    assert pump(lambda: not frame._find_all_busy)
+    assert opened == [] and frame._find_all_waiting is not None
+    # Long after, Ctrl+Shift+S asks for a new search instead of showing them.
+    when, results = frame._find_all_waiting
+    frame._find_all_waiting = (when - main_frame.FIND_ALL_KEEP_S - 1, results)
+    asked = []
+    monkeypatch.setattr(frame, "_ask_text", lambda *a: asked.append(a) or None)
+    frame.on_find_all()
+    assert opened == [] and len(asked) == 1
+
+
+def test_changing_the_view_drops_waiting_results(frame, env):
+    frame._find_all_waiting = (0.0, object())
+    frame.on_view("all")
+    assert frame._find_all_waiting is None
+
+
+def test_stopping_drops_the_results_and_a_late_error(frame, env, monkeypatch):
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [user_text("the needle")])
+    monkeypatch.setattr("thechatplace.ui.main_frame.FindResultsDialog",
+                        lambda *a, **k: pytest.fail("stopped"))
+    monkeypatch.setattr(frame, "_ask_text", lambda *a: "needle")
+    started = threading.Event()
+    release = threading.Event()
+    real = main_frame_module().search_sessions
+
+    def slow(*args, **kwargs):
+        started.set()
+        release.wait(5)
+        return real(*args, **kwargs)
+    monkeypatch.setattr(main_frame_module(), "search_sessions", slow)
+    frame.on_find_all()
+    assert started.wait(5)
+    frame.on_find_all()  # Ctrl+Shift+S again
+    assert env["feedback"][-1] == "Stopped searching."
+    frame.on_find_all()
+    assert env["feedback"][-1] == "Stopping. It ends after the session it's reading."
+    release.set()
+    assert pump(lambda: not frame._find_all_busy)
+    assert frame._find_all_waiting is None
+    said = frame._last_announcement
+    frame._find_all_failed(OSError("late"))
+    assert frame._last_announcement == said  # nothing said after a stop
+
+
+def test_progress_is_said_only_for_the_search_running_now(frame, env):
+    frame._find_all_busy, frame._find_all_cancel = True, False
+    frame._find_all_run, frame._find_all_done = 2, 7
+    frame._say_find_all_progress(1, 30)  # an earlier search's timer
+    assert not env["feedback"] or "Searched" not in env["feedback"][-1]
+    assert frame._find_all_timer is None
+    frame._say_find_all_progress(2, 30)
+    assert env["feedback"][-1] == "Searched 7 of 30 sessions."
+    assert frame._find_all_timer is not None
+    frame.stop_timers()
+
+
+def test_a_result_thats_a_hidden_tool_call_says_so(frame, env, monkeypatch):
+    from thechatplace.search import Match
+    add_transcript(env, "C:\\G\\Repo", "cli-a", [
+        user_text("go"),
+        assistant_block(tool_use_block("Bash", {"command": "grep needle"}, "t1"), "m1")])
+    select(frame, "Quiet one")
+    frame.on_open_session()
+    assert pump(lambda: frame._chat_loaded)
+    tool = frame._chat_messages[1]
+    frame._go_to_match(Match(frame._open.key, "Quiet one", tool.key, "Tool", "", "grep needle", 1))
+    assert env["feedback"][-1] == ("1 message. The message found isn't in the list now; if it "
+                                   "was a tool call, Ctrl+T shows them.")
+
+
+def test_a_result_in_a_session_without_its_transcript_forgets_the_target(frame, env):
+    from thechatplace.search import Match
+    frame._go_to_match(Match(frame._list_keys[0], "x", "k", "You", "", "", 0))
+    assert pump(lambda: frame._chat_loaded or frame._select_on_load is None)
+    assert frame._select_on_load is None
+
+
+def main_frame_module():
+    from thechatplace.ui import main_frame
+    return main_frame

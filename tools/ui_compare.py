@@ -242,22 +242,36 @@ def report(result: dict) -> str:
     return "\n".join(lines)
 
 
-def _merge_manifest(source: Path, target: Path) -> None:
-    """A run's manifest into the baseline's. A run of only some surfaces
-    (``-Surface``) adds or replaces those, and keeps the baseline's others:
-    copying it whole dropped every other screen from the baseline. A complete
-    run's own description of the variant (Windows, scaling, theme) wins."""
+def _merge_manifest(source: Path, target: Path, only=None) -> None:
+    """A run's manifest into the baseline's.
+
+    * A complete run replaces it: its surfaces are the probe's now, so a
+      screen gone from the probe goes from the baseline too.
+    * A run of only some surfaces (``-Surface``) adds or replaces those and
+      keeps the baseline's others (copying it whole once dropped every other
+      screen), and the baseline's description of the variant.
+    * ``only`` (surface names, accepting by name) merges just those, into a
+      manifest the baseline already has.
+    """
     new = json.loads(source.read_text(encoding="utf-8"))
-    if not target.exists():
+    if only is not None and not target.exists():
+        return  # a baseline without manifests goes by its files; one of a few would hide the rest
+    if only is not None:
+        new = {**new, "complete": False,
+               "surfaces": {k: v for k, v in new.get("surfaces", {}).items() if k in only}}
+    if not target.exists() and new.get("complete") is not False:
         shutil.copy2(source, target)
         return
-    old = json.loads(target.read_text(encoding="utf-8"))
-    partial = new.get("complete") is False
-    merged = dict(old) if partial else {**old, **new}
-    merged["surfaces"] = {**old.get("surfaces", {}), **new.get("surfaces", {})}
-    if old.get("complete") is not False:
-        merged.pop("complete", None)  # still the whole baseline
-    target.write_text(json.dumps(merged, indent=1) + "\n", encoding="utf-8")
+    old = json.loads(target.read_text(encoding="utf-8")) if target.exists() else {}
+    if new.get("complete") is not False:
+        merged = new
+    else:
+        merged = dict(old) if old else dict(new)
+        merged["surfaces"] = {**old.get("surfaces", {}), **new.get("surfaces", {})}
+        if old and old.get("complete") is not False:
+            merged.pop("complete", None)  # still the whole baseline
+    target.write_text(json.dumps(merged, indent=1, ensure_ascii=False) + "\n",
+                      encoding="utf-8")
 
 
 def accept(run: Path, baseline: Path, names) -> list:
@@ -274,11 +288,16 @@ def accept(run: Path, baseline: Path, names) -> list:
     if absent:
         raise SystemExit("Not accepted: not in the run:\n" + "\n".join(f"  {s}" for s in absent))
     baseline.mkdir(parents=True, exist_ok=True)
-    if not names:
-        # Accepting a whole run keeps its manifests: which Windows, scaling
-        # and theme the baseline was taken in.
-        for manifest in run.glob("manifest*.json"):
-            _merge_manifest(manifest, baseline / manifest.name)
+    # The manifests say which Windows, scaling and theme the baseline was
+    # taken in, and which screens it has.
+    for manifest in run.glob("manifest*.json"):
+        tag = json.loads(manifest.read_text(encoding="utf-8")).get("tag", "")
+        only = None
+        if names:
+            only = {stem[:-len(tag) - 1] for stem in stems if tag and stem.endswith("-" + tag)}
+            if not only:
+                continue
+        _merge_manifest(manifest, baseline / manifest.name, only)
     for source in sources:
         shutil.copy2(source, baseline / source.name)
     return stems
