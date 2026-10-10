@@ -70,6 +70,11 @@ try {
         }
     } finally { $archive.Dispose() }
     Invoke-Command -Session $session -ScriptBlock {
+        # A probe left over from a run that was stopped holds vmtest's output
+        # file, and every later vmtest run would be refused.
+        Get-CimInstance Win32_Process | Where-Object {
+            $_.CommandLine -match 'ui_probe(_guest)?\.(py|ps1)' -and $_.ProcessId -ne $PID
+        } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
         Remove-Item C:\vmtest\tcp, C:\vmtest\probe-out -Recurse -Force -ErrorAction SilentlyContinue
         New-Item C:\vmtest -ItemType Directory -Force | Out-Null
     }
