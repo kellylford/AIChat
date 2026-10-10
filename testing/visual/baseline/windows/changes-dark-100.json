@@ -1,0 +1,159 @@
+{
+ "title": "Changed Files: Visual probe",
+ "class": "ChangesDialog",
+ "size": [
+  800,
+  580
+ ],
+ "client": [
+  784,
+  541
+ ],
+ "dpi": [
+  96,
+  96
+ ],
+ "content_scale": 1.0,
+ "controls": [
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "&Show changes from:",
+   "rect": [
+    8,
+    11,
+    109,
+    16
+   ],
+   "best": [
+    109,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Choice",
+   "name": "Show changes from",
+   "label": "",
+   "rect": [
+    123,
+    8,
+    133,
+    23
+   ],
+   "best": [
+    133,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": "Your latest message"
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "&Files:",
+   "rect": [
+    8,
+    39,
+    27,
+    16
+   ],
+   "best": [
+    27,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "ListBox",
+   "name": "Files, 1",
+   "label": "",
+   "rect": [
+    10,
+    57,
+    768,
+    130
+   ],
+   "best": [
+    180,
+    130
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "items": [
+    "uploader.py, 2 lines added"
+   ],
+   "selection": 0
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "C&hanges:",
+   "rect": [
+    8,
+    193,
+    50,
+    16
+   ],
+   "best": [
+    50,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "TextCtrl",
+   "name": "Changes to uploader.py",
+   "label": "",
+   "rect": [
+    10,
+    211,
+    768,
+    293
+   ],
+   "best": [
+    127,
+    240
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": "C:\\Users\\vmuser\\AppData\\Local\\Temp\\tcp-probe\\changes\\Projects\\Scratch\\uploader.py: 2 lines added.\n\nA change:\nAdded: self._file.flush()\nAdded: self._file.close()\nUnchanged: self.done.set()"
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "C&lose",
+   "rect": [
+    701,
+    510,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  }
+ ],
+ "capture": "PrintWindow"
+}

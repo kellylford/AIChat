@@ -1,0 +1,141 @@
+{
+ "title": "Insert Command or Skill",
+ "class": "CommandPickerDialog",
+ "size": [
+  720,
+  520
+ ],
+ "client": [
+  704,
+  481
+ ],
+ "dpi": [
+  96,
+  96
+ ],
+ "content_scale": 1.0,
+ "controls": [
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "&Search:",
+   "rect": [
+    8,
+    8,
+    39,
+    16
+   ],
+   "best": [
+    39,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "TextCtrl",
+   "name": "Search commands and skills",
+   "label": "",
+   "rect": [
+    10,
+    26,
+    688,
+    23
+   ],
+   "best": [
+    110,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": ""
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "&Commands and skills (3 of 3):",
+   "rect": [
+    8,
+    55,
+    157,
+    16
+   ],
+   "best": [
+    157,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "ListBox",
+   "name": "Commands and skills, 3 of 3",
+   "label": "",
+   "rect": [
+    10,
+    73,
+    688,
+    371
+   ],
+   "best": [
+    479,
+    49
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "items": [
+    "/blog-publish: Publish a post to the blog",
+    "/compact <optional instructions>, Claude Code: Clear history but keep a summary",
+    "/context, Claude Code: Show what's using the context"
+   ],
+   "selection": 0
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Insert",
+   "rect": [
+    540,
+    450,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "Cancel",
+   "rect": [
+    621,
+    450,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  }
+ ],
+ "capture": "screen copy (stretched by Windows)"
+}

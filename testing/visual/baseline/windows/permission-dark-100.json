@@ -1,0 +1,155 @@
+{
+ "title": "Claude needs permission: Visual probe",
+ "class": "PermissionDialog",
+ "size": [
+  700,
+  540
+ ],
+ "client": [
+  684,
+  501
+ ],
+ "dpi": [
+  96,
+  96
+ ],
+ "content_scale": 1.0,
+ "controls": [
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "&Request:",
+   "rect": [
+    8,
+    8,
+    46,
+    16
+   ],
+   "best": [
+    46,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "TextCtrl",
+   "name": "Request",
+   "label": "Claude wants to run git push origin release/0.2.\r\n\r\nBash command:\r\ngit push origin release/0.2",
+   "rect": [
+    10,
+    34,
+    668,
+    367
+   ],
+   "best": [
+    127,
+    160
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": "Claude wants to run git push origin release/0.2.\n\nBash command:\ngit push origin release/0.2"
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "&Reason to give Claude if you deny (optional):",
+   "rect": [
+    8,
+    407,
+    238,
+    16
+   ],
+   "best": [
+    238,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "TextCtrl",
+   "name": "Reason to give Claude if you deny (optional)",
+   "label": "",
+   "rect": [
+    10,
+    433,
+    668,
+    23
+   ],
+   "best": [
+    110,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": ""
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Allow",
+   "rect": [
+    425,
+    470,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Deny",
+   "rect": [
+    506,
+    470,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "Answer &Later",
+   "rect": [
+    587,
+    470,
+    89,
+    23
+   ],
+   "best": [
+    89,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  }
+ ],
+ "capture": "PrintWindow"
+}

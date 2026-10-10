@@ -1,0 +1,280 @@
+{
+ "title": "The Chat Place",
+ "class": "MainFrame",
+ "size": [
+  1000,
+  529
+ ],
+ "client": [
+  984,
+  447
+ ],
+ "dpi": [
+  96,
+  96
+ ],
+ "content_scale": 1.0,
+ "controls": [
+  {
+   "class": "Panel",
+   "name": "panel",
+   "label": "panel",
+   "rect": [
+    0,
+    0,
+    984,
+    447
+   ],
+   "best": [
+    540,
+    167
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "Session &list:",
+   "rect": [
+    8,
+    8,
+    61,
+    16
+   ],
+   "best": [
+    61,
+    16
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "ListBox",
+   "name": "Session list",
+   "label": "",
+   "rect": [
+    10,
+    34,
+    378,
+    407
+   ],
+   "best": [
+    1182,
+    64
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": [],
+   "items": [
+    "Fix the flaky upload test, AIChat, needs you: Pick a name for the release branch, active 1 minute ago, You: Thanks. Which branch name should the release use?",
+    "Visual probe, Scratch, idle, active just now, Chat Place session, Claude: What changed The upload test failed one run in ten because it read the progress file before the writer had flushed it. It now waits for the writer to…",
+    "Write the release notes for 0.2, AIChat, idle, active 1 hour ago",
+    "A session whose title goes on and on to show what a very long title does to the session list and the heading above the messages, Website, idle, active yesterday"
+   ],
+   "selection": 0
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "",
+   "rect": [
+    402,
+    8,
+    1,
+    16
+   ],
+   "best": [
+    1,
+    16
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "&Messages:",
+   "rect": [
+    402,
+    32,
+    55,
+    16
+   ],
+   "best": [
+    55,
+    16
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "ListBox",
+   "name": "Messages",
+   "label": "",
+   "rect": [
+    404,
+    50,
+    574,
+    329
+   ],
+   "best": [
+    385,
+    49
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": [],
+   "items": [
+    "No session loaded. Choose one in the session list and press Enter."
+   ],
+   "selection": 0
+  },
+  {
+   "class": "CheckBox",
+   "name": "check",
+   "label": "Show tool &activity",
+   "rect": [
+    402,
+    393,
+    116,
+    15
+   ],
+   "best": [
+    116,
+    15
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&New Session...",
+   "rect": [
+    402,
+    416,
+    96,
+    23
+   ],
+   "best": [
+    96,
+    23
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Refresh",
+   "rect": [
+    504,
+    416,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "StatusBar",
+   "name": "statusBar",
+   "label": "",
+   "rect": [
+    0,
+    447,
+    984,
+    23
+   ],
+   "best": [
+    301,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Control",
+   "name": "Status",
+   "label": "4 sessions: 1 need you, 0 working.",
+   "rect": [
+    2,
+    451,
+    464,
+    16
+   ],
+   "best": [
+    100,
+    80
+   ],
+   "depth": 1,
+   "parent": 9,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Control",
+   "name": "Loaded session",
+   "label": "",
+   "rect": [
+    471,
+    451,
+    312,
+    16
+   ],
+   "best": [
+    100,
+    80
+   ],
+   "depth": 1,
+   "parent": 9,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "1 session needs you",
+   "rect": [
+    788,
+    451,
+    154,
+    16
+   ],
+   "best": [
+    111,
+    23
+   ],
+   "depth": 1,
+   "parent": 9,
+   "enabled": true,
+   "problems": [
+    "text cut off: smaller than its best size"
+   ]
+  }
+ ],
+ "capture": "screen copy (stretched by Windows)"
+}

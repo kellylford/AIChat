@@ -1,0 +1,139 @@
+{
+ "title": "Code Blocks",
+ "class": "CodeBlocksDialog",
+ "size": [
+  760,
+  560
+ ],
+ "client": [
+  744,
+  521
+ ],
+ "dpi": [
+  96,
+  96
+ ],
+ "content_scale": 1.0,
+ "controls": [
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "Code &blocks:",
+   "rect": [
+    8,
+    8,
+    69,
+    16
+   ],
+   "best": [
+    69,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "ListBox",
+   "name": "Code blocks, 1",
+   "label": "",
+   "rect": [
+    10,
+    26,
+    728,
+    110
+   ],
+   "best": [
+    203,
+    110
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "items": [
+    "Python, 4 lines: def finish(self):"
+   ],
+   "selection": 0
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "Co&de:",
+   "rect": [
+    8,
+    142,
+    32,
+    16
+   ],
+   "best": [
+    32,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "TextCtrl",
+   "name": "Code block, Python, 4 lines",
+   "label": "",
+   "rect": [
+    10,
+    160,
+    728,
+    324
+   ],
+   "best": [
+    127,
+    220
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": "def finish(self):\n    self._file.flush()\n    self._file.close()\n    self.done.set()"
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Copy",
+   "rect": [
+    580,
+    490,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "C&lose",
+   "rect": [
+    661,
+    490,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  }
+ ],
+ "capture": "screen copy (stretched by Windows)"
+}

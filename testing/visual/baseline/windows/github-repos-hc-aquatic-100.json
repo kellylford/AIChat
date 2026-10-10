@@ -1,0 +1,160 @@
+{
+ "title": "From GitHub",
+ "class": "GitHubRepoDialog",
+ "size": [
+  720,
+  520
+ ],
+ "client": [
+  704,
+  481
+ ],
+ "dpi": [
+  96,
+  96
+ ],
+ "content_scale": 1.0,
+ "controls": [
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "&Search, or type owner/name:",
+   "rect": [
+    8,
+    8,
+    153,
+    16
+   ],
+   "best": [
+    153,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "TextCtrl",
+   "name": "Search your repositories, or type owner/name. Clones go into C:\\Users\\probe\\GitHub",
+   "label": "",
+   "rect": [
+    10,
+    26,
+    688,
+    23
+   ],
+   "best": [
+    110,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": ""
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "&Repositories (3 of 3):",
+   "rect": [
+    8,
+    55,
+    108,
+    16
+   ],
+   "best": [
+    108,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "ListBox",
+   "name": "Repositories, 3 of 3",
+   "label": "",
+   "rect": [
+    10,
+    73,
+    688,
+    347
+   ],
+   "best": [
+    382,
+    49
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "items": [
+    "probe/AIChat: The Chat Place: a reader for Claude Code sessions",
+    "probe/website: The Idea Place website",
+    "probe/notes, private: Private notes"
+   ],
+   "selection": 0
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "Cloned into C:\\Users\\probe\\GitHub, if it isn't there yet.",
+   "rect": [
+    8,
+    426,
+    289,
+    16
+   ],
+   "best": [
+    289,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Use",
+   "rect": [
+    540,
+    450,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "Cancel",
+   "rect": [
+    621,
+    450,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  }
+ ],
+ "capture": "PrintWindow"
+}
