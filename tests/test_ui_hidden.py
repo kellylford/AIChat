@@ -2667,7 +2667,7 @@ def test_report_a_bug_opens_github_with_the_report(frame, env, monkeypatch):
     frame.on_report_bug()
     assert any(line.startswith("Sessions listed: 2 desktop app, 1 Chat Place")
                for line in fills.seen)
-    assert env["opened"][-1].startswith("https://github.com/kellylford/AIChat/issues/new?")
+    assert env["opened"][-1].startswith("https://github.com/TheIdeaPlace/AIChat/issues/new?")
     assert "title=Sort+resets" in env["opened"][-1]
     assert env["feedback"][-1].startswith("Opened GitHub's new issue page")
 
@@ -5996,7 +5996,7 @@ def test_update_installed_dialog_opens_the_release_notes(frame, env, monkeypatch
     monkeypatch.setattr(frame, "_modal", fake_modal)
     frame.show_update_installed("0.1.4")
     assert seen == ["The Chat Place Update Installed"]
-    assert env["opened"] == ["https://github.com/kellylford/AIChat/releases/tag/v0.1.4"]
+    assert env["opened"] == ["https://github.com/TheIdeaPlace/AIChat/releases/tag/v0.1.4"]
     assert env["feedback"][-1] == "Opening what's new in The Chat Place 0.1.4."
 
     def broken(url):

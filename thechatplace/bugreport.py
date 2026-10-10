@@ -27,7 +27,7 @@ from typing import Dict, List, Optional
 from . import __version__, platform_paths
 
 #: Where issues are filed. One place to change when the app moves.
-REPO = "kellylford/AIChat"
+REPO = "TheIdeaPlace/AIChat"
 #: The longest the body may be once it's URL-encoded: browsers and the shell
 #: cut longer URLs (GitHub's limit is about 8 KB); the clipboard has it all.
 MAX_URL_BODY = 6000

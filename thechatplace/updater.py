@@ -48,8 +48,8 @@ from . import platform_paths
 
 logger = logging.getLogger("thechatplace.updater")
 
-REPO_URL = "https://github.com/kellylford/AIChat"
-RELEASES_API = "https://api.github.com/repos/kellylford/AIChat/releases?per_page=100"
+REPO_URL = "https://github.com/TheIdeaPlace/AIChat"
+RELEASES_API = "https://api.github.com/repos/TheIdeaPlace/AIChat/releases?per_page=100"
 TAG_PREFIX = "v"
 CHANNEL = "windows" if sys.platform == "win32" else "osx"
 INCLUDE_PRERELEASES = True
