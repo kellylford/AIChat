@@ -61,9 +61,9 @@ The window has three parts, in Tab order:
 
 1. The **session list**: every session, one per line.
 2. The **messages** of the session you've loaded.
-3. The **reply box**, with Send and Stop. For a Claude desktop app session, the same place holds
-   a short note saying why you reply in Claude, with Open in Claude and Continue Here buttons. For
-   a terminal session, the note says you reply in its terminal, with a Continue Here button.
+3. The **reply box**, with Send and Stop. For a session you reply to somewhere else (the desktop
+   app or a terminal), the same place holds a short note saying where you reply, followed by the
+   Open in Claude and Continue Here buttons that apply to it (see Kinds of session).
 
 Tab and Shift+Tab move between them, and Ctrl+1, Ctrl+2 and Ctrl+3 go straight to each one. F6
 and Shift+F6 move between the parts and the **status bar**, which holds whatever was said last;
@@ -137,32 +137,38 @@ Claude's tool calls and their results are hidden until you turn on **Show Tool A
 isn't silent: "Using Bash: git status; Read: main.py." A run of calls is gathered up and said
 together ("Using Read 4 times, then Bash."), and it never cuts off your screen reader.
 
-## Desktop app sessions and The Chat Place's own
+## Kinds of session
 
-There are two kinds of session in the list, and what you can do differs.
+The list holds four kinds of session, depending on where each was started. You read every kind the
+same way: arrow to it and press **Enter**. What differs is where you reply.
 
-**Claude desktop app sessions** are read-only here. You can read them, find in them, export them
-and see what they changed, but you reply in the desktop app. That's deliberate: if two programs
-both worked in one session at the same time, its conversation would get tangled. **Open in Claude**
-(Ctrl+O) switches the desktop app to the session, to answer it, approve a permission or answer a
-question card.
+| Kind | Started in | Its line adds | You reply | Open in Claude | Continue Here |
+|---|---|---|---|---|---|
+| **Desktop app session** | The Claude desktop app's Code tab | no kind | in the desktop app | yes | yes |
+| **Cowork session** | The desktop app's Cowork tab | "Cowork session" | in the desktop app | yes | no |
+| **Terminal session** | A terminal, by typing `claude` | "terminal session" | in that terminal | no | yes |
+| **Chat Place session** | The Chat Place (File, New Session) | "Chat Place session" | here, in the reply box | no | not needed |
 
-**The Chat Place's own sessions** are ones you start here. You read and reply to them entirely in
-The Chat Place, and they don't appear in the desktop app.
+Only The Chat Place's own sessions can be replied to here. The others are read-only. That's
+deliberate: if two programs both worked in one session at the same time, its conversation would
+get tangled. Where the reply box would be, a read-only session has a short note saying where you
+reply, followed by the buttons that apply to it. **Ctrl+3** moves to that note.
 
-If you'd like to carry on a desktop app or terminal session here, use **Continue Here** (Ctrl+Shift+N, or the
-button beside Open in Claude). It makes a new Chat Place session in the same folder, with the
-whole conversation so far, and you type its first message. Its title starts as the original's,
-followed by "(continued)". The original session isn't changed, and what you do in the copy
-doesn't appear in it.
+To list one kind, use View, Show Sessions (Alt+V, H): **Desktop App Sessions** (Code and
+Cowork together), **Cowork Sessions**, **Terminal Sessions** or **Chat Place Sessions**. Ctrl+F in
+the list also finds sessions by "cowork" or "terminal".
+
+### Desktop app sessions
+
+You can read, search, export and see what changed in the Claude desktop app's sessions, but you
+reply in the desktop app. **Open in Claude** (Ctrl+O) switches the desktop app to the session, to
+answer it, approve a permission or answer a question card.
 
 ### Cowork sessions
 
 The desktop app's **Cowork** sessions are listed too, and like its other sessions they're
-read-only here. Each one's line says "Cowork session", and where a session's folder would be, it
-names the folder you gave Cowork to work on, or says "no folder". To find them in a long list,
-press **Ctrl+F** and type "cowork". Press **Enter** to read the conversation, and
-**Open in Claude** (Ctrl+O) to answer it in the desktop app.
+read-only here. Where a session's folder would be, its line names the folder you gave Cowork to
+work on, or says "no folder". **Open in Claude** (Ctrl+O) answers it in the desktop app.
 
 A Cowork session can't be continued here: Cowork keeps its conversation inside the desktop app's
 own files and its tools were run by the desktop app, so Continue Here isn't offered for it (on
@@ -173,18 +179,44 @@ Anthropic's servers rather than on your computer, so they aren't listed.
 
 ### Terminal sessions
 
-Sessions you started by typing `claude` in a terminal are listed too, and like the desktop app's
-they're read-only here. Each one's line says "terminal session" and names the folder you started
-it in. Its title is the name you gave it with `/rename`, or else the one Claude Code gave it, or
-else the start of your first message. To find them in a long list, press **Ctrl+F** and type
-"terminal", or choose View, Show Sessions, **Terminal Sessions**. Press **Enter** to read the
-conversation. The list shows one as working while Claude works in it, and as needing you while
-it waits on you in the terminal (a permission or a question), and announces both.
+Sessions you started by typing `claude` in a terminal are listed too, read-only. Each one's line
+names the folder you started it in. Its title is the name you gave it with `/rename`, or else the
+one Claude Code gave it, or else the start of your first message. The list shows one as working
+while Claude works in it, and as needing you while it waits on you in the terminal (a permission
+or a question), and announces both. When it needs you, the line says what for, such as "needs
+you: dialog open".
 
-You reply to a terminal session in its terminal, or carry it on here with **Continue Here**
-(Ctrl+Shift+N). The desktop app doesn't list terminal sessions, so Open in Claude isn't offered for
-them. Sessions that scripts run with `claude -p`, and those of the VS Code extension, aren't
-listed.
+You reply to a terminal session in its terminal, or carry it on here with **Continue Here**. The
+desktop app doesn't list terminal sessions, so Open in Claude isn't offered for them. Sessions
+that scripts run with `claude -p`, and those of the VS Code extension, aren't listed.
+
+### The Chat Place's own sessions
+
+These are the sessions you start here, with File, New Session (Ctrl+N) or Continue Here. You read
+and reply to them entirely in The Chat Place, and they don't appear in the desktop app. Claude
+runs only while it's answering you: each message you send starts Claude, and it stops when the
+turn ends. So if Claude starts something in the background, such as a long build or a watch on a
+pull request's checks, and ends its turn to wait for it, the session won't carry on by itself when
+that work finishes: it waits for your next message. On Windows the background work itself also
+stops when the turn ends. Ask Claude to wait for such work before it finishes its turn, or run
+long jobs in a terminal session instead.
+
+### Continue Here
+
+To carry on a desktop app or terminal session here, use **Continue Here** (Ctrl+Shift+N, or the
+button after the note, where the reply box would be). It makes a new Chat Place session in the same
+folder, with the whole conversation so far, and you type its first message. Its title starts as
+the original's, followed by "(continued)". The original session isn't changed, and what you do in
+the copy doesn't appear in it.
+
+### Following a session as it works
+
+You can follow any kind of session while Claude works in it, wherever it was started. Load it,
+and its new messages appear as they're written. Turn on **Show Tool Activity** (Ctrl+T) to hear
+each tool call as it happens, so you know what Claude is doing between messages: "Using Bash: git
+status; Read: main.py." Without it, the newest message can be a short note Claude wrote before
+its next step, such as "Trying again with JSON", followed by a pause while it works. When the turn
+ends, or the session needs you, it's announced.
 
 ## Starting a session and replying
 
