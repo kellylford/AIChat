@@ -183,16 +183,20 @@ You reply to a terminal session in its terminal, or carry it on here with **Cont
 desktop app doesn't list terminal sessions, so Open in Claude isn't offered for them. Sessions
 that scripts run with `claude -p`, and those of the VS Code extension, aren't listed.
 
+A terminal session you load while it's working is one you're watching over someone's shoulder.
+Claude writes short notes to whoever is at the terminal as it goes, such as "The issue view
+printed nothing; trying again with JSON." That's Claude saying what it's doing about a step that
+didn't work, not an error from The Chat Place, and Claude usually carries on by itself. The step
+it means is hidden unless **Show Tool Activity** (Ctrl+T) is on: with it on, you also hear each
+command Claude runs and what came back, so a note like that follows on from what you've just
+heard. See Following a session as it works.
+
 ### The Chat Place's own sessions
 
 These are the sessions you start here, with File, New Session (Ctrl+N) or Continue Here. You read
-and reply to them entirely in The Chat Place, and they don't appear in the desktop app. Claude
-runs only while it's answering you: each message you send starts Claude, and it stops when the
-turn ends. So if Claude starts something in the background, such as a long build or a watch on a
-pull request's checks, and ends its turn to wait for it, the session won't carry on by itself when
-that work finishes: it waits for your next message. On Windows the background work itself also
-stops when the turn ends. Ask Claude to wait for such work before it finishes its turn, or run
-long jobs in a terminal session instead.
+and reply to them entirely in The Chat Place, and they don't appear in the desktop app. If Claude
+starts something in the background, such as a build or a wait for GitHub checks, the session keeps
+running while it does, and Claude carries on by itself when it finishes (see Replying).
 
 ### Continue Here
 
@@ -208,8 +212,8 @@ You can follow any kind of session while Claude works in it, wherever it was sta
 and its new messages appear as they're written. Turn on **Show Tool Activity** (Ctrl+T) to hear
 each tool call as it happens, so you know what Claude is doing between messages: "Using Bash: git
 status; Read: main.py." Without it, the newest message can be a short note Claude wrote before
-its next step, such as "Trying again with JSON", followed by a pause while it works. When the turn
-ends, or the session needs you, it's announced.
+its next step, such as "Trying again with JSON", followed by a pause while it works: the note is
+about a step you didn't hear. When the turn ends, or the session needs you, it's announced.
 
 ### The four kinds side by side
 
