@@ -24,3 +24,16 @@ def test_a_bad_file_is_reported_and_never_saved_over(tmp_path):
     with pytest.raises(OSError):
         store.hide("own:a")
     assert path.read_text(encoding="utf-8") == "[not ours"
+
+
+def test_tool_activity_store_is_its_own_file(tmp_path):
+    """#162: the sessions Show Tool Activity is on for, kept apart from hidden ones."""
+    from thechatplace.hidden import ToolActivityStore
+    path = tmp_path / "tool_activity.json"
+    store = ToolActivityStore(path)
+    store.add("own:a")
+    store.rename_key("own:a", "own:b")
+    assert ToolActivityStore(path).keys() == ["own:b"]
+    assert '"show_activity"' in path.read_text(encoding="utf-8")
+    store.discard("own:b")
+    assert "own:b" not in ToolActivityStore(path)

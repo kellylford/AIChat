@@ -133,7 +133,8 @@ was refused appear as "Permission denied: …".
 ### Seeing what Claude is doing
 
 Claude's tool calls and their results are hidden until you turn on **Show Tool Activity**
-(Ctrl+T). With it on, the open session's tool calls are also spoken as they happen, so a long turn
+(Ctrl+T). It's set for each session and remembered, so turning it on for one session leaves the
+others as they were. With it on, the open session's tool calls are also spoken as they happen, so a long turn
 isn't silent: "Using Bash: git status; Read: main.py." A run of calls is gathered up and said
 together ("Using Read 4 times, then Bash."), and it never cuts off your screen reader.
 
