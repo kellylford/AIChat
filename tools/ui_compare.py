@@ -242,6 +242,24 @@ def report(result: dict) -> str:
     return "\n".join(lines)
 
 
+def _merge_manifest(source: Path, target: Path) -> None:
+    """A run's manifest into the baseline's. A run of only some surfaces
+    (``-Surface``) adds or replaces those, and keeps the baseline's others:
+    copying it whole dropped every other screen from the baseline. A complete
+    run's own description of the variant (Windows, scaling, theme) wins."""
+    new = json.loads(source.read_text(encoding="utf-8"))
+    if not target.exists():
+        shutil.copy2(source, target)
+        return
+    old = json.loads(target.read_text(encoding="utf-8"))
+    partial = new.get("complete") is False
+    merged = dict(old) if partial else {**old, **new}
+    merged["surfaces"] = {**old.get("surfaces", {}), **new.get("surfaces", {})}
+    if old.get("complete") is not False:
+        merged.pop("complete", None)  # still the whole baseline
+    target.write_text(json.dumps(merged, indent=1) + "\n", encoding="utf-8")
+
+
 def accept(run: Path, baseline: Path, names) -> list:
     failed = _failed(run)
     stems = names or sorted(_stems(run))
@@ -260,7 +278,7 @@ def accept(run: Path, baseline: Path, names) -> list:
         # Accepting a whole run keeps its manifests: which Windows, scaling
         # and theme the baseline was taken in.
         for manifest in run.glob("manifest*.json"):
-            shutil.copy2(manifest, baseline / manifest.name)
+            _merge_manifest(manifest, baseline / manifest.name)
     for source in sources:
         shutil.copy2(source, baseline / source.name)
     return stems

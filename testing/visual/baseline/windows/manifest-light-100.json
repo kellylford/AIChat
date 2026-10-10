@@ -21,6 +21,523 @@
   720
  ],
  "surfaces": {
+  "main-start": {
+   "kind": "window",
+   "png": "main-start-light-100.png",
+   "json": "main-start-light-100.json",
+   "title": "The Chat Place",
+   "class": "MainFrame",
+   "size": [
+    1000,
+    720
+   ],
+   "capture": "PrintWindow",
+   "problems": [
+    "Button '1 session needs you': text cut off: smaller than its best size"
+   ],
+   "about": "Main window as it opens: session list, no session loaded"
+  },
+  "main-own": {
+   "kind": "window",
+   "png": "main-own-light-100.png",
+   "json": "main-own-light-100.json",
+   "title": "Visual probe \u2014 The Chat Place",
+   "class": "MainFrame",
+   "size": [
+    1000,
+    720
+   ],
+   "capture": "PrintWindow",
+   "problems": [
+    "Button '1 session needs you': text cut off: smaller than its best size"
+   ],
+   "about": "An own session loaded: messages and the reply box"
+  },
+  "main-own-working": {
+   "kind": "window",
+   "png": "main-own-working-light-100.png",
+   "json": "main-own-working-light-100.json",
+   "title": "Visual probe \u2014 The Chat Place",
+   "class": "MainFrame",
+   "size": [
+    1000,
+    720
+   ],
+   "capture": "PrintWindow",
+   "problems": [
+    "Button '1 session needs you': text cut off: smaller than its best size"
+   ],
+   "about": "An own session mid-turn, one more message queued and a draft typed"
+  },
+  "main-attachments": {
+   "kind": "window",
+   "png": "main-attachments-light-100.png",
+   "json": "main-attachments-light-100.json",
+   "title": "Visual probe \u2014 The Chat Place",
+   "class": "MainFrame",
+   "size": [
+    1000,
+    720
+   ],
+   "capture": "PrintWindow",
+   "problems": [
+    "Button '1 session needs you': text cut off: smaller than its best size"
+   ],
+   "about": "An own session with two files attached to the next message"
+  },
+  "main-desktop": {
+   "kind": "window",
+   "png": "main-desktop-light-100.png",
+   "json": "main-desktop-light-100.json",
+   "title": "Fix the flaky upload test \u2014 The Chat Place",
+   "class": "MainFrame",
+   "size": [
+    1000,
+    720
+   ],
+   "capture": "PrintWindow",
+   "problems": [
+    "Button '1 session needs you': text cut off: smaller than its best size"
+   ],
+   "about": "A desktop app session loaded: the read-only panel instead of a reply box"
+  },
+  "main-activity": {
+   "kind": "window",
+   "png": "main-activity-light-100.png",
+   "json": "main-activity-light-100.json",
+   "title": "Fix the flaky upload test \u2014 The Chat Place",
+   "class": "MainFrame",
+   "size": [
+    1000,
+    720
+   ],
+   "capture": "PrintWindow",
+   "problems": [
+    "Button '1 session needs you': text cut off: smaller than its best size"
+   ],
+   "about": "Show tool activity turned on"
+  },
+  "main-last-message": {
+   "kind": "window",
+   "png": "main-last-message-light-100.png",
+   "json": "main-last-message-light-100.json",
+   "title": "The Chat Place",
+   "class": "MainFrame",
+   "size": [
+    1000,
+    720
+   ],
+   "capture": "PrintWindow",
+   "problems": [
+    "Button '1 session needs you': text cut off: smaller than its best size"
+   ],
+   "about": "The session list with the Last message column (#146)"
+  },
+  "main-status-bar": {
+   "kind": "window",
+   "png": "main-status-bar-light-100.png",
+   "json": "main-status-bar-light-100.json",
+   "title": "Visual probe \u2014 The Chat Place",
+   "class": "MainFrame",
+   "size": [
+    1000,
+    720
+   ],
+   "capture": "PrintWindow",
+   "problems": [
+    "Button 'Context 42% full': text cut off: smaller than its best size",
+    "Button '1 session needs you': text cut off: smaller than its best size",
+    "Button 'Update 0.2.0 ready': text cut off: smaller than its best size"
+   ],
+   "about": "The status bar with every button showing: context, needs you, update"
+  },
+  "main-narrow": {
+   "kind": "window",
+   "png": "main-narrow-light-100.png",
+   "json": "main-narrow-light-100.json",
+   "title": "Visual probe \u2014 The Chat Place",
+   "class": "MainFrame",
+   "size": [
+    640,
+    480
+   ],
+   "capture": "PrintWindow",
+   "problems": [
+    "StaticText 'Ready.': text cut off: smaller than its best size",
+    "Button '1 session needs you': text cut off: smaller than its best size"
+   ],
+   "about": "An own session in a 640 by 480 window"
+  },
+  "shortcuts-page": {
+   "kind": "dialog",
+   "png": "shortcuts-page-light-100.png",
+   "json": "shortcuts-page-light-100.json",
+   "title": "Keyboard Shortcuts",
+   "class": "FormattedMessageDialog",
+   "size": [
+    820,
+    620
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "Help, Keyboard Shortcuts (formatted page)"
+  },
+  "shortcuts-plain": {
+   "kind": "dialog",
+   "png": "shortcuts-plain-light-100.png",
+   "json": "shortcuts-plain-light-100.json",
+   "title": "Keyboard Shortcuts",
+   "class": "ShortcutsDialog",
+   "size": [
+    620,
+    520
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "Keyboard Shortcuts as plain text"
+  },
+  "user-guide": {
+   "kind": "dialog",
+   "png": "user-guide-light-100.png",
+   "json": "user-guide-light-100.json",
+   "title": "User Guide",
+   "class": "FormattedMessageDialog",
+   "size": [
+    820,
+    620
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "Help, User Guide (formatted page)"
+  },
+  "message-formatted": {
+   "kind": "dialog",
+   "png": "message-formatted-light-100.png",
+   "json": "message-formatted-light-100.json",
+   "title": "Message from Claude",
+   "class": "FormattedMessageDialog",
+   "size": [
+    820,
+    620
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "A message read as a formatted page: heading, list, code, table, link"
+  },
+  "message-plain": {
+   "kind": "dialog",
+   "png": "message-plain-light-100.png",
+   "json": "message-plain-light-100.json",
+   "title": "Message from Claude",
+   "class": "MessageDialog",
+   "size": [
+    720,
+    520
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "The same message as plain text"
+  },
+  "settings": {
+   "kind": "dialog",
+   "png": "settings-light-100.png",
+   "json": "settings-light-100.json",
+   "title": "Settings",
+   "class": "SettingsDialog",
+   "size": [
+    680,
+    620
+   ],
+   "capture": "PrintWindow",
+   "problems": [
+    "CheckBox \"Turn on Remote &Control for The Chat Place's sessions, so you can reach them from claude.ai and other devices. Their conversations are copied to claude.ai and kept there. (File, Remote Control changes one session.)\": text cut off: smaller than its best size"
+   ],
+   "about": "Settings"
+  },
+  "new-session": {
+   "kind": "dialog",
+   "png": "new-session-light-100.png",
+   "json": "new-session-light-100.json",
+   "title": "New Chat Place Session",
+   "class": "NewSessionDialog",
+   "size": [
+    680,
+    620
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "File, New Session"
+  },
+  "github-repos": {
+   "kind": "dialog",
+   "png": "github-repos-light-100.png",
+   "json": "github-repos-light-100.json",
+   "title": "From GitHub",
+   "class": "GitHubRepoDialog",
+   "size": [
+    720,
+    520
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "New Session, From GitHub: your repositories"
+  },
+  "continue-here": {
+   "kind": "dialog",
+   "png": "continue-here-light-100.png",
+   "json": "continue-here-light-100.json",
+   "title": "Continue Here: Fix the flaky upload test",
+   "class": "NewSessionDialog",
+   "size": [
+    680,
+    620
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "Continue Here (a desktop session)"
+  },
+  "update-installed": {
+   "kind": "dialog",
+   "png": "update-installed-light-100.png",
+   "json": "update-installed-light-100.json",
+   "title": "The Chat Place Update Installed",
+   "class": "UpdateInstalledDialog",
+   "size": [
+    272,
+    126
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "After an update is installed"
+  },
+  "permission": {
+   "kind": "dialog",
+   "png": "permission-light-100.png",
+   "json": "permission-light-100.json",
+   "title": "Claude needs permission: Visual probe",
+   "class": "PermissionDialog",
+   "size": [
+    700,
+    540
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "Claude asks permission to run a command"
+  },
+  "question": {
+   "kind": "dialog",
+   "png": "question-light-100.png",
+   "json": "question-light-100.json",
+   "title": "Claude asks: Visual probe",
+   "class": "QuestionDialog",
+   "size": [
+    700,
+    560
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "Claude asks questions (one choice and several choices)"
+  },
+  "plan": {
+   "kind": "dialog",
+   "png": "plan-light-100.png",
+   "json": "plan-light-100.json",
+   "title": "Claude's plan: Visual probe",
+   "class": "PlanDialog",
+   "size": [
+    760,
+    600
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "Claude's plan to approve"
+  },
+  "manage-groups": {
+   "kind": "dialog",
+   "png": "manage-groups-light-100.png",
+   "json": "manage-groups-light-100.json",
+   "title": "Manage Groups",
+   "class": "ManageGroupsDialog",
+   "size": [
+    480,
+    420
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "File, Manage Groups"
+  },
+  "command-picker": {
+   "kind": "dialog",
+   "png": "command-picker-light-100.png",
+   "json": "command-picker-light-100.json",
+   "title": "Insert Command or Skill",
+   "class": "CommandPickerDialog",
+   "size": [
+    720,
+    520
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "Insert Command or Skill"
+  },
+  "bug-report": {
+   "kind": "dialog",
+   "png": "bug-report-light-100.png",
+   "json": "bug-report-light-100.json",
+   "title": "Report a Bug",
+   "class": "BugReportDialog",
+   "size": [
+    660,
+    640
+   ],
+   "capture": "PrintWindow",
+   "problems": [
+    "StaticText \"Open on GitHub needs access to the app's repository on GitHub. Without it, use Copy Report and email the report to support@theideaplace.net.\": text cut off: smaller than its best size"
+   ],
+   "about": "Help, Report a Bug"
+  },
+  "code-blocks": {
+   "kind": "dialog",
+   "png": "code-blocks-light-100.png",
+   "json": "code-blocks-light-100.json",
+   "title": "Code Blocks",
+   "class": "CodeBlocksDialog",
+   "size": [
+    760,
+    560
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "A message's code blocks"
+  },
+  "changes": {
+   "kind": "dialog",
+   "png": "changes-light-100.png",
+   "json": "changes-light-100.json",
+   "title": "Changed Files: Visual probe",
+   "class": "ChangesDialog",
+   "size": [
+    800,
+    580
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "View, Changed Files"
+  },
+  "usage": {
+   "kind": "dialog",
+   "png": "usage-light-100.png",
+   "json": "usage-light-100.json",
+   "title": "Usage and Context",
+   "class": "UsageDialog",
+   "size": [
+    640,
+    360
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "View, Usage and Context"
+  },
+  "about-you": {
+   "kind": "dialog",
+   "png": "about-you-light-100.png",
+   "json": "about-you-light-100.json",
+   "title": "What Claude Knows About You",
+   "class": "AboutYouDialog",
+   "size": [
+    860,
+    640
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "View, What Claude Knows About You"
+  },
+  "session-columns": {
+   "kind": "dialog",
+   "png": "session-columns-light-100.png",
+   "json": "session-columns-light-100.json",
+   "title": "Session List Columns",
+   "class": "SessionColumnsDialog",
+   "size": [
+    640,
+    560
+   ],
+   "capture": "PrintWindow",
+   "problems": [
+    "StaticText 'Each session in the list is read as one line. Choose what it says, and in what order: put Status first to hear what each session is doing before its title.': text cut off: smaller than its best size"
+   ],
+   "about": "View, Session List Columns"
+  },
+  "prompts": {
+   "kind": "dialog",
+   "png": "prompts-light-100.png",
+   "json": "prompts-light-100.json",
+   "title": "Prompts",
+   "class": "PromptsDialog",
+   "size": [
+    680,
+    560
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "File, Prompts"
+  },
+  "prompt-edit": {
+   "kind": "dialog",
+   "png": "prompt-edit-light-100.png",
+   "json": "prompt-edit-light-100.json",
+   "title": "Edit Prompt",
+   "class": "PromptEditDialog",
+   "size": [
+    620,
+    460
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "Editing a saved prompt"
+  },
+  "rename": {
+   "kind": "dialog",
+   "png": "rename-light-100.png",
+   "json": "rename-light-100.json",
+   "title": "Rename Session",
+   "class": "TextEntryDialog",
+   "size": [
+    346,
+    153
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "Rename Session (wx's own text entry dialog)"
+  },
+  "main-empty": {
+   "kind": "window",
+   "png": "main-empty-light-100.png",
+   "json": "main-empty-light-100.json",
+   "title": "The Chat Place",
+   "class": "MainFrame",
+   "size": [
+    1000,
+    720
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "Main window with no sessions at all (a first run)"
+  },
+  "links": {
+   "kind": "dialog",
+   "png": "links-light-100.png",
+   "json": "links-light-100.json",
+   "title": "Links in Fix the flaky upload test: 1",
+   "class": "LinksDialog",
+   "size": [
+    760,
+    480
+   ],
+   "capture": "PrintWindow",
+   "problems": [],
+   "about": "View, Links"
+  },
   "find-all": {
    "kind": "dialog",
    "png": "find-all-light-100.png",
@@ -36,5 +553,5 @@
    "about": "View, Find in All Sessions: the results"
   }
  },
- "seconds": 8.7
+ "seconds": 85.9
 }
