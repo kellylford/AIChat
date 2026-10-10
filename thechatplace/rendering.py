@@ -49,7 +49,12 @@ LANGUAGE_NAMES = {
 #: paths wrap; not overflow-wrap: anywhere, which squeezes table columns),
 #: a focus ring that shows on every link, and dark-mode links, visited ones
 #: too, at 6.6:1 or better (the browser's default visited purple was 1.6:1).
+#: color-scheme lets WebView2 draw its scroll bars and focus rings dark on a
+#: dark page; under High Contrast a code block, which only a background marks,
+#: gets a border in the theme's text colour (#155). tests/test_visual_style.py
+#: measures all of it.
 _STYLE = """
+:root { color-scheme: light dark; }
 body { font: 100%/1.5 "Segoe UI", sans-serif; margin: 1em 1.5em; max-width: 60em;
        overflow-wrap: break-word; }
 pre { white-space: pre-wrap; background: #f3f3f3; padding: .6em; border-radius: 4px; }
@@ -62,6 +67,9 @@ a:focus-visible { outline: 3px solid; outline-offset: 2px; }
   pre { background: #2b2b2b; }
   a { color: #8ab4f8; }
   a:visited { color: #c58af9; }
+}
+@media (forced-colors: active) {
+  pre { border: 1px solid CanvasText; }
 }
 """
 
