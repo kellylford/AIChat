@@ -156,6 +156,7 @@ class StatusParts:
     def __init__(self, bar: wx.StatusBar):
         self.bar = bar
         self._parts: List[_Part] = []
+        self._fitted = False  # the bar's height is set for its buttons (#175)
         bar.Bind(wx.EVT_SIZE, self._on_size)
 
     def add_text(self, key: str, name: str, width: int, empty_text: str = "") -> StatusText:
@@ -166,29 +167,30 @@ class StatusParts:
 
     def add_button(self, key: str, width: int,
                    on_press: Callable[[], None]) -> "StatusButton":
-        control = StatusButton(self.bar, self.focus_first, label="Ag",
+        control = StatusButton(self.bar, self.focus_first, label="",
                                style=wx.BORDER_NONE | wx.BU_EXACTFIT)
-        self._fit_height(control.GetBestSize().height)
-        control.SetLabel("")
-        control.Bind(wx.EVT_BUTTON, lambda e: on_press())
         control.Hide()
+        if not self._fitted:
+            self._fit_height(control)
+        control.Bind(wx.EVT_BUTTON, lambda e: on_press())
         self._parts.append(_Part(key, control, width, False))
         self.layout()
         return control
 
-    def _fit_height(self, button_height: int) -> None:
-        """Make the bar tall enough for a button's text (#175). Its fields
+    def _fit_height(self, button: wx.Button) -> None:
+        """Make the bar tall enough for a button's text (#175): its fields
         were 20 pixels and a button with letters below the line needs 23, so
-        "needs you" read as "needs vou". The bar grows a pixel at a time,
-        because how its minimum height maps to its fields' height is the
-        platform's own."""
-        needed = button_height + 2 * _INSET
-        start = self.bar.GetFieldRect(0).height
-        minimum = max(1, start - 8)
-        while self.bar.GetFieldRect(0).height < needed and minimum < needed + 16:
-            minimum += 1
-            self.bar.SetMinHeight(minimum)
-        if self.bar.GetFieldRect(0).height != start:
+        "needs you" read as "needs vou". SetMinHeight takes the height the
+        controls need and adds the bar's own borders. Every button has the
+        same font, so the first one's height does for all. (A Mac's status
+        bar keeps its own fixed height whatever this asks.)"""
+        button.SetLabel("Ag")
+        needed = button.GetBestSize().height
+        button.SetLabel("")
+        before = self.bar.GetFieldRect(0).height
+        self.bar.SetMinHeight(needed)
+        self._fitted = True
+        if self.bar.GetFieldRect(0).height != before:
             self.bar.GetParent().SendSizeEvent()
 
     def get(self, key: str) -> wx.Window:
