@@ -1787,7 +1787,7 @@ class MainFrame(wx.Frame):
             return
         try:
             platform_paths.open_url(chosen.url)
-        except OSError as exc:
+        except (OSError, ValueError) as exc:
             wx.MessageBox(f"Couldn't open the link: {exc}\n\nIt's {chosen.url}", APP_NAME,
                           wx.OK | wx.ICON_WARNING, self)
             return

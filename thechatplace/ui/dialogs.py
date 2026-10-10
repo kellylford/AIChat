@@ -2349,7 +2349,10 @@ class LinksDialog(wx.Dialog):
         self.filter = wx.TextCtrl(self, style=wx.TE_PROCESS_ENTER)
         set_accessible_name(self.filter, "Filter links")
         sizer.Add(self.filter, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
-        sizer.Add(wx.StaticText(self, label="&Links:"), 0, wx.LEFT | wx.TOP, 8)
+        # The label carries the count: a list box's name, for JAWS and NVDA,
+        # is the label before it (as From GitHub's list does it).
+        self.list_label = wx.StaticText(self, label="&Links:")
+        sizer.Add(self.list_label, 0, wx.LEFT | wx.TOP, 8)
         self.list = wx.ListBox(self, style=wx.LB_SINGLE)
         sizer.Add(self.list, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
         row = wx.BoxSizer(wx.HORIZONTAL)
@@ -2383,9 +2386,10 @@ class LinksDialog(wx.Dialog):
         if self._shown:
             self.list.SetSelection(0)
         total = len(self._all)
-        name = (f"Links, {total}" if len(self._shown) == total
-                else f"Links, {len(self._shown)} of {total}")
-        set_accessible_name(self.list, name)
+        count = (f"{total}" if len(self._shown) == total
+                 else f"{len(self._shown)} of {total}")
+        self.list_label.SetLabel(f"&Links ({count}):")
+        set_accessible_name(self.list, f"Links, {count}")  # VoiceOver's name
 
     def selected(self):
         index = self.list.GetSelection()

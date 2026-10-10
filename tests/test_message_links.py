@@ -99,3 +99,57 @@ def test_no_links_and_odd_text():
     assert find_links([msg(USER, ""), msg(ASSISTANT, "No links here. Not http:// either.")]) == []
     assert links_in_text("an email: someone@example.com") == []
     assert links_in_text("ftp://x.org isn't web") == []
+
+
+
+def test_references_to_files_and_headings_are_not_links():
+    text = "See [main.py](src/main.py#L12), [the top](#top) and [docs](https://x.org/d)."
+    assert [url for url, _w, _c in links_in_text(text)] == ["https://x.org/d"]
+
+
+def test_control_and_format_characters_never_open():
+    nul = FoundLink("https:/\x00a", "", "Claude", 0)
+    bidi = FoundLink("https://x.org/\u202egnp.exe", "", "Claude", 0)
+    assert not nul.can_open and not bidi.can_open
+
+
+@pytest.mark.parametrize("url", ["https:", "https://", "https:C:\\Windows\\calc.exe",
+                                 "https:\\\\evil\\share", "mailto:"])
+def test_incomplete_addresses_are_only_copied(url):
+    link = FoundLink(url, "", "Claude", 0)
+    assert not link.can_open
+    assert link.why_not() == "That address isn't complete, so it can only be copied."
+
+
+def test_a_path_isnt_called_a_scheme():
+    assert FoundLink("C:\\Users\\x", "", "Claude", 0).why_not().startswith("This link isn't")
+
+
+def test_long_addresses_are_read_short_and_copied_whole():
+    url = "https://github.com/" + "a/" * 60 + "releases/tag/v0.1.5"
+    link = FoundLink(url, "", "Claude", 0)
+    assert link.address.startswith("github.com/…/") and link.address.endswith("v0.1.5")
+    assert len(link.address) <= 80
+    assert link.url == url and link.markdown() == f"<{url}>"
+
+
+def test_the_same_address_in_another_case_is_listed_once():
+    found = find_links([msg(USER, "HTTPS://Example.COM/Path"),
+                        msg(ASSISTANT, "https://example.com/Path/")])
+    assert len(found) == 1
+
+
+def test_emphasis_is_dropped_from_link_words():
+    assert links_in_text("[*the* _notes_ for snake_case](https://x.org)")[0][1] == \
+        "the notes for snake_case"
+
+
+@pytest.mark.parametrize("text", ["[" * 60000, "`https://a.b` " * 10000,
+                                  "<https://a.b> " * 10000,
+                                  "https://a.b/" + ")" * 20000],
+                         ids=["brackets", "inline-code", "angle", "parentheses"])
+def test_hostile_text_is_read_quickly(text):
+    import time
+    started = time.perf_counter()
+    links_in_text(text)
+    assert time.perf_counter() - started < 2.0

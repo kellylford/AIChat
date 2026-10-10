@@ -155,9 +155,10 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   a Copy button for just that block; **Ctrl+Shift+C** copies the message's last code block straight
   away. **Links** (View, Links, **Ctrl+L**, from the session list, the messages or the reply box)
   lists every link in the loaded session, newest first, each address once: a link reads as its
-  words and then where it goes ("release notes, github.com/…/v0.1.5"), a bare address as itself,
-  followed by who wrote it and roughly when ("Claude, 3 messages ago"), and "in code" for one in
-  a code block or inline code. Enter (or Open) opens it in your browser and closes the list;
+  words and then where it goes, a bare address as itself (a long one shortened to its site and
+  its end), then who wrote it and roughly when, and "in code" for one in a code block or inline
+  code: "release notes, github.com/…/tag/v0.1.5. Claude, 3 messages ago". References to files
+  in the repository, such as `[main.py](src/main.py)`, aren't listed. Enter (or Open) opens it in your browser and closes the list;
   Ctrl+C (or Copy) copies its address and Ctrl+Shift+C (or Copy as Markdown) the link, and the
   list stays open. Typing narrows the list (the letters go to its Filter box); Down Arrow comes
   back. Only web, email and session links open; anything else, such as a file: path, is marked

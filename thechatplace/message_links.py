@@ -18,7 +18,9 @@ Nothing here imports wx, so it's all tested without a window.
 """
 from __future__ import annotations
 
+import bisect
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import Iterable, List, Optional, Tuple
 
@@ -28,7 +30,8 @@ from .rendering import opens_in_browser
 
 #: ``[words](address "title")`` and ``![alt](address)``. The address may be
 #: in angle brackets, and may hold one level of parentheses (Wikipedia's).
-_MARKDOWN = re.compile(r"!?\[([^\]\n]*)\]\(\s*<?((?:[^()\s<>]|\([^()\s]*\))+)>?"
+#: The words can't hold "[" either, so a line of brackets is read in one pass.
+_MARKDOWN = re.compile(r"!?\[([^\[\]\n]*)\]\(\s*<?((?:[^()\s<>]|\([^()\s]*\))+)>?"
                        r"(?:\s+(?:\"[^\"\n]*\"|'[^'\n]*'))?\s*\)")
 #: ``<https://example.com>`` and ``<mailto:me@example.com>``.
 _ANGLE = re.compile(r"<((?:https?://|mailto:)[^<>\s]+)>", re.IGNORECASE)
@@ -37,6 +40,21 @@ _ANGLE = re.compile(r"<((?:https?://|mailto:)[^<>\s]+)>", re.IGNORECASE)
 _BARE = re.compile(r"(?<![\w/:@.-])((?:https?://|mailto:)[^\s<>\[\]\"'`]+)", re.IGNORECASE)
 _INLINE_CODE = re.compile(r"`([^`\n]+)`")
 _TRAILING = ".,;:!?*_~'\""
+#: A link's scheme: two letters or more, so "C:\path" is a path, not one.
+_SCHEME = re.compile(r"^([A-Za-z][A-Za-z0-9+.-]+):")
+#: What opens: a web address with a host, or a mail address. Stricter than
+#: the scheme alone, so "https:" with nothing after it, or "https:C:\x", is
+#: only copied.
+_WEB = re.compile(r"(?i)^https?://[^/\\\s?#]")
+_MAIL = re.compile(r"(?i)^mailto:[^\s]")
+#: Longer than this, an address is read shortened (it's copied and opened whole).
+READ_LIMIT = 70
+
+
+def _plain(url: str) -> bool:
+    """No control or format characters (a NUL, a right-to-left override):
+    those never open, and would make the row read backwards."""
+    return not any(unicodedata.category(c) in ("Cc", "Cf") for c in url)
 
 
 @dataclass
@@ -57,7 +75,10 @@ class FoundLink:
 
     @property
     def can_open(self) -> bool:
-        return opens_in_browser(self.url) or self.is_session_link
+        if not _plain(self.url):
+            return False
+        return (bool(_WEB.match(self.url) or _MAIL.match(self.url))
+                and opens_in_browser(self.url)) or self.is_session_link
 
     def why_not(self) -> str:
         """Why it won't open, "" if it will."""
@@ -65,16 +86,19 @@ class FoundLink:
             return ""
         if is_app_link(self.url):
             return "That link isn't one The Chat Place knows. It can only be copied."
-        scheme = self.url.split(":", 1)[0].lower() if ":" in self.url else ""
+        match = _SCHEME.match(self.url)
+        scheme = match.group(1).lower() if match else ""
+        if scheme in ("http", "https", "mailto"):
+            return "That address isn't complete, so it can only be copied."
         kind = f"A {scheme}: link" if scheme else "This link"
         return (f"{kind} isn't opened from here, only web and email links are. "
                 "It can only be copied.")
 
     @property
     def address(self) -> str:
-        """The address as it's read: without "https://", and a mail link as
-        its address."""
-        return _readable(self.url)
+        """The address as it's read: without "https://", a mail link as its
+        address, and a long one shortened to its site and its end."""
+        return _shorten(_readable(self.url))
 
     def when(self) -> str:
         if self.ago == 0:
@@ -112,29 +136,57 @@ def _readable(url: str) -> str:
     return url[4:] if url.lower().startswith("www.") else url
 
 
+def _shorten(address: str) -> str:
+    """"github.com/…/releases/tag/v0.1.5" for a long address: its site, then
+    "…", then as much of its end as fits, from a "/"."""
+    if len(address) <= READ_LIMIT:
+        return address
+    site, _, path = address.partition("/")
+    room = max(READ_LIMIT - len(site) - 3, 20)
+    tail = path[-room:]
+    cut = tail.find("/")
+    if 0 <= cut < len(tail) - 1:
+        tail = tail[cut + 1:]
+    return f"{site}/…/{tail}"
+
+
 def _trim(url: str) -> str:
     """A bare address without the punctuation after it: "(see https://x.y/a)."
     is https://x.y/a, but https://en.wikipedia.org/wiki/Foo_(bar) keeps its
     closing parenthesis."""
-    while url:
-        if url[-1] in _TRAILING:
-            url = url[:-1]
-        elif url[-1] == ")" and url.count(")") > url.count("("):
-            url = url[:-1]
+    opened, closed = url.count("("), url.count(")")
+    end = len(url)
+    while end:
+        last = url[end - 1]
+        if last in _TRAILING:
+            end -= 1
+        elif last == ")" and closed > opened:
+            end -= 1
+            closed -= 1
         else:
             break
-    return url
+    return url[:end]
+
+
+_EMPHASIS_MARKS = re.compile(r"(\*\*|__|(?<!\w)[*_]|[*_](?!\w))")
 
 
 def _words(words: str, url: str) -> str:
-    words = " ".join(words.replace("`", "").replace("**", "").split())
+    words = " ".join(_EMPHASIS_MARKS.sub("", words.replace("`", "")).split())
     if not words or words == url or _readable(words) == _readable(url):
         return ""
     return words
 
 
+def _blank(chars: List[str], start: int, end: int) -> None:
+    chars[start:end] = " " * (end - start)
+
+
 def links_in_text(text: str) -> List[Tuple[str, str, bool]]:
-    """(url, words, in code) for each link in ``text``, in order."""
+    """(url, words, in code) for each link in ``text``, in order. A Markdown
+    link without a scheme (``[main.py](src/main.py)``, ``#heading``) is a
+    reference to a file or a place in the page, not a link to follow, and
+    isn't listed."""
     found: List[Tuple[int, str, str, bool]] = []
     offset = 0
     for part in split_code_blocks(text):
@@ -147,21 +199,28 @@ def links_in_text(text: str) -> List[Tuple[str, str, bool]]:
             offset += len(part.code) + 1
             continue
         line = part
-        spans = [(m.start(), m.end()) for m in _INLINE_CODE.finditer(line)]
+        starts: List[int] = []
+        ends: List[int] = []
+        for match in _INLINE_CODE.finditer(line):
+            starts.append(match.start())
+            ends.append(match.end())
 
         def in_code(at: int) -> bool:
-            return any(start <= at < end for start, end in spans)
+            index = bisect.bisect_right(starts, at) - 1
+            return index >= 0 and at < ends[index]
         taken = list(line)
         for match in _MARKDOWN.finditer(line):
             url = match.group(2)
             if in_code(match.start()):
                 continue  # `[x](y)` is shown as code; its address is found below
-            found.append((offset + match.start(), url, _words(match.group(1), url), False))
-            taken[match.start():match.end()] = " " * (match.end() - match.start())
+            _blank(taken, match.start(), match.end())
+            if _SCHEME.match(url):
+                found.append((offset + match.start(), url, _words(match.group(1), url), False))
         rest = "".join(taken)
         for match in _ANGLE.finditer(rest):
             found.append((offset + match.start(), match.group(1), "", in_code(match.start())))
-            rest = rest[:match.start()] + " " * (match.end() - match.start()) + rest[match.end():]
+            _blank(taken, match.start(), match.end())
+        rest = "".join(taken)
         for match in _BARE.finditer(rest):
             url = _trim(match.group(1))
             if url:
@@ -169,6 +228,15 @@ def links_in_text(text: str) -> List[Tuple[str, str, bool]]:
         offset += len(line) + 1
     found.sort(key=lambda item: item[0])
     return [(url, words, code) for _at, url, words, code in found]
+
+
+def _key(url: str) -> str:
+    """The same address written two ways is listed once: the scheme and the
+    site don't care about case, and a trailing "/" makes no difference."""
+    match = re.match(r"(?i)^(https?://)([^/?#]*)(.*)$", url)
+    if not match:
+        return url
+    return (match.group(1) + match.group(2)).lower() + match.group(3).rstrip("/")
 
 
 def find_links(messages: Iterable) -> List[FoundLink]:
@@ -184,7 +252,7 @@ def find_links(messages: Iterable) -> List[FoundLink]:
     for index in range(newest, -1, -1):
         message = messages[index]
         for url, words, code in links_in_text(message.text or ""):
-            key = url.rstrip("/") if opens_in_browser(url) else url
+            key = _key(url)
             link: Optional[FoundLink] = seen.get(key)
             if link is None:
                 seen[key] = FoundLink(url, words, message.label, newest - index, code)
