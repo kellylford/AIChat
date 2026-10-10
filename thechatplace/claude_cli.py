@@ -557,6 +557,7 @@ class TurnEvent:
     """One thing that happened during a turn, already made readable."""
 
     kind: str               # started | text | tool | denied | permission | finished | failed
+    #                         | background | woke | closed (#161)
     text: str = ""
     session_id: str = ""
     is_error: bool = False
@@ -566,6 +567,10 @@ class TurnEvent:
     detail: str = ""
     #: For "limits": the rate_limit_event's rate_limit_info (#19).
     data: Optional[dict] = None
+    #: Background work Claude left running (#161): on "finished", the turn is
+    #: over but its process stays for this work; on "background", what's
+    #: running now; on "closed", what was still running and is now stopped.
+    background: List[str] = field(default_factory=list)
 
 
 class StreamParser:
@@ -588,6 +593,10 @@ class StreamParser:
         self.unsupported_requests: List[str] = []
         #: The model's context window, from the result's modelUsage (#19).
         self.context_window = 0
+        #: What Claude has running in the background now (#161), and what the
+        #: latest one to finish said about itself.
+        self.background_tasks: List[str] = []
+        self.task_summary = ""
 
     def feed(self, line: str) -> List[TurnEvent]:
         line = line.strip()
@@ -670,6 +679,20 @@ class StreamParser:
             # last result, background agents' included (#76).
             return [TurnEvent("state", text=str(event.get("state") or ""),
                               session_id=self.session_id)]
+        if etype == "system" and subtype == "background_tasks_changed":
+            # The whole list each time: a background command, agent or
+            # monitor Claude started and hasn't heard the end of (#161).
+            tasks = event.get("tasks") if isinstance(event.get("tasks"), list) else []
+            self.background_tasks = [
+                str(t.get("description") or "a background task").strip()
+                for t in tasks if isinstance(t, dict)]
+            return [TurnEvent("background", session_id=self.session_id,
+                              background=list(self.background_tasks))]
+        if etype == "system" and subtype == "task_notification":
+            summary = event.get("summary")
+            if isinstance(summary, str) and summary.strip():
+                self.task_summary = summary.strip()
+            return []
         if etype == "system" and subtype == "compact_boundary":
             return [TurnEvent("compacted", session_id=self.session_id)]
         if etype == "system" and subtype == "init":
@@ -763,6 +786,17 @@ IDLE_AFTER_RESULT_WAIT = 600.0
 #: How long a turn's message waits for Claude Code to answer initialize.
 INIT_ANSWER_WAIT = 10.0
 
+#: How long a finished turn's process waits for background work Claude left
+#: running (a CI watch, a build) before stopping it (#161).
+BACKGROUND_WAIT = 2 * 3600.0
+
+#: The background work all finished but Claude didn't start on it: how long
+#: before the process is let go anyway. Claude normally starts at once.
+BACKGROUND_DONE_WAIT = 60.0
+
+#: How long Claude Code has to exit once a wait ends before it's killed.
+PARKED_EXIT_WAIT = 30.0
+
 
 def resolved_model(models: Dict[str, str], chosen: str) -> str:
     """The model a turn will use, from the ``initialize`` answer: what the
@@ -818,8 +852,19 @@ class TurnRunner:
     """Runs one turn in a background thread and reports ``TurnEvent``s.
 
     ``on_event`` is called from the worker thread; the UI marshals it onto the
-    main thread (``wx.CallAfter``). Exactly one ``finished`` or ``failed``
-    event is always delivered last, whatever happens.
+    main thread (``wx.CallAfter``). Every turn ends in exactly one
+    ``finished`` or ``failed`` event, whatever happens, and it's the last
+    event unless the process outlives the turn (#161):
+
+    When Claude ends a turn with background work still running (it started a
+    CI watch or a build and ended its turn to wait for it), the turn's
+    ``finished`` event has ``background`` set and the process is kept, input
+    open, for up to ``BACKGROUND_WAIT``. Claude Code starts a turn by itself
+    when that work finishes: a ``woke`` event, then that turn's events,
+    ending as any turn does (and perhaps waiting again). ``send`` starts the
+    next turn in the same process instead. If the process ends while waiting
+    (Stop, the wait running out, the work finishing with nothing to say), the
+    last event is ``closed``.
 
     There is deliberately no time limit: a long build or test run is a normal
     turn. ``elapsed`` and ``last_activity`` let the UI say how long it has been
@@ -880,6 +925,76 @@ class TurnRunner:
         #: Permission requests sent to the UI and not yet answered.
         self.pending: Dict[str, PermissionRequest] = {}
         self._stdin_open = False
+        #: Between turns, waiting for background work Claude left running
+        #: (#161). Each wait has its own number, so a timer from an earlier
+        #: wait can't end a later one.
+        self._parked = False
+        self._park_generation = 0
+        self._close_reason = ""
+        self._exit_timers: List[threading.Timer] = []
+        #: What it's waiting for, while it waits.
+        self.background: List[str] = []
+
+    @property
+    def waiting_for_background(self) -> bool:
+        return self._parked
+
+    def send(self, prompt: str, images: Optional[List[dict]] = None) -> str:
+        """Start the next turn in this process while it waits for background
+        work (#161), rather than a second ``claude`` on the same session.
+        "sent"; "busy" if Claude has just started on its own (the work
+        finished); "closed" if the process is ending.
+
+        One race is left: Claude starting by itself in the milliseconds before
+        its "running" is read here. The message then joins Claude Code's own
+        queue, and the first result is taken as its answer; the turn may end
+        early, but the message is still answered, in this process."""
+        with self._lock:
+            if not self._stdin_open or self._cancelled:
+                return "closed"
+            if not self._parked:
+                return "busy"
+            if not self._write_raw(message_line(prompt, images)):
+                return "closed"
+            self._parked = False
+            self._unanswered += 1
+            self.prompt, self.images = prompt, list(images or [])
+            self.started_at = self._clock()
+            self.last_activity = "starting"
+            self.background = []
+            return "sent"
+
+    def _wake_if_parked(self) -> bool:
+        """Claude started a turn by itself while the process waited: its
+        background work finished. True if it was waiting."""
+        with self._lock:
+            if not self._parked:
+                return False
+            self._parked = False
+            # Claude's own turn gets one result, as a message does, so a Send
+            # Now during it is counted right (#83).
+            self._unanswered += 1
+            self.started_at = self._clock()
+            self.last_activity = "carrying on after its background work"
+            self.background = []
+            return True
+
+    def _close_if_parked(self, generation: int, reason: str) -> None:
+        """Let the process go if it's still in the same wait. Claude Code
+        exits when its input closes, ending its background work; if it ever
+        doesn't, it's killed a little later, so the wait really ends."""
+        with self._lock:
+            if self._parked and self._park_generation == generation and not self._unanswered:
+                self._close_reason = reason
+                self._close_stdin_locked()
+                closing = True
+            else:
+                closing = False
+        if closing:
+            timer = self._timer(PARKED_EXIT_WAIT, self._kill)
+            timer.daemon = True
+            self._exit_timers.append(timer)
+            timer.start()
 
     def elapsed(self) -> float:
         return self._clock() - self.started_at
@@ -891,6 +1006,10 @@ class TurnRunner:
         with self._lock:
             if not self._stdin_open or self._cancelled or self.stopped_before_answer:
                 return False  # over, or being stopped: it would go nowhere
+            if self._parked:
+                # The turn is over, waiting for background work (#161): a
+                # message goes with ``send`` once the UI hears it ended.
+                return False
             if not self._prompt_sent:
                 # Still waiting for initialize's answer: the turn's own
                 # message goes first, then this one (``_send_prompt``).
@@ -1108,6 +1227,45 @@ class TurnRunner:
             def disarm_ceiling() -> None:
                 while ceiling:
                     ceiling.pop().cancel()
+            park_timers: List[threading.Timer] = []
+
+            def park_timer(wait: float, generation: int, reason: str) -> None:
+                timer = self._timer(wait, lambda: self._close_if_parked(generation, reason))
+                timer.daemon = True
+                park_timers.append(timer)
+                timer.start()
+
+            def turn_over() -> bool:
+                """The turn is answered and Claude is idle: end it, or keep
+                the process while Claude has background work running, so the
+                work isn't killed and Claude carries on when it finishes
+                (#161). False if a Send Now message is still to be answered."""
+                nonlocal final
+                with self._lock:
+                    if self._unanswered:
+                        return False
+                    tasks = list(self.parser.background_tasks)
+                    if not tasks or final is None or self._cancelled:
+                        self._close_stdin_locked()
+                        return True
+                    self._parked = True
+                    self._park_generation += 1
+                    generation = self._park_generation
+                    self.background = tasks
+                    self.last_activity = "waiting for its background work"
+                # A ceiling armed earlier in the turn would close a wait that
+                # can last hours; an earlier wait's timers are spent.
+                disarm_ceiling()
+                while park_timers:
+                    park_timers.pop().cancel()
+                self.parser.task_summary = ""  # the next wake-up's own news
+                ended, final = final, None
+                ended.background = tasks
+                if not ended.session_id:
+                    ended.session_id = self.parser.session_id
+                self._emit(ended)
+                park_timer(BACKGROUND_WAIT, generation, "timeout")
+                return True
             sent_lock = threading.Lock()
 
             def send_message() -> bool:
@@ -1177,11 +1335,25 @@ class TurnRunner:
                         with self._lock:
                             self.pending[event.request.request_id] = event.request
                         self.last_activity = f"waiting for you: {event.request.summary()}"
+                    if event.kind == "background":
+                        with self._lock:
+                            parked, generation = self._parked, self._park_generation
+                            if parked:
+                                self.background = list(event.background)
+                        if parked and not event.background:
+                            # Claude normally starts on it at once; if not,
+                            # nothing is left to wait for.
+                            park_timer(BACKGROUND_DONE_WAIT, generation, "done")
+                        self._emit(event)
+                        continue
                     if event.kind == "state":
                         states_seen = True
                         last_state = event.text
+                        if event.text == "running" and self._wake_if_parked():
+                            self._emit(TurnEvent("woke", text=self.parser.task_summary,
+                                                 session_id=self.parser.session_id))
                         if event.text == "idle" and final is not None:
-                            if self._close_stdin_if_answered():
+                            if turn_over():
                                 # Really over: closing stdin lets the CLI exit.
                                 disarm_ceiling()
                             else:
@@ -1220,7 +1392,7 @@ class TurnRunner:
                         idle = states_seen and last_state == "idle"
                         if not replaced and states_seen and not idle:
                             arm_ceiling()  # idle should follow
-                        elif replaced or not self._close_stdin_if_answered():
+                        elif replaced or not turn_over():
                             # A Send Now message is still to be answered
                             # (one may have gone just now). Claude moves on to
                             # it; if it has already said idle, "running"
@@ -1236,10 +1408,31 @@ class TurnRunner:
                 if self.stopped_before_answer:
                     break
             disarm_ceiling()
+            while park_timers:
+                park_timers.pop().cancel()
             self._close_stdin()
             process.wait()
+            for timer in self._exit_timers:
+                timer.cancel()
             err_thread.join(timeout=2)
-            if final is None:
+            with self._lock:
+                parked, self._parked = self._parked, False
+            if final is None and parked:
+                # Ended between turns, while waiting for background work.
+                if self._cancelled:
+                    reason = "stopped"
+                elif self._close_reason:
+                    reason = self._close_reason
+                else:
+                    reason = "exited"
+                detail = next((x for x in reversed(stderr_lines) if x.strip()), "")
+                # The turn had finished: only how Claude Code ended is news.
+                exited = f"Exit code {process.returncode}." + (f" {detail}" if detail else "")
+                final = TurnEvent("closed", raw_type=reason,
+                                  text=exited if reason == "exited" else "",
+                                  background=list(self.background),
+                                  session_id=self.parser.session_id)
+            elif final is None:
                 if self._cancelled:
                     final = TurnEvent("failed", text="Stopped.", is_error=True,
                                       session_id=self.parser.session_id)

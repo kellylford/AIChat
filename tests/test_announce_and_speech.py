@@ -273,3 +273,15 @@ def test_update_notice_settings_round_trip_and_default(tmp_path):
     odd = SpeechSettings.load(path)
     assert odd.update_installed_notice is True
     assert odd.last_run_version == ""
+
+
+@pytest.mark.parametrize("tasks, words", [
+    ([], "background work"),
+    (["  "], "background work"),
+    (["Watch CI"], "Watch CI"),
+    (["Build", "Test"], "2 background tasks: Build and Test"),
+    (["Build", "Test", "Watch\nCI"], "3 background tasks: Build, Test and Watch CI"),
+    (["a", "b", "c", "d"], "4 background tasks"),
+])
+def test_background_work_in_words(tasks, words):
+    assert announce.background_text(tasks) == words

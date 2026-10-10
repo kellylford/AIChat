@@ -701,7 +701,9 @@ class ProcessTree:
     terminating the job, closing it when the turn ends, or The Chat Place
     exiting ends the whole tree: claude runs tools as child processes, and
     killing only claude.exe would leave a long build or test run going. It
-    also means anything Claude started and left running ends with the turn.
+    also means anything Claude started and left running ends with claude:
+    at the end of the turn, or, for background work Claude is waiting for,
+    once that's over (``claude_cli.TurnRunner``, #161).
 
     The child is created suspended and only resumed once it is in the job, so
     nothing it starts can escape the job in between. If the job can't be set

@@ -213,6 +213,27 @@ def test_collect_marks_own_session_busy_elsewhere(tmp_path):
     assert "outside" in snap.sessions[0].detail
 
 
+def test_collect_says_what_a_session_waits_for_without_hiding_why_it_needs_you(tmp_path):
+    (tmp_path / "live").mkdir()
+    (tmp_path / "live" / "7.json").write_text(json.dumps(
+        {"pid": 7, "sessionId": "own-2", "status": "busy"}))
+    refused = OwnSession("own-1", "Refused", "C:\\x", state=NEEDS_YOU,
+                         detail="1 tool was refused")
+    kept = OwnSession("own-2", "Kept", "C:\\x")
+    asking = OwnSession("own-3", "Asking", "C:\\x")
+    background = {"own-1": "waiting for Build", "own-2": "waiting for Watch CI",
+                  "own-3": "waiting for Agent"}
+    snap = hub.collect([refused, kept, asking], set(), desktop_dir=tmp_path / "d",
+                       live_dir=tmp_path / "live", alive=lambda pid: True,
+                       waiting={"own-3": "Bash: ls"}, background=background)
+    by_id = {s.cli_session_id: s for s in snap.sessions}
+    assert (by_id["own-1"].state, by_id["own-1"].detail) == \
+        (NEEDS_YOU, "1 tool was refused; waiting for Build")
+    # Its own claude, between turns: not "running outside The Chat Place".
+    assert by_id["own-2"].state != WORKING and by_id["own-2"].detail == "waiting for Watch CI"
+    assert (by_id["own-3"].state, by_id["own-3"].detail) == (NEEDS_YOU, "Bash: ls")
+
+
 def test_finished_turns():
     previous = {"a": WORKING, "b": WORKING, "c": IDLE}
     current = [_info("a", IDLE, 1), _info("b", WORKING, 1), _info("c", NEEDS_YOU, 1),

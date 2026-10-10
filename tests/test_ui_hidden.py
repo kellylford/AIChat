@@ -161,6 +161,7 @@ def frame(env):
     assert pump(lambda: window.session_list.GetCount() == 3)
     yield window
     window._runners.clear()
+    window._parked.clear()
     # All of them, as closing does: a delayed call left running (the
     # sign-in check, 4 seconds in) would fire into this destroyed window
     # during a later test, which crashes wx on a Mac.
@@ -209,6 +210,15 @@ class FakeRunner:
     def send_now(self, prompt):
         self.sent_now = getattr(self, "sent_now", []) + [prompt]
         return not getattr(self, "ended", False)
+
+    #: What ``send`` answers while kept for background work (#161).
+    send_outcome = "sent"
+    background = []
+
+    def send(self, prompt, images=None):
+        if self.send_outcome == "sent":
+            self.sent = getattr(self, "sent", []) + [prompt]
+        return self.send_outcome
 
 
 @pytest.fixture
@@ -1513,6 +1523,147 @@ def test_stop_with_nothing_running_says_so(frame, env):
     assert frame.stop_btn.IsEnabled()
     frame.on_stop()
     assert env["feedback"][-1] == "Nothing is running."
+
+
+def _waiting_for_ci(frame, fake_runner, env):
+    """A turn that ended with Claude watching CI in the background (#161)."""
+    runner = _start(frame, fake_runner, "push and watch CI")
+    runner.background = ["Watch CI"]
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent(
+        "finished", text="Pushed. Watching CI.", background=["Watch CI"]))
+    return runner
+
+
+def test_a_turn_ending_with_background_work_keeps_its_claude(frame, env, fake_runner):
+    runner = _waiting_for_ci(frame, fake_runner, env)
+    assert frame._parked == {"own-1": runner} and "own-1" not in frame._runners
+    assert env["spoken"][-1].endswith("It's waiting for Watch CI.")
+    assert frame.turn_status.GetLabel() == "Ready. Waiting for Watch CI; Stop ends it."
+    frame.refresh_sessions(force=True)
+    assert pump(lambda: any("waiting for Watch CI" in s
+                            for s in frame.session_list.GetStrings()))
+    frame.on_turn_status()
+    assert "is waiting for Watch CI" in env["feedback"][-1]
+
+
+def test_claude_carrying_on_after_background_work_is_a_running_turn(frame, env, fake_runner):
+    runner = _waiting_for_ci(frame, fake_runner, env)
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent(
+        "woke", text='Background command "Watch CI" completed (exit code 0)'))
+    assert frame._runners["own-1"] is runner and not frame._parked
+    assert env["spoken"][-1] == ('Hub probe is working again: Background command '
+                                 '"Watch CI" completed (exit code 0).')
+    assert frame.turn_status.GetLabel().startswith("Claude is working")
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("finished", text="CI passed."))
+    assert not frame._runners and not frame._parked
+    assert frame.turn_status.GetLabel() == "Ready."
+
+
+def test_a_message_while_waiting_goes_to_the_same_claude(frame, env, fake_runner):
+    runner = _waiting_for_ci(frame, fake_runner, env)
+    frame.reply_text.SetValue("how is it going?")
+    frame.on_send()
+    assert runner.sent == ["how is it going?"]
+    assert len(fake_runner.instances) == 1  # no second claude on the session
+    assert frame._runners["own-1"] is runner and not frame._parked
+    assert frame.reply_text.GetValue() == ""
+
+
+def test_a_message_as_claude_starts_again_is_kept(frame, env, fake_runner):
+    runner = _waiting_for_ci(frame, fake_runner, env)
+    runner.send_outcome = "busy"
+    frame.reply_text.SetValue("how is it going?")
+    frame.on_send()
+    assert "Send again in a moment" in env["boxes"][-1]
+    assert frame.reply_text.GetValue() == "how is it going?"
+    assert len(fake_runner.instances) == 1
+
+
+def test_a_queued_message_goes_to_the_claude_kept_for_background_work(frame, env,
+                                                                      fake_runner):
+    runner = _start(frame, fake_runner, "push and watch CI")
+    frame.reply_text.SetValue("then tidy up")
+    frame.on_send()  # queued behind the turn
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent(
+        "finished", text="Watching CI.", background=["Watch CI"]))
+    assert runner.sent == ["then tidy up"]
+    assert len(fake_runner.instances) == 1
+    assert frame._runners["own-1"] is runner
+
+
+def test_stop_while_waiting_stops_the_background_work(frame, env, fake_runner):
+    runner = _waiting_for_ci(frame, fake_runner, env)
+    frame.on_stop()
+    assert runner.cancelled
+    assert env["feedback"][-1] == "Stopping Watch CI."
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent(
+        "closed", raw_type="stopped", background=["Watch CI"]))
+    assert not frame._parked
+    assert frame.turn_status.GetLabel() == "Ready."
+
+
+def test_background_work_outlasting_the_wait_is_stopped_and_said(frame, env, fake_runner):
+    _waiting_for_ci(frame, fake_runner, env)
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent(
+        "closed", raw_type="timeout", background=["Watch CI"]))
+    assert not frame._parked
+    assert env["spoken"][-1] == ("Hub probe: Watch CI was still running after 2 hours, "
+                                 "so it was stopped.")
+    assert frame.store.get("own-1").state == NEEDS_YOU
+
+
+def test_background_work_finishing_quietly_says_nothing(frame, env, fake_runner):
+    _waiting_for_ci(frame, fake_runner, env)
+    spoken = list(env["spoken"])
+    frame._on_turn_event({"id": "own-1"}, "Hub probe",
+                         TurnEvent("closed", raw_type="done"))
+    assert not frame._parked and env["spoken"] == spoken
+
+
+def test_a_question_while_waiting_can_be_answered(frame, env, fake_runner, monkeypatch):
+    from thechatplace.claude_cli import PermissionRequest
+    runner = _waiting_for_ci(frame, fake_runner, env)
+    request = PermissionRequest(request_id="q1", tool_name="Bash", input={"command": "ls"})
+    frame._on_turn_event({"id": "own-1"}, "Hub probe",
+                         TurnEvent("permission", text=request.summary(), request=request))
+    assert frame._pending["own-1"] == [request]
+    assert "Hub probe needs you" in env["spoken"][-1]
+    assert frame.turn_status.GetLabel().startswith("Waiting for you")
+    frame._apply_answer("own-1", request, {"behavior": "allow"}, "Allowed.", {})
+    assert runner.responses == [("q1", {"behavior": "allow"})]
+    frame._on_turn_event({"id": "own-1"}, "Hub probe", TurnEvent("closed", raw_type="stopped"))
+    assert "own-1" not in frame._pending
+
+
+def test_turn_status_lists_sessions_waiting_for_background_work(frame, env, fake_runner):
+    _waiting_for_ci(frame, fake_runner, env)
+    frame._open = None
+    frame.on_turn_status()
+    assert env["feedback"][-1] == "Waiting for background work: Hub probe, Watch CI."
+
+
+def test_a_model_change_while_waiting_says_when_it_applies(frame, env, fake_runner,
+                                                           monkeypatch):
+    _waiting_for_ci(frame, fake_runner, env)
+    select(frame, "Hub probe")
+    monkeypatch.setattr(frame, "_choose", lambda *a, **k: 1)
+    frame.on_change_model()
+    assert env["feedback"][-1].endswith(
+        "from its next turn, once its background work is over.")
+
+
+def test_quit_and_hide_mind_background_work(frame, env, fake_runner):
+    runner = _waiting_for_ci(frame, fake_runner, env)
+    select(frame, "Hub probe")
+    frame.on_hide()
+    assert "background work is still running" in env["feedback"][-1]
+    event = wx.CloseEvent(wx.wxEVT_CLOSE_WINDOW)
+    event.SetCanVeto(True)
+    frame._on_close(event)
+    assert env["boxes"][-1] == ("1 Chat Place session is waiting for background work "
+                                "Claude started (Watch CI). Quit anyway? The background "
+                                "work will be stopped.")
+    assert runner.cancelled
 
 
 def test_quit_prompt_mentions_queued_messages(frame, env, fake_runner):

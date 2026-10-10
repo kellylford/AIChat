@@ -1428,3 +1428,260 @@ def test_send_now_after_the_turn_ended_is_refused(tmp_path):
         when="never")
     assert box["done"].wait(5)
     assert box["runner"].send_now("too late") is False
+
+
+# -- Background work Claude leaves running (#161) ----------------------------------------
+
+
+def tasks(*descriptions):
+    return ev(type="system", subtype="background_tasks_changed",
+              tasks=[{"task_id": f"b{i}", "task_type": "local_bash", "description": d}
+                     for i, d in enumerate(descriptions)])
+
+
+DONE_NOTE = ev(type="system", subtype="task_notification", task_id="b0", status="completed",
+               summary='Background command "Watch CI" completed (exit code 0)')
+
+
+def test_parser_reads_background_tasks():
+    parser = StreamParser()
+    [event] = parser.feed(tasks("Watch CI", "Build"))
+    assert event.kind == "background" and event.background == ["Watch CI", "Build"]
+    assert parser.background_tasks == ["Watch CI", "Build"]
+    assert parser.feed(DONE_NOTE) == []
+    assert parser.task_summary.startswith('Background command "Watch CI" completed')
+    [event] = parser.feed(ev(type="system", subtype="background_tasks_changed", tasks=[]))
+    assert event.background == [] and parser.background_tasks == []
+    # Odd shapes don't break it.
+    parser.feed(ev(type="system", subtype="background_tasks_changed", tasks="x"))
+    assert parser.background_tasks == []
+
+
+class KillableLiveProcess(LiveProcess):
+    """Killing ends its output, as killing the real CLI does."""
+
+    def kill(self):
+        super().kill()
+        self.stdin_closed.set()
+
+
+def _background_turn(tmp_path, lines):
+    """A turn against a live process with fake timers. ``box["ended"]`` is
+    set at the first ``finished``, and ``box["over"]`` at the last event."""
+    process = KillableLiveProcess(lines)
+    timers = FakeTimers()
+    events, box = [], {"ended": threading.Event(), "over": threading.Event()}
+
+    def on_event(event):
+        events.append(event)
+        if event.kind == "finished":
+            box.setdefault("open_at_end", not process.stdin_closed.is_set())
+            box["ended"].set()
+        if event.kind in ("failed", "closed") or (
+                event.kind == "finished" and not event.background):
+            box["over"].set()
+    runner = TurnRunner(["claude", "-p"], str(tmp_path), "Watch CI", on_event,
+                        popen=lambda cmd, **k: process, env={"PATH": "x"}, timer=timers)
+    box["runner"], box["timers"] = runner, timers
+    runner.start()
+    return events, box, process
+
+
+def _fire(timers, interval):
+    live = [t for t in timers.made if t.started and not t.cancelled and t.interval == interval]
+    for timer in live:
+        timer.cancelled = True
+        timer.function()
+    return len(live)
+
+
+def _until(condition):
+    for _ in range(250):
+        if condition():
+            return True
+        threading.Event().wait(0.02)
+    return False
+
+
+def test_background_work_keeps_the_process_and_claude_carries_on(tmp_path):
+    gate = threading.Event()
+    events, box, process = _background_turn(tmp_path, [
+        RUNNING, INIT, tasks("Watch CI"),
+        ev(type="result", subtype="success", result="Watching CI."), IDLE,
+        gate,
+        tasks(), DONE_NOTE, RUNNING, INIT,
+        ev(type="assistant", message={"content": [{"type": "text", "text": "CI passed."}]}),
+        ev(type="result", subtype="success", result="CI passed."), IDLE])
+    assert box["ended"].wait(5)
+    first = next(e for e in events if e.kind == "finished")
+    assert first.text == "Watching CI." and first.background == ["Watch CI"]
+    assert box["open_at_end"] is True  # the work isn't killed with the turn
+    runner = box["runner"]
+    assert runner.waiting_for_background and runner.background == ["Watch CI"]
+    gate.set()
+    assert box["over"].wait(5)
+    kinds = [e.kind for e in events]
+    assert kinds.index("woke") > kinds.index("finished")
+    assert "Watch CI" in events[kinds.index("woke")].text
+    assert events[-1].kind == "finished" and events[-1].text == "CI passed."
+    assert events[-1].background == []
+    assert process.stdin_closed.is_set()  # nothing left to wait for: let go
+    assert not runner.waiting_for_background
+    # Only the one message was ever sent: Claude started the second turn.
+    assert [m["type"] for m in process.sent()].count("user") == 1
+
+
+def test_a_message_sent_while_waiting_goes_to_the_same_process(tmp_path):
+    gate = threading.Event()
+    events, box, process = _background_turn(tmp_path, [
+        RUNNING, INIT, tasks("Build"),
+        ev(type="result", subtype="success", result="Building."), IDLE,
+        gate,
+        RUNNING, tasks(), ev(type="result", subtype="success", result="The answer."), IDLE])
+    assert box["ended"].wait(5)
+    runner = box["runner"]
+    assert runner.send("How is it going?") == "sent"
+    assert not runner.waiting_for_background
+    assert runner.send("again") == "busy"  # a turn is running now
+    gate.set()
+    assert box["over"].wait(5)
+    assert "woke" not in [e.kind for e in events]  # our message, not a wake-up
+    assert events[-1].kind == "finished" and events[-1].text == "The answer."
+    users = [m["message"]["content"] for m in process.sent() if m["type"] == "user"]
+    assert users == ["Watch CI", "How is it going?"]
+    assert runner.send("later") == "closed"
+
+
+def test_the_wait_ends_after_its_time_and_says_what_was_stopped(tmp_path):
+    events, box, process = _background_turn(tmp_path, [
+        RUNNING, INIT, tasks("Watch CI"),
+        ev(type="result", subtype="success", result="Watching."), IDLE])
+    assert box["ended"].wait(5)
+    assert not process.stdin_closed.is_set()
+    assert _fire(box["timers"], cli.BACKGROUND_WAIT) == 1
+    assert box["over"].wait(5)
+    last = events[-1]
+    assert last.kind == "closed" and last.raw_type == "timeout"
+    assert last.background == ["Watch CI"]
+
+
+def test_stop_while_waiting_ends_the_work(tmp_path):
+    events, box, process = _background_turn(tmp_path, [
+        RUNNING, INIT, tasks("Build"),
+        ev(type="result", subtype="success", result="Building."), IDLE])
+    assert box["ended"].wait(5)
+    box["runner"].cancel()
+    assert box["over"].wait(5)
+    assert process.killed
+    assert events[-1].kind == "closed" and events[-1].raw_type == "stopped"
+    assert "failed" not in [e.kind for e in events]
+
+
+def test_work_finishing_with_nothing_said_lets_the_process_go(tmp_path):
+    gate = threading.Event()
+    events, box, process = _background_turn(tmp_path, [
+        RUNNING, INIT, tasks("Build"),
+        ev(type="result", subtype="success", result="Building."), IDLE, gate, tasks()])
+    assert box["ended"].wait(5)
+    gate.set()
+    assert _until(lambda: _fire(box["timers"], cli.BACKGROUND_DONE_WAIT))
+    assert box["over"].wait(5)
+    assert events[-1].kind == "closed" and events[-1].raw_type == "done"
+
+
+def test_a_timer_from_an_earlier_wait_doesnt_end_a_later_one(tmp_path):
+    gate = threading.Event()
+    events, box, process = _background_turn(tmp_path, [
+        RUNNING, INIT, tasks("Watch CI"),
+        ev(type="result", subtype="success", result="Watching."), IDLE,
+        gate,
+        # Woken; CI failed, so Claude pushes a fix and watches again.
+        DONE_NOTE, RUNNING, tasks("Watch CI again"),
+        ev(type="result", subtype="success", result="Watching again."), IDLE])
+    assert box["ended"].wait(5)
+    first_wait = [t for t in box["timers"].made if t.interval == cli.BACKGROUND_WAIT]
+    gate.set()
+    assert _until(lambda: sum(e.kind == "finished" for e in events) == 2)
+    assert events[-1].background == ["Watch CI again"]
+    first_wait[0].function()  # the first wait's time running out, late
+    assert not process.stdin_closed.is_set()
+    assert box["runner"].waiting_for_background
+    assert _fire(box["timers"], cli.BACKGROUND_WAIT) >= 1
+    assert box["over"].wait(5)
+    assert events[-1].kind == "closed" and events[-1].raw_type == "timeout"
+
+
+def test_send_now_during_a_turn_claude_started_itself_waits_for_its_answer(tmp_path):
+    woke_gate, stop_gate = threading.Event(), threading.Event()
+    events, box, process = _background_turn(tmp_path, [
+        RUNNING, INIT, tasks("Watch CI"),
+        ev(type="result", subtype="success", result="Watching."), IDLE,
+        woke_gate, tasks(), DONE_NOTE, RUNNING,
+        stop_gate, STOPPED, IDLE, RUNNING,
+        ev(type="result", subtype="success", result="hi"), IDLE])
+    assert box["ended"].wait(5)
+    woke_gate.set()
+    assert _until(lambda: "woke" in [e.kind for e in events])
+    assert box["runner"].send_now("Instead, say hi") is True
+    stop_gate.set()
+    assert box["over"].wait(5)
+    assert [e.kind for e in events].count("woke") == 1
+    last = events[-1]
+    assert last.kind == "finished" and last.text == "hi" and not last.is_error
+
+
+def test_a_ceiling_from_before_the_wait_doesnt_end_it(tmp_path):
+    gate = threading.Event()
+    events, box, process = _background_turn(tmp_path, [
+        RUNNING, INIT, tasks("Build"), gate, STOPPED, IDLE,
+        ev(type="result", subtype="success", result="Building.")])
+    assert _until(lambda: "started" in [e.kind for e in events])
+    assert box["runner"].send_now("Build it instead") is True
+    gate.set()
+    assert box["ended"].wait(5)
+    assert box["runner"].waiting_for_background
+    assert box["timers"].live_ceilings() == []
+    assert not process.stdin_closed.is_set()
+
+
+def test_send_now_is_refused_while_waiting(tmp_path):
+    events, box, process = _background_turn(tmp_path, [
+        RUNNING, INIT, tasks("Build"),
+        ev(type="result", subtype="success", result="Building."), IDLE])
+    assert box["ended"].wait(5)
+    assert box["runner"].send_now("now") is False
+    assert box["runner"].waiting_for_background
+    box["runner"].cancel()
+    assert box["over"].wait(5)
+
+
+def test_claude_code_ending_while_waiting_says_how(tmp_path):
+    process = FakeProcess([RUNNING, INIT, tasks("Build"),
+                           ev(type="result", subtype="success", result="Building."), IDLE],
+                          returncode=3, stderr_lines=["boom"])
+    runner, events, _ = run_turn(process, tmp_path)
+    runner.join(5)
+    assert events[-2].kind == "finished" and events[-2].background == ["Build"]
+    last = events[-1]
+    assert last.kind == "closed" and last.raw_type == "exited"
+    assert last.text == "Exit code 3. boom" and last.background == ["Build"]
+
+
+def test_claude_code_not_exiting_when_a_wait_ends_is_killed(tmp_path):
+    events, box, process = _background_turn(tmp_path, [
+        RUNNING, INIT, tasks("Watch CI"),
+        ev(type="result", subtype="success", result="Watching."), IDLE])
+    assert box["ended"].wait(5)
+    assert _fire(box["timers"], cli.BACKGROUND_WAIT) == 1
+    assert box["over"].wait(5)
+    # The process ended here as stdin closed; had it not, this would kill it.
+    assert [t.interval for t in box["timers"].made].count(cli.PARKED_EXIT_WAIT) == 1
+
+
+def test_no_background_work_left_ends_the_turn_as_before(tmp_path):
+    events, box, process = _background_turn(tmp_path, [
+        RUNNING, INIT, tasks("Quick"), tasks(),
+        ev(type="result", subtype="success", result="Done."), IDLE])
+    assert box["over"].wait(5)
+    assert events[-1].kind == "finished" and events[-1].background == []
+    assert process.stdin_closed.is_set()

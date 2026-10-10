@@ -272,6 +272,12 @@ started, such as a build; a queued message then goes back into the reply box.
 **Ctrl+Shift+T** (Turn Status) says how long Claude has been working on this turn and what it last
 did. There's no time limit on a turn.
 
+When Claude starts something in the background, such as a build or a watch on a CI run, and
+ends its turn to wait for it, the session waits for it, for up to 2 hours. The reply ends with
+"It's waiting for" and what it's waiting for, and the session's row says so. When the work
+finishes, Claude carries on by itself, and you hear that the session is working again. A message
+you send meanwhile goes to the session as usual. **Stop** ends the work.
+
 ### Commands, skills and attachments
 
 These are for The Chat Place's own sessions:

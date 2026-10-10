@@ -54,8 +54,9 @@ from ..changes import by_file, summary_text
 from ..codeblocks import find_code_blocks
 from .. import (__version__, about_you, announce, attachments, bugreport, signin, export, hub, links,
                platform_paths, remote, usage, workplaces)
-from ..claude_cli import (MODELS, PERMISSION_MODES, PermissionRequest, ResumeRefused, TurnEvent,
-                          TurnRunner, allow_response, answer_questions_response,
+from ..claude_cli import (BACKGROUND_WAIT, MODELS, PERMISSION_MODES, PermissionRequest,
+                          ResumeRefused, TurnEvent, TurnRunner, allow_response,
+                          answer_questions_response,
                           build_fork_command, build_new_command, build_resume_command,
                           SESSION_INJECTED_PREFIXES, STRIPPED_VARS, child_environment,
                           deny_response, fetch_commands, usable_commands,
@@ -192,6 +193,9 @@ class MainFrame(wx.Frame):
         #: row under the reader changed only in those (#146).
         self._row_basis: Dict[str, Tuple[str, str]] = {}
         self._runners: Dict[str, TurnRunner] = {}
+        #: Own sessions between turns whose claude is kept for background work
+        #: Claude left running (#161). Never in ``_runners`` at the same time.
+        self._parked: Dict[str, TurnRunner] = {}
         self._denials: Dict[str, List[str]] = {}
         self._pending_refresh: Optional[bool] = None
         # Set once the window is closing (_on_close). Its destruction waits
@@ -734,6 +738,8 @@ class MainFrame(wx.Frame):
         own = [OwnSession(**vars(s)) for s in self.store.all()]
         running = set(self._runners)
         waiting = self._waiting()
+        background = {sid: f"waiting for {announce.background_text(runner.background)}"
+                      for sid, runner in self._parked.items()}
         order = self.speech.session_order
         # Each transcript's end is read only while the column is shown (#146).
         last_messages = FIELD_LAST_MESSAGE in self.speech.session_fields
@@ -741,7 +747,7 @@ class MainFrame(wx.Frame):
         def work():
             try:
                 snap = collect(own, running, waiting=waiting, order=order,
-                               last_messages=last_messages)
+                               last_messages=last_messages, background=background)
                 ended = finished_turns(self._previous_states, snap.sessions)
                 replies = {}
                 if not self._first_snapshot and self.speech.announce_all_sessions:
@@ -1000,6 +1006,9 @@ class MainFrame(wx.Frame):
         if info.is_own and info.cli_session_id in self._runners:
             self._feedback("A turn is running in that session. Stop it first.")
             return
+        if info.is_own and info.cli_session_id in self._parked:
+            self._feedback("That session's background work is still running. Stop it first.")
+            return
         try:
             self.hidden.hide(info.key)
         except OSError as exc:
@@ -1119,6 +1128,9 @@ class MainFrame(wx.Frame):
             return
         if info.cli_session_id in self._runners:
             self._feedback("A turn is running in that session. Stop it first.")
+            return
+        if info.cli_session_id in self._parked:
+            self._feedback("That session's background work is still running. Stop it first.")
             return
         if info.state == WORKING:
             # Resumed in a terminal: that claude is still writing it.
@@ -2014,6 +2026,7 @@ class MainFrame(wx.Frame):
     def _update_send_state(self):
         info = self._open
         running = info is not None and info.cli_session_id in self._runners
+        kept = info is not None and info.cli_session_id in self._parked
         # Always enabled: a disabled button drops out of the Tab order, and
         # Send and Stop must stay where Kelly's fingers expect them.
         own = bool(info and info.is_own)
@@ -2021,7 +2034,7 @@ class MainFrame(wx.Frame):
         self.stop_btn.Enable(own)
         if info is not None and info.is_own:
             waiting = self._pending.get(info.cli_session_id)
-            if running and waiting:
+            if (running or kept) and waiting:
                 label = f"Waiting for you: {waiting[0].summary()}. Ctrl+Shift+A answers."
             elif running:
                 elapsed = describe_elapsed(self._runners[info.cli_session_id].elapsed())
@@ -2030,6 +2043,9 @@ class MainFrame(wx.Frame):
                 if waiting_count:
                     # What's queued first: it's yours, and the news (#59).
                     label = f"{self._queued_words(waiting_count)} {label}"
+            elif kept:
+                what = announce.background_text(self._parked[info.cli_session_id].background)
+                label = f"Ready. Waiting for {what}; Stop ends it."
             else:
                 label = "Ready."
             if self.turn_status.GetLabel() != label:
@@ -2373,7 +2389,7 @@ class MainFrame(wx.Frame):
             self._update_heading()
         self._refresh_list_in_place()
         self._feedback(f"Remote Control {'on' if on else 'off'} for {info.title}, "
-                       "from its next turn.")
+                       f"from its next turn{self._after_background(info.cli_session_id)}.")
 
     def on_other_machines(self):
         """File, Other Machines (Ctrl+Shift+M, #123): your sessions on other
@@ -2541,7 +2557,13 @@ class MainFrame(wx.Frame):
             return
         self._update_heading()
         self._feedback(f"{info.title} now uses {model_label(values[index])}, from its next "
-                       "turn.")
+                       f"turn{self._after_background(info.cli_session_id)}.")
+
+    def _after_background(self, session_id: str) -> str:
+        """While a session's claude is kept for background work (#161), its
+        next turns go to that same claude, started with the old settings."""
+        return (", once its background work is over" if session_id in self._parked
+                else "")
 
     def _check_model(self, session_id: str, title: str, actual: str):
         """Say once if Claude Code runs another model than the session chose
@@ -2593,15 +2615,29 @@ class MainFrame(wx.Frame):
             self._feedback(f"{info.title}: {waiting}Claude has been working for "
                            f"{describe_elapsed(runner.elapsed())}, last {runner.last_activity}.")
             return
-        if not self._runners:
+        parked = self._parked.get(info.cli_session_id) if info else None
+        if parked is not None:
+            self._feedback(f"{info.title} finished its turn and is waiting for "
+                           f"{announce.background_text(parked.background)}. Claude carries "
+                           "on when it finishes; Stop ends it.")
+            return
+        if not self._runners and not self._parked:
             self._feedback("No turns are running.")
             return
-        parts = []
-        for session_id, other in self._runners.items():
+
+        def name(session_id):
             own = self.store.get(session_id)
-            name = own.title if own else "A session"
-            parts.append(f"{name}, {describe_elapsed(other.elapsed())}")
-        self._feedback("Working: " + "; ".join(parts) + ".")
+            return own.title if own else "A session"
+        said = []
+        if self._runners:
+            said.append("Working: " + "; ".join(
+                f"{name(sid)}, {describe_elapsed(other.elapsed())}"
+                for sid, other in self._runners.items()) + ".")
+        if self._parked:
+            said.append("Waiting for background work: " + "; ".join(
+                f"{name(sid)}, {announce.background_text(other.background)}"
+                for sid, other in self._parked.items()) + ".")
+        self._feedback(" ".join(said))
 
     # ------------------------------------------- answering Claude (#187, #188)
 
@@ -2695,7 +2731,9 @@ class MainFrame(wx.Frame):
         queue = self._pending.get(session_id) or []
         if request in queue:
             queue.remove(request)
-        runner = self._runners.get(session_id)
+        # A background agent can ask after the turn ended, while its claude
+        # waits for it (#161).
+        runner = self._runners.get(session_id) or self._parked.get(session_id)
         if runner is None or not runner.respond(request.request_id, response):
             self._feedback("That isn't waiting any more: the turn has ended.")
             self._update_send_state()
@@ -2963,6 +3001,22 @@ class MainFrame(wx.Frame):
         """Start a turn with ``message``. Returns why it can't, or None once
         sent; the caller decides how to say it (a dialog when Kelly pressed
         Send, speech for a queued message going out on its own)."""
+        parked = self._parked.get(session_id)
+        if parked is not None:
+            # Its claude is still running for background work (#161): the
+            # message goes to it, never to a second claude on the session.
+            own = self.store.get(session_id)
+            title = own.title if own is not None else "The session"
+            outcome = parked.send(message, images)
+            if outcome != "sent":
+                return (f"{title} has just started working again" if outcome == "busy"
+                        else f"{title} is stopping its background work") + \
+                    ". Send again in a moment."
+            self._parked.pop(session_id, None)
+            self._runners[session_id] = parked
+            self._turn_began(session_id, parked, message, title, queued=queued,
+                             images=images, spoken=spoken, attached=attached)
+            return None
         # Read fresh, not from the list's snapshot: up to 5 seconds old, it
         # still shows The Chat Place's own just-finished turn as busy.
         live = hub.load_live_status().get(session_id)
@@ -3025,12 +3079,20 @@ class MainFrame(wx.Frame):
                   if own is not None and self._remote_control_on(own) else None)
         runner = TurnRunner(command, cwd, prompt, on_event, images=images,
                             remote_control=remote)
+        self._runners[session_id] = runner
+        runner.start()
+        self._turn_began(session_id, runner, prompt, title, queued=queued, images=images,
+                         spoken=spoken, attached=attached)
+
+    def _turn_began(self, session_id: str, runner: TurnRunner, prompt: str, title: str,
+                    queued: bool = False, images: Optional[List[dict]] = None,
+                    spoken: Optional[str] = None, attached: Optional[List[str]] = None):
+        """A turn is under way in ``runner``: a new claude, or the one kept
+        for background work (#161)."""
         # What you typed and attached, to give back if the turn never starts.
         runner.typed = spoken if spoken is not None else prompt
         runner.attached = list(attached or [])
-        self._runners[session_id] = runner
         self._denials[session_id] = []
-        runner.start()
         self._update_send_state()
         said = announce.sent_text(title, spoken if spoken is not None else prompt,
                                   self.speech.announce, self.speech.announce_own,
@@ -3079,6 +3141,9 @@ class MainFrame(wx.Frame):
             self._status(f"{title}: Claude is working.")
             return
         is_open_now = self._open is not None and self._open.cli_session_id == session_id
+        if event.kind in ("background", "woke", "closed"):
+            self._on_background_event(session_id, title, event, is_open_now)
+            return
         if event.kind == "tool":
             self._status(f"{title}: Claude is using {event.text}.")
             if is_open_now and self._show_activity:
@@ -3120,7 +3185,7 @@ class MainFrame(wx.Frame):
                 self.refresh_sessions()
             return
         if event.kind == "permission" and event.request is not None:
-            if session_id not in self._runners:
+            if session_id not in self._runners and session_id not in self._parked:
                 return  # the turn already ended; nothing is waiting
             queue = self._pending.setdefault(session_id, [])
             queue.append(event.request)
@@ -3153,6 +3218,13 @@ class MainFrame(wx.Frame):
             # UI first, store writes after: a failed write must not leave the
             # session looking busy for good.
             runner = self._runners.pop(session_id, None)
+            # Over, but its claude stays for background work Claude left
+            # running, and carries on when that finishes (#161).
+            parked = event.kind == "finished" and bool(event.background) and runner is not None
+            if parked:
+                self._parked[session_id] = runner
+            waiting = (f"waiting for {announce.background_text(event.background)}"
+                       if parked else "")
             denials = event.denials or self._denials.pop(session_id, [])
             self._denials.pop(session_id, None)
             is_open = self._open is not None and self._open.cli_session_id == session_id
@@ -3192,16 +3264,17 @@ class MainFrame(wx.Frame):
                                   stopped=runner is not None and runner.cancelled)
             if event.kind == "failed" or event.is_error:
                 spoken = f"{title}: the turn failed. {usage.friendly_error(event.text)}"
-                self._say(spoken)
+                self._say(spoken + (f" It's {waiting}." if waiting else ""))
             else:
                 text = announce.reply_text(title, event.text, self.speech.announce)
                 if denials and self.speech.enabled:
                     text = (text or f"{title} finished.") + f" {detail}: " + "; ".join(denials)
                 if text:
-                    self._say(text)
+                    self._say(text + (f" It's {waiting}." if waiting else ""))
                 else:
                     reply = announce.first_sentence(event.text) if event.text else ""
-                    self._status(f"{title} finished. {reply}".strip())
+                    self._status(f"{title} finished. {reply}".strip()
+                                 + (f" It's {waiting}." if waiting else ""))
             if is_open:
                 self._changes_due = True
                 self._refresh_chat()
@@ -3227,6 +3300,54 @@ class MainFrame(wx.Frame):
                 self._give_back(session_id, "\n\n".join(unsent), is_open)
             self._update_send_state()
             self.refresh_sessions()
+
+    def _on_background_event(self, session_id: str, title: str, event: TurnEvent,
+                             is_open_now: bool):
+        """Background work Claude left running when a turn ended (#161): what
+        it is now, Claude carrying on once it finishes, or the claude kept
+        for it ending."""
+        if event.kind == "background":
+            if session_id in self._parked and event.background:
+                # Still waiting, for less now: the row and status say what for.
+                self._update_send_state()
+                self.refresh_sessions()
+            return
+        if event.kind == "woke":
+            runner = self._parked.pop(session_id, None)
+            if runner is None:
+                return
+            self._runners[session_id] = runner
+            self._denials[session_id] = []
+            news = " ".join((event.text or "its background work finished").split())
+            self._say(f"{title} is working again: {news.rstrip('.')}.")
+            self._store_write(self.store.update, session_id, state=IDLE, detail="",
+                              last_activity_ms=int(time.time() * 1000))
+            self._update_send_state()
+            self.refresh_sessions()
+            return
+        # closed: nothing of it is left running, or waiting for an answer.
+        if self._parked.pop(session_id, None) is None:
+            return
+        self._pending.pop(session_id, None)
+        self._update_send_state()
+        if event.raw_type in ("timeout", "exited"):
+            what = announce.background_text(event.background)
+            if event.raw_type == "timeout":
+                text = (f"{title}: {what} was still running after "
+                        f"{describe_elapsed(BACKGROUND_WAIT)}, so it was stopped.")
+            else:
+                text = f"{title}: Claude Code ended while waiting for {what}. {event.text}"
+            self._store_write(self.store.update, session_id, state=NEEDS_YOU,
+                              detail=announce.status_text(text, 120), unread=not is_open_now,
+                              last_activity_ms=int(time.time() * 1000))
+            self._notify(self._own_key(session_id), f"{title} needs you", text,
+                         needs_you=True)
+            self._say(text)
+        elif event.raw_type == "stopped":
+            # You pressed Stop. (Work that finished with nothing for Claude
+            # to say needs no news.)
+            self._status(f"{title}: background work stopped.")
+        self.refresh_sessions()
 
     def _take_queued(self, session_id: str) -> Optional[str]:
         """All of a session's queued messages, as the one message they're
@@ -3329,6 +3450,12 @@ class MainFrame(wx.Frame):
     def on_stop(self, _event=None):
         info = self._open
         runner = self._runners.get(info.cli_session_id) if info else None
+        parked = self._parked.get(info.cli_session_id) if info else None
+        if runner is None and parked is not None:
+            # Between turns, but Claude's background work is still running (#161).
+            parked.cancel()
+            self._feedback(f"Stopping {announce.background_text(parked.background)}.")
+            return
         if runner is None:
             self._feedback("Nothing is running.")
             return
@@ -3808,7 +3935,7 @@ class MainFrame(wx.Frame):
             self._say(f"{text} Help, {item} installs it, or the Update "
                       "button on the status bar.")
             return
-        if self._runners:
+        if self._runners or self._parked:
             self._say(f"{text} It can be installed once Claude finishes; use Help, "
                       f"{item} then.", force=True)
             return
@@ -3949,7 +4076,7 @@ class MainFrame(wx.Frame):
             return
         later = self._install_later_text(result)
         # The download took a while; things may have changed since the yes.
-        if self._runners or self._modal_open():
+        if self._runners or self._parked or self._modal_open():
             self._say(later, force=True)
             return
         if self._unsent_text():
@@ -3957,7 +4084,7 @@ class MainFrame(wx.Frame):
                 f"The Chat Place {result.version} is downloaded. Restart now to install it? "
                 "Text you haven't sent in a reply box will be lost.",
                 "Update The Chat Place", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION, self)
-            if answer != wx.YES or self._runners:
+            if answer != wx.YES or self._runners or self._parked:
                 self._say(later, force=True)
                 return
         self._say(f"Installing The Chat Place {result.version} and restarting.", force=True)
@@ -3988,7 +4115,7 @@ class MainFrame(wx.Frame):
         self._update_busy = False
         # Applying exits at once; a turn sent, a dialog opened or a reply begun
         # while the announcement played would be lost.
-        if self._runners or self._modal_open() or self._unsent_text():
+        if self._runners or self._parked or self._modal_open() or self._unsent_text():
             self._restart_timers()
             self._say(self._install_later_text(result), force=True)
             return
@@ -4537,19 +4664,14 @@ class MainFrame(wx.Frame):
     # ---------------------------------------------------------------- close
 
     def _on_close(self, event: wx.CloseEvent):
-        if self._runners and event.CanVeto():
-            count = len(self._runners)
-            answer = wx.MessageBox(
-                f"Claude is working in {count} Chat Place session"
-                f"{'s' if count != 1 else ''}. Quit anyway? The running turn"
-                f"{'s' if count != 1 else ''} will be stopped"
-                f"{', and queued messages will not be sent.' if self._queued else '.'}",
-                f"Quit {APP_NAME}", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION, self)
+        if (self._runners or self._parked) and event.CanVeto():
+            answer = wx.MessageBox(self._quit_question(), f"Quit {APP_NAME}",
+                                   wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION, self)
             if answer != wx.YES:
                 event.Veto()
                 return
         self._closing = True
-        for runner in list(self._runners.values()):
+        for runner in list(self._runners.values()) + list(self._parked.values()):
             runner.cancel()
         self.stop_timers()
         speaker.stop()
@@ -4557,6 +4679,26 @@ class MainFrame(wx.Frame):
         self._notifier.close()  # its icon would keep the app running
         self._pool.shutdown(wait=False, cancel_futures=True)
         event.Skip()
+
+    def _quit_question(self) -> str:
+        """What quitting would stop: running turns, and background work
+        Claude left running in sessions between turns (#161)."""
+        said, stopped = [], []
+        if self._runners:
+            count = len(self._runners)
+            said.append(f"Claude is working in {count} Chat Place session"
+                        f"{'s' if count != 1 else ''}.")
+            stopped.append(f"The running turn{'s' if count != 1 else ''}")
+        if self._parked:
+            count = len(self._parked)
+            what = announce.background_text(
+                [t for runner in self._parked.values() for t in runner.background])
+            said.append(f"{count} Chat Place session{'s are' if count != 1 else ' is'} "
+                        f"waiting for background work Claude started ({what}).")
+            stopped.append("the background work" if stopped else "The background work")
+        queued = ", and queued messages will not be sent." if self._queued else "."
+        return (" ".join(said) + " Quit anyway? " + " and ".join(stopped)
+                + " will be stopped" + queued)
 
     def _gone(self) -> bool:
         """True once the window is destroyed or being destroyed. A Mac

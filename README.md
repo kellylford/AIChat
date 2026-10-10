@@ -297,8 +297,8 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   **File, Remote Control** turns it on or off for one session (or back to the Settings
   default). A session on Remote Control can be reached from claude.ai and your other devices
   while one of its turns is running: each turn is its own Claude Code process, so between turns
-  it shows as offline. The same Remote Control session is joined every turn, and File, Remote
-  Control copies its claude.ai address. Turning it on copies the conversation to claude.ai,
+  it shows as offline (except while it waits for background work, below). The same Remote
+  Control session is joined every turn, and File, Remote Control copies its claude.ai address. Turning it on copies the conversation to claude.ai,
   where it stays (turning Remote Control off, or deleting the session, doesn't remove it;
   archive it on claude.ai). While a turn runs, anyone signed in to your account on claude.ai
   can type into it or answer its questions; a question answered there is cleared here.
@@ -414,6 +414,16 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
 - **Turn Status** (Ctrl+Shift+T) says how long Claude has been working on the current turn and what
   it last did. There's no time limit on a turn; Stop (Ctrl+Period) ends it, along with anything it
   started, such as a build.
+- **Background work carries on after a turn.** When Claude starts something in the background,
+  such as a build or a watch on a CI run, and ends its turn to wait for it, the session's Claude
+  Code keeps running for it, for up to 2 hours. The reply ends with "It's waiting for" and what
+  it's waiting for, the session's row says "waiting for" it, and Turn Status (Ctrl+Shift+T) says
+  so. When the work finishes, Claude carries on by itself: you hear the session's name, "is
+  working again" and what finished, and its reply is announced like any other. A message you
+  send meanwhile goes to the same Claude Code, so Claude still knows about the work. Stop
+  (Ctrl+Period) ends the work. If it's still running after 2 hours it's stopped, and the
+  session needs you and says what was stopped. Quitting asks first and stops it, and an update
+  waits until it's done.
 - **User Guide** (Help menu, Alt+H, G) shows the user guide as a page, read by heading like the
   keyboard shortcuts, or as plain text (Alt+P). It's part of the app, so it works offline. It's
   edited in `thechatplace/assets/user-guide.md`; `python tools/make_docs.py` makes the copies in
@@ -744,7 +754,10 @@ whether a reply went to the screen reader at all when you didn't hear it.
 A turn runs `claude` in a Windows job object, so Stop, or quitting the app, ends `claude` and every
 program it started (a build or test run, say), not just `claude` itself. The same happens when a
 turn finishes normally: anything Claude started and left running, such as a development server,
-ends with the turn. (Ask Claude to start long-running servers in a terminal of your own instead.)
+ends with the turn, unless Claude Code lists it as background work it's waiting for. Then
+`claude` is kept, with its input open, until that work finishes and Claude has answered, for 2
+hours at most, or until Stop (#161). (Ask Claude to start long-running servers in a terminal of
+your own instead: one it starts in the background is stopped after those 2 hours.)
 `claude` is started suspended and only let run once it's in the job, so nothing it starts can
 slip out first.
 

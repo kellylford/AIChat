@@ -205,6 +205,20 @@ def queued_text(title: str, message: str, level: str, read_back: bool,
     return f"{head} {title}: {words}"
 
 
+def background_text(tasks, limit: int = 3) -> str:
+    """Background work Claude left running (#161), as words: "Watch CI", or
+    "3 background tasks: Build, Test and Watch CI", or past ``limit`` only
+    the count."""
+    names = [" ".join(str(t).split()) for t in tasks if str(t).strip()]
+    if not names:
+        return "background work"
+    if len(names) == 1:
+        return names[0]
+    if len(names) > limit:
+        return f"{len(names)} background tasks"
+    return f"{len(names)} background tasks: {_and_list(names)}"
+
+
 def status_text(text: str, limit: int = 150) -> str:
     """The same news, short enough for the status bar."""
     flat = " ".join((text or "").split())
@@ -212,7 +226,7 @@ def status_text(text: str, limit: int = 150) -> str:
 
 
 __all__ = ["first_sentence", "reply_text", "turn_end_text", "status_text",
-           "sent_text", "queued_text", "activity_text",
+           "sent_text", "queued_text", "activity_text", "background_text",
            "ANNOUNCE_FULL", "ANNOUNCE_SUMMARY", "ANNOUNCE_SILENT"]
 
 

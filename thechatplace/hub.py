@@ -68,9 +68,12 @@ def collect(own: Iterable[OwnSession], running_own_ids: Set[str],
             waiting: Optional[Dict[str, str]] = None,
             started=platform_paths.process_start,
             order: str = SORT_STATUS,
-            last_messages: bool = False) -> Snapshot:
+            last_messages: bool = False,
+            background: Optional[Dict[str, str]] = None) -> Snapshot:
     """``waiting`` maps a running own session to what Claude is waiting for
     (a permission request, question or plan): it needs you, not working.
+    ``background`` maps an own session between turns to the background work
+    its claude is kept for (#161), said in its row.
     ``order`` is how the list is sorted (see ``sessions.SORT_ORDERS``).
     ``last_messages`` fills in each session's Last message column (#146):
     only while that column is shown, since it reads every transcript."""
@@ -85,10 +88,16 @@ def collect(own: Iterable[OwnSession], running_own_ids: Set[str],
     own = list(own)
     for item in own:
         info = item.to_info()
-        if item.cli_session_id in running_own_ids and waiting.get(item.cli_session_id):
+        kept = (background or {}).get(item.cli_session_id, "")
+        if ((item.cli_session_id in running_own_ids or kept)
+                and waiting.get(item.cli_session_id)):
             info.state, info.detail = NEEDS_YOU, waiting[item.cli_session_id]
         elif item.cli_session_id in running_own_ids:
             info.state, info.detail = WORKING, ""
+        elif kept:
+            # Its own claude, idle between turns: never "running outside".
+            # What the turn ended with (refusals, say) still shows.
+            info.detail = f"{info.detail}; {kept}" if info.detail else kept
         elif (live.get(item.cli_session_id) is not None
               and live[item.cli_session_id].status == "busy"):
             # Someone resumed it elsewhere (a terminal); it is busy there.
