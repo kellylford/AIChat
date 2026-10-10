@@ -18,7 +18,7 @@ looks like.
 | #175 | Status bar buttons are 16 pixels tall and need 23, so the bottoms of letters are cut off ("needs vou", "readv"). **Fixed:** the bar is 30 tall | Every main-window picture, every variant |
 | #176 | Long labels run off the dialog's edge: the Remote Control check box, Report a Bug's note (the support address is hidden), Session List Columns' intro, Usage's first row. Question and Settings have large empty bands. **Fixed:** long labels wrap and dialogs fit their contents | settings, bug-report, session-columns, usage, question |
 | #177 | Windows dark mode isn't followed: the app stays light, and only the formatted pages turn dark, inside light dialogs | Every dark-100 picture |
-| #178 | Continue Here's Title box opens scrolled to its end and its About box cuts a line in half; New Session's Folder box is cramped | continue-here, new-session |
+| #178 | Continue Here's Title box opens scrolled to its end and its About box cuts a line in half; New Session's Folder box is cramped. **Fixed:** the Folder box is full width, the title shows its start and the note shows whole (field edges 2 pixels apart remain) | continue-here, new-session |
 | #179 | The split between the session list and the session moves with the status text (378, 326, then 268 pixels), and status bar fields cut mid-word | main-own, main-desktop, main-own-working |
 | #180 | The Last message column (#146) is out of sight at the default window size | main-last-message |
 | #181 | Both lists show the same blue selection; only a faint dotted outline (1.89:1) says which has focus | Every main-window picture, light and dark |
