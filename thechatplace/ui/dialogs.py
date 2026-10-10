@@ -2452,8 +2452,8 @@ class FindResultsDialog(wx.Dialog):
     message found ("Build, Claude, yesterday 10:42: …the migration ran…").
     Enter or Go to Message loads that session on that message."""
 
-    def __init__(self, parent, results, now=None):
-        super().__init__(parent, title=f'Find in All Sessions: "{results.text}"',
+    def __init__(self, parent, results, now=None, app_name="The Chat Place"):
+        super().__init__(parent, title=results.title(app_name),
                          size=(820, 520), style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
         self._matches = list(results.matches)
         #: The match to go to once the dialog has closed, or None.

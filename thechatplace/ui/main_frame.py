@@ -3959,7 +3959,7 @@ class MainFrame(wx.Frame):
 
     def _open_find_results(self, results):
         returning_to = wx.Window.FindFocus()
-        dialog = FindResultsDialog(self, results)
+        dialog = FindResultsDialog(self, results, app_name=APP_NAME)
         try:
             dialog.ShowModal()
             chosen = dialog.chosen

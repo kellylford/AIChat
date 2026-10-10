@@ -133,3 +133,16 @@ def test_progress_is_reported_per_session(tmp_path):
     search_sessions([_target("a", "A", a), Target("b", "B", lambda: None)], "x",
                     progress=done.append)
     assert done == [1, 2]
+
+
+
+def test_the_window_title_says_how_many_and_for_what_first(tmp_path, monkeypatch):
+    path = _transcript(tmp_path, "t", user_text("a needle"), user_text("another needle"))
+    results = search_sessions([_target("k", "T", path)], "needle")
+    assert results.title("The Chat Place") == ('The Chat Place: 2 results for "needle", '
+                                               "Find in All Sessions")
+    one = search_sessions([_target("k", "T", path)], "another")
+    assert one.title("App") == 'App: 1 result for "another", Find in All Sessions'
+    monkeypatch.setattr(search, "MAX_RESULTS", 1)
+    capped = search_sessions([_target("k", "T", path)], "needle")
+    assert capped.title("App") == 'App: the first 1 results for "needle", Find in All Sessions'
