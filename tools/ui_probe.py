@@ -856,7 +856,20 @@ def _system_appearance() -> dict:
     info = {"dark": appearance.IsDark(), "name": appearance.GetName(), "scale": _system_scale()}
     if IS_WINDOWS:
         info["high_contrast"] = _high_contrast_on()
+        info["windows_apps_dark"] = _windows_apps_dark()
     return info
+
+
+def _windows_apps_dark() -> bool:
+    """Windows' own dark mode setting for apps. wx's IsDark says whether the
+    app's colours are dark, which is a different question."""
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion"
+                            r"\Themes\Personalize") as key:
+            return winreg.QueryValueEx(key, "AppsUseLightTheme")[0] == 0
+    except OSError:
+        return False
 
 
 def session_locked() -> bool:
@@ -882,7 +895,10 @@ def photograph(name: str, out: Path, stem: str, size, world: Path) -> dict:
         env = build_world(world, empty=empty)
         frame = build_frame(env, empty=empty)
         frame.SetPosition((20, 20))
-        frame.SetSize(size)
+        # Shrunk to fit the screen, as the app sizes itself: at 150% a
+        # 1000 by 720 window is taller than a 1080-pixel screen.
+        from thechatplace.ui.main_frame import _fitting_size
+        frame.SetSize(_fitting_size(*size))
         frame.Show()
         frame.Raise()
         _pump(SETTLE_SECONDS)
