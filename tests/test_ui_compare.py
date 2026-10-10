@@ -78,8 +78,8 @@ def test_same_pictures_and_layout_are_unchanged(app, tmp_path):
 
 def test_a_colour_change_the_layout_cant_see_is_caught(app, tmp_path):
     controls = [_control("Button", "OK", [10, 10, 40, 20])]
-    _surface(tmp_path / "base", "settings-dark-100", controls, box=(0, 0, 40, 30))
-    _surface(tmp_path / "run", "settings-dark-100", controls, box=(0, 0, 40, 30),
+    _surface(tmp_path / "base", "settings-dark-100", controls, box=(10, 10, 40, 30))
+    _surface(tmp_path / "run", "settings-dark-100", controls, box=(10, 10, 40, 30),
              colour=(255, 0, 255))
     result = ui_compare.compare(tmp_path / "run", tmp_path / "base")
     assert list(result["changed"]) == ["settings-dark-100"]
@@ -129,3 +129,11 @@ def test_accepting_a_whole_run_keeps_its_manifests(app, tmp_path):
                             "--accept"]) == 0
     assert (tmp_path / "base" / "manifest-dark-100.json").exists()
     assert (tmp_path / "base" / "usage-dark-100.png").exists()
+
+
+def test_the_window_border_is_not_compared(app, tmp_path):
+    # Windows draws the outer border over whatever is behind the window.
+    _surface(tmp_path / "base", "usage-light-150", [], box=(0, 0, 80, 1))
+    _surface(tmp_path / "run", "usage-light-150", [], box=(0, 0, 80, 1), colour=(255, 0, 0))
+    assert ui_compare.compare(tmp_path / "run", tmp_path / "base")["unchanged"] == [
+        "usage-light-150"]

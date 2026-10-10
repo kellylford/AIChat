@@ -33,6 +33,11 @@ CHANGED_SHARE = 0.001
 #: Controls that moved or grew by no more than this many pixels haven't.
 MOVE_TOLERANCE = 2
 
+#: Pixels at the picture's edge that aren't compared.
+EDGE = 2
+
+_app = None  # the wx.App pixel_change makes when run on its own
+
 
 def _key(control: dict) -> tuple:
     return control["class"], control["name"], control["label"]
@@ -82,8 +87,10 @@ def pixel_change(old_png: Path, new_png: Path, diff_png: Path | None = None) -> 
     """The share of pixels that differ (1.0 if the sizes differ). Writes a
     picture of where, if asked: changed pixels red over a faded copy."""
     import wx
+    global _app
     if not wx.GetApp():
-        wx.App(False)
+        # Kept: an App nobody holds is gone at once, and wx.Image needs one.
+        _app = wx.App(False)
     old, new = wx.Image(str(old_png)), wx.Image(str(new_png))
     if old.GetSize() != new.GetSize():
         return 1.0
@@ -94,8 +101,13 @@ def pixel_change(old_png: Path, new_png: Path, diff_png: Path | None = None) -> 
     changed = 0
     marks = bytearray(len(b))
     for i in range(0, len(b), 3):
-        if (abs(a[i] - b[i]) > CHANNEL_TOLERANCE or abs(a[i + 1] - b[i + 1]) > CHANNEL_TOLERANCE
-                or abs(a[i + 2] - b[i + 2]) > CHANNEL_TOLERANCE):
+        x, y = (i // 3) % width, (i // 3) // width
+        # The window's outer border is Windows' drawing over whatever is
+        # behind it (a screen copy at 150% and above), not the app's.
+        edge = x < EDGE or y < EDGE or x >= width - EDGE or y >= height - EDGE
+        if not edge and (abs(a[i] - b[i]) > CHANNEL_TOLERANCE
+                         or abs(a[i + 1] - b[i + 1]) > CHANNEL_TOLERANCE
+                         or abs(a[i + 2] - b[i + 2]) > CHANNEL_TOLERANCE):
             changed += 1
             marks[i:i + 3] = b"\xff\x00\x00"
         else:

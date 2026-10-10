@@ -122,6 +122,14 @@ def _screen_copy(left, top, width, height) -> wx.Bitmap:
     return bitmap
 
 
+def _work_area():
+    """The primary screen less the taskbar, in the calling thread's pixels."""
+    rect = (ctypes.c_long * 4)()
+    SPI_GETWORKAREA = 0x0030
+    ctypes.windll.user32.SystemParametersInfoW(SPI_GETWORKAREA, 0, ctypes.byref(rect), 0)
+    return tuple(rect)
+
+
 def _print_window(window):
     """The window as it draws itself, at its own (unscaled) size, whatever
     covers it on screen: PrintWindow with PW_RENDERFULLCONTENT, which
@@ -152,7 +160,12 @@ def _capture_windows(window: wx.TopLevelWindow) -> tuple[wx.Bitmap, str]:
         if stretched:
             window.Raise()
             _pump(0.4)
-            bl, bt, br, bb = bounds
+            # Only what's on screen above the taskbar: a dialog taller than
+            # the screen runs under it (#186), and the taskbar's own icons,
+            # which differ run to run, would show as changes.
+            wl, wt, wr, wb = _work_area()
+            bl, bt = max(bounds[0], wl), max(bounds[1], wt)
+            br, bb = min(bounds[2], wr), min(bounds[3], wb)
             return _screen_copy(bl, bt, br - bl, bb - bt), "screen copy (stretched by Windows)"
     left, top, right, bottom = physical
     width, height = right - left, bottom - top
