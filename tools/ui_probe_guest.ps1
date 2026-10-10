@@ -273,7 +273,7 @@ try {
     & $Python @probeArgs
     $code = $LASTEXITCODE
 } finally {
-    Reset-Display
-    [ProbeDisplay]::RestoreResolution()
+    # The resolution goes back even if the theme couldn't.
+    try { Reset-Display } finally { [ProbeDisplay]::RestoreResolution() }
 }
 exit $code

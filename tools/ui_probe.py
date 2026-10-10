@@ -120,6 +120,21 @@ def _screen_copy(left, top, width, height) -> wx.Bitmap:
     return bitmap
 
 
+def _print_window(window):
+    """The window as it draws itself, at its own (unscaled) size, whatever
+    covers it on screen: PrintWindow with PW_RENDERFULLCONTENT, which
+    includes WebView2's page. None if Windows couldn't."""
+    hwnd = window.GetHandle()
+    left, top, right, bottom = _window_rect(hwnd)
+    bitmap = wx.Bitmap(right - left, bottom - top)
+    dc = wx.MemoryDC(bitmap)
+    PW_RENDERFULLCONTENT = 2
+    ok = ctypes.windll.user32.PrintWindow(ctypes.c_void_p(hwnd), ctypes.c_void_p(dc.GetHandle()),
+                                          PW_RENDERFULLCONTENT)
+    dc.SelectObject(wx.NullBitmap)
+    return bitmap if ok else None
+
+
 def _capture_windows(window: wx.TopLevelWindow) -> tuple[wx.Bitmap, str]:
     """At 100%: PrintWindow with PW_RENDERFULLCONTENT, which includes the
     formatted view's WebView2 (drawn by another process), or a screen copy
@@ -139,14 +154,9 @@ def _capture_windows(window: wx.TopLevelWindow) -> tuple[wx.Bitmap, str]:
             return _screen_copy(bl, bt, br - bl, bb - bt), "screen copy (stretched by Windows)"
     left, top, right, bottom = physical
     width, height = right - left, bottom - top
-    bitmap = wx.Bitmap(width, height)
-    dc = wx.MemoryDC(bitmap)
-    PW_RENDERFULLCONTENT = 2
-    ok = ctypes.windll.user32.PrintWindow(ctypes.c_void_p(hwnd), ctypes.c_void_p(dc.GetHandle()),
-                                          PW_RENDERFULLCONTENT)
-    dc.SelectObject(wx.NullBitmap)
+    bitmap = _print_window(window)
     method = "PrintWindow"
-    if not ok or _one_colour(bitmap):
+    if bitmap is None or _one_colour(bitmap):
         window.Raise()
         _pump(0.4)
         bitmap = _screen_copy(left, top, width, height)
@@ -770,17 +780,19 @@ def _pages_drawn(dialog, views) -> bool:
     """Every web view in ``dialog`` shows more than one colour. WebView2
     draws in its own process after IsBusy has gone false, and asking the page
     (RunScript) from inside this timer can wait forever, so the picture
-    itself is the test: a page that hasn't drawn yet is one flat colour."""
+    itself is the test: a page that hasn't drawn yet is one flat colour.
+    PrintWindow, not the screen: at 175% the taskbar covers the bottom of a
+    tall dialog, and its colours would pass for a drawn page."""
     if not IS_WINDOWS:
         return True
-    bitmap, _method = _capture_windows(dialog)
-    frame = dialog.GetScreenRect()
-    scale = bitmap.GetWidth() / max(1, frame.width)
+    bitmap = _print_window(dialog)
+    if bitmap is None:
+        return False
+    left, top, _right, _bottom = _window_rect(dialog.GetHandle())
     for view in views:
         rect = view.GetScreenRect()
-        x, y = int((rect.x - frame.x) * scale) + 8, int((rect.y - frame.y) * scale) + 8
-        w, h = int(rect.width * scale) - 16, int(rect.height * scale) - 16
-        area = wx.Rect(x, y, w, h).Intersect(wx.Rect(0, 0, bitmap.GetWidth(), bitmap.GetHeight()))
+        area = wx.Rect(rect.x - left + 8, rect.y - top + 8, rect.width - 16, rect.height - 16)
+        area = area.Intersect(wx.Rect(0, 0, bitmap.GetWidth(), bitmap.GetHeight()))
         if area.width < 4 or area.height < 4 or _one_colour(bitmap.GetSubBitmap(area)):
             return False
     return True
@@ -790,11 +802,12 @@ def photograph_dialog(opener, out: Path, stem: str) -> dict:
     """Run ``opener`` (which shows a modal dialog, now or a moment later),
     photograph the dialog once it has settled, and cancel it."""
     result = {"kind": "dialog"}
-    state = {"seen": None, "since": 0.0, "done": False, "started": time.time()}
+    state = {"seen": None, "since": 0.0, "done": False, "ticking": False,
+             "started": time.time()}
 
     def tick(_event=None):
         # Taking a picture can pump messages, so the timer could fire inside it.
-        if state["done"] or state.get("ticking"):
+        if state["done"] or state["ticking"]:
             return
         state["ticking"] = True
         try:
@@ -817,13 +830,17 @@ def photograph_dialog(opener, out: Path, stem: str) -> dict:
         waited = now - state["since"]
         if waited < (WEBVIEW_SETTLE_SECONDS if views else SETTLE_SECONDS):
             return
-        if views and waited < DIALOG_TIMEOUT_SECONDS and not _pages_drawn(dialog, views):
+        drawn = not views or _pages_drawn(dialog, views)
+        if not drawn and waited < DIALOG_TIMEOUT_SECONDS:
             return
         state["done"] = True
         try:
             result.update(_save(dialog, out, stem))
         except Exception as exc:  # noqa: BLE001
             result["error"] = f"capture failed: {exc}"
+        if not drawn:
+            result["error"] = (f"the web page never drew: photographed blank after "
+                               f"{DIALOG_TIMEOUT_SECONDS:.0f} seconds")
         dialog.EndModal(wx.ID_CANCEL)
 
     timer = wx.Timer()
@@ -853,7 +870,8 @@ def _save(window, out: Path, stem: str) -> dict:
     problems = [f"{c['class']} {c['label'] or c['name']!r}: {p}"
                 for c in info["controls"] for p in c["problems"]]
     return {"png": png.name, "json": f"{stem}.json", "title": info["title"],
-            "class": info["class"], "capture": method, "problems": problems}
+            "class": info["class"], "size": info["size"], "capture": method,
+            "problems": problems}
 
 
 def _dpi_awareness() -> str:
@@ -886,7 +904,10 @@ def _high_contrast_on() -> bool:
 
 def _system_appearance() -> dict:
     appearance = wx.SystemSettings.GetAppearance()
-    info = {"dark": appearance.IsDark(), "name": appearance.GetName(), "scale": _system_scale()}
+    screen = wx.Display(0).GetClientArea()
+    info = {"dark": appearance.IsDark(), "name": appearance.GetName(), "scale": _system_scale(),
+            # The work area the windows are fitted to, in the app's (unscaled) pixels.
+            "work_area": [screen.width, screen.height]}
     if IS_WINDOWS:
         info["high_contrast"] = _high_contrast_on()
         info["windows_apps_dark"] = _windows_apps_dark()

@@ -160,3 +160,56 @@ def test_a_blank_capture_is_recognised(app):
     dc.DrawRectangle(5, 5, 30, 20)
     dc.SelectObject(wx.NullBitmap)
     assert not ui_probe._one_colour(drawn)
+
+
+class _View:
+    def __init__(self, rect):
+        self._rect = rect
+
+    def GetScreenRect(self):
+        return wx.Rect(*self._rect)
+
+
+class _Dialog:
+    def GetHandle(self):
+        return 1
+
+
+def _page(app, colour_box=None):
+    """A 300 by 200 dialog picture whose page area (50, 40, 200, 120 on a
+    screen where the dialog is at 100, 100) is flat white, or has a box."""
+    image = wx.Image(300, 200)
+    image.SetRGB(wx.Rect(0, 0, 300, 200), 240, 240, 240)
+    image.SetRGB(wx.Rect(50, 40, 200, 120), 255, 255, 255)
+    if colour_box:
+        image.SetRGB(wx.Rect(*colour_box), 0, 0, 0)
+    return image.ConvertToBitmap()
+
+
+@pytest.mark.parametrize("box, drawn", [(None, False), ((80, 70, 60, 20), True),
+                                        # Only outside the page (the frame): still blank.
+                                        ((0, 0, 30, 30), False)])
+def test_a_page_is_drawn_only_when_its_area_has_more_than_one_colour(app, monkeypatch, box, drawn):
+    monkeypatch.setattr(ui_probe, "IS_WINDOWS", True)
+    monkeypatch.setattr(ui_probe, "_print_window", lambda window: _page(app, box))
+    monkeypatch.setattr(ui_probe, "_window_rect", lambda hwnd: (100, 100, 400, 300))
+    view = _View((150, 140, 200, 120))  # the page, in screen coordinates
+    assert ui_probe._pages_drawn(_Dialog(), [view]) is drawn
+
+
+def test_a_page_windows_could_not_print_is_not_drawn(app, monkeypatch):
+    monkeypatch.setattr(ui_probe, "IS_WINDOWS", True)
+    monkeypatch.setattr(ui_probe, "_print_window", lambda window: None)
+    assert ui_probe._pages_drawn(_Dialog(), [_View((0, 0, 50, 50))]) is False
+
+
+def test_the_working_surface_says_working(opened, tmp_path, monkeypatch):
+    env = ui_probe.build_world(tmp_path, monkeypatch.setattr, formatted_view=False)
+    frame = ui_probe.build_frame(env)
+    try:
+        ui_probe.s_main_own_working(frame, env)
+        assert "working" in frame.session_heading.GetLabel()
+        row = next(s for s in frame.session_list.GetStrings() if s.startswith("Visual probe"))
+        assert "working" in row
+    finally:
+        ui_probe.close_frame(frame)

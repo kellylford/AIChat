@@ -31,14 +31,18 @@ Noted, not filed:
 - **Attachments:** the attachment list has no visible label (it has an accessible name).
 - **Window titles:** in High Contrast Desert they are faint, but that is Windows drawing an inactive title bar, not the app.
 
-A formatted message's code block lost its edge under High Contrast, because a background colour
-was all that marked it. The phase 3 change of #155 gives it a border there.
+A formatted message's code block loses its edge under High Contrast, because a background
+colour is all that marks it. Phase 3 of #155 adds a border there; until it merges, the
+High Contrast pictures show the block marked only by its indent and font.
 
 ## What passed
 
-- **Contrast:** every text and background pair measured passes WCAG AA in light, dark (the
-  formatted pages) and both High Contrast themes. The lowest app-drawn pair is white on the
-  selection blue, at 4.53:1.
+- **Text contrast (WCAG 1.4.3):** every text and background pair measured passes AA in light,
+  dark (the formatted pages) and both High Contrast themes. The lowest app-drawn pair is white
+  on the selection blue, at 4.53:1.
+- **Non-text contrast (WCAG 1.4.11):** this doesn't all pass. The list focus outline is 1.89:1
+  (#181), and the formatted view's code box is 1.1:1 against its page in light mode and 1.2:1
+  in dark. The code box is only a tint, though, since the monospaced text marks the block.
 - **High Contrast:** both themes reach every part of the app, including the custom-drawn status
   bar, list selection and the formatted pages.
 - **Rendering:** no screen is blank, and none shows stray `&` marks, mojibake or placeholder

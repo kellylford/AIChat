@@ -32,18 +32,27 @@ powershell -File tools\ui_probe_vm.ps1 -Variant light-100,dark-100 -Surface sett
 vmtest save                                                  # when done for now
 ```
 
-The variants are in `tools/ui_probe_plan.json`: light at 100, 150 and 175% scaling (175% is the most the VM's 1920 by 1080 screen offers), dark
-apps, and High Contrast Aquatic and Desert. `tools/ui_probe_guest.ps1` sets each one
-inside the VM, runs the probe, and puts the display back. It refuses to run outside a
-virtual machine.
+The variants are in `tools/ui_probe_plan.json`:
+- light at 100, 150 and 175% scaling;
+- dark apps;
+- High Contrast Aquatic and Desert.
 
-The first run installs Python 3.12, the Visual C++ runtime and the app's packages in the
-VM, which takes a few minutes. The VM is switched to its largest screen for a run; 200% would need a bigger one than
-ClaudeTesting has (its Hyper-V display is set to at most 1920 by 1200). The pictures come back to a new folder under `%TEMP%\tcp-ui-probe`.
+`tools/ui_probe_guest.ps1` sets each one inside the VM, runs the probe, and puts the display
+back. It refuses to run outside a virtual machine.
 
-At 150% and 200% the pictures are screen copies in real pixels, because the app isn't DPI
-aware: Windows draws it at 100% and stretches it, and the pictures show that, as a person
-would see it.
+For a run, the VM is switched to its largest screen mode, 1920 by 1080. Windows allows up to
+175% on that screen, so 200% would need ClaudeTesting's Hyper-V display set larger. The first
+run installs Python 3.12, the Visual C++ runtime and the app's packages in the VM, which
+takes a few minutes. The pictures come back to a new folder under `%TEMP%\tcp-ui-probe`.
+
+At 150% and 175% the pictures are screen copies in real pixels, because the app isn't DPI
+aware (#185): Windows draws it at 100% and stretches it, and the pictures show that, as a
+person would see it. The main window is shrunk to fit the screen, as the app does.
+
+Each `manifest-<tag>.json` records what the variant really was: the scaling, the work area
+the windows were fitted to, High Contrast, and Windows' own dark mode setting
+(`windows_apps_dark`; wx's `dark` says whether the app's colours are dark, which is a
+different question).
 
 ## macOS: by hand
 
