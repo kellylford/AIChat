@@ -1,0 +1,136 @@
+{
+ "title": "Edit Prompt",
+ "class": "PromptEditDialog",
+ "size": [
+  620,
+  460
+ ],
+ "client": [
+  604,
+  421
+ ],
+ "dpi": [
+  96,
+  96
+ ],
+ "content_scale": 1.0,
+ "controls": [
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "&Name:",
+   "rect": [
+    8,
+    8,
+    36,
+    16
+   ],
+   "best": [
+    36,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "TextCtrl",
+   "name": "Prompt name",
+   "label": "Review",
+   "rect": [
+    10,
+    26,
+    588,
+    23
+   ],
+   "best": [
+    110,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": "Review"
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "&Text:",
+   "rect": [
+    8,
+    55,
+    26,
+    16
+   ],
+   "best": [
+    26,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "TextCtrl",
+   "name": "Prompt text",
+   "label": "Review this change for bugs.",
+   "rect": [
+    10,
+    73,
+    588,
+    311
+   ],
+   "best": [
+    127,
+    200
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": "Review this change for bugs."
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Save",
+   "rect": [
+    440,
+    390,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "Cancel",
+   "rect": [
+    521,
+    390,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  }
+ ],
+ "capture": "PrintWindow"
+}

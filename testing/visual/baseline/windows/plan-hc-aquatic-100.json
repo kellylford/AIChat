@@ -1,0 +1,213 @@
+{
+ "title": "Claude's plan: Visual probe",
+ "class": "PlanDialog",
+ "size": [
+  760,
+  600
+ ],
+ "client": [
+  744,
+  561
+ ],
+ "dpi": [
+  96,
+  96
+ ],
+ "content_scale": 1.0,
+ "controls": [
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "&Plan:",
+   "rect": [
+    8,
+    8,
+    27,
+    16
+   ],
+   "best": [
+    27,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "TextCtrl",
+   "name": "Plan",
+   "label": "# Plan\r\n\r\n1. Flush and close the progress file before signalling.\r\n2. Wait on the signal in the test.\r\n3. Run the suite ten times.\r\n",
+   "rect": [
+    10,
+    34,
+    728,
+    412
+   ],
+   "best": [
+    127,
+    260
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": "# Plan\n\n1. Flush and close the progress file before signalling.\n2. Wait on the signal in the test.\n3. Run the suite ten times.\n"
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "If approved, carry on &in:",
+   "rect": [
+    8,
+    463,
+    126,
+    16
+   ],
+   "best": [
+    126,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Choice",
+   "name": "If approved, carry on in",
+   "label": "",
+   "rect": [
+    209,
+    460,
+    527,
+    23
+   ],
+   "best": [
+    457,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": "Accept edits: file edits allowed; Claude asks before commands that need approval"
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "&What to change (for Keep Planning):",
+   "rect": [
+    8,
+    494,
+    193,
+    16
+   ],
+   "best": [
+    193,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "TextCtrl",
+   "name": "What to change (for Keep Planning)",
+   "label": "",
+   "rect": [
+    211,
+    493,
+    527,
+    23
+   ],
+   "best": [
+    110,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": ""
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "Read &Formatted...",
+   "rect": [
+    331,
+    530,
+    114,
+    23
+   ],
+   "best": [
+    114,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Approve",
+   "rect": [
+    463,
+    530,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Keep Planning",
+   "rect": [
+    544,
+    530,
+    97,
+    23
+   ],
+   "best": [
+    97,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "Answer &Later",
+   "rect": [
+    647,
+    530,
+    89,
+    23
+   ],
+   "best": [
+    89,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  }
+ ],
+ "capture": "PrintWindow"
+}

@@ -1,0 +1,235 @@
+{
+ "title": "Prompts",
+ "class": "PromptsDialog",
+ "size": [
+  680,
+  560
+ ],
+ "client": [
+  664,
+  521
+ ],
+ "dpi": [
+  96,
+  96
+ ],
+ "content_scale": 1.0,
+ "controls": [
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "&Prompts:",
+   "rect": [
+    8,
+    8,
+    49,
+    16
+   ],
+   "best": [
+    49,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "ListBox",
+   "name": "Prompts, 2",
+   "label": "",
+   "rect": [
+    10,
+    26,
+    648,
+    217
+   ],
+   "best": [
+    113,
+    150
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "items": [
+    "Review",
+    "Release notes"
+   ],
+   "selection": 0
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "Te&xt:",
+   "rect": [
+    8,
+    249,
+    26,
+    16
+   ],
+   "best": [
+    26,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "TextCtrl",
+   "name": "Prompt text",
+   "label": "",
+   "rect": [
+    10,
+    267,
+    648,
+    217
+   ],
+   "best": [
+    127,
+    140
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": "Review this change for bugs, then for accessibility."
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Use",
+   "rect": [
+    8,
+    490,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&New...",
+   "rect": [
+    89,
+    490,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Edit...",
+   "rect": [
+    170,
+    490,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Delete...",
+   "rect": [
+    251,
+    490,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "Mo&ve Up",
+   "rect": [
+    332,
+    490,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "Move Do&wn",
+   "rect": [
+    413,
+    490,
+    85,
+    23
+   ],
+   "best": [
+    85,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Close",
+   "rect": [
+    581,
+    490,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  }
+ ],
+ "capture": "screen copy (stretched by Windows)"
+}

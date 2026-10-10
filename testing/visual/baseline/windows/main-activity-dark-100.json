@@ -1,0 +1,381 @@
+{
+ "title": "Fix the flaky upload test — The Chat Place",
+ "class": "MainFrame",
+ "size": [
+  1000,
+  720
+ ],
+ "client": [
+  984,
+  638
+ ],
+ "dpi": [
+  96,
+  96
+ ],
+ "content_scale": 1.0,
+ "controls": [
+  {
+   "class": "Panel",
+   "name": "panel",
+   "label": "panel",
+   "rect": [
+    0,
+    0,
+    984,
+    638
+   ],
+   "best": [
+    1070,
+    617
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "Session &list:",
+   "rect": [
+    8,
+    8,
+    61,
+    16
+   ],
+   "best": [
+    61,
+    16
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "ListBox",
+   "name": "Session list",
+   "label": "",
+   "rect": [
+    10,
+    34,
+    326,
+    598
+   ],
+   "best": [
+    876,
+    64
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": [],
+   "items": [
+    "Fix the flaky upload test, AIChat, needs you: Pick a name for the release branch, active 1 minute ago",
+    "Visual probe, Scratch, idle, active just now, Chat Place session",
+    "Write the release notes for 0.2, AIChat, idle, active 1 hour ago",
+    "A session whose title goes on and on to show what a very long title does to the session list and the heading above the messages, Website, idle, active yesterday"
+   ],
+   "selection": 0
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "Fix the flaky upload test, AIChat, needs you: Pick a name for the release branch. Claude desktop app session, read-only.",
+   "rect": [
+    350,
+    8,
+    626,
+    16
+   ],
+   "best": [
+    626,
+    16
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "&Messages in Fix the flaky upload test (needs you: Pick a name for the release branch, read-only):",
+   "rect": [
+    350,
+    32,
+    504,
+    16
+   ],
+   "best": [
+    504,
+    16
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "ListBox",
+   "name": "Messages in Fix the flaky upload test (needs you: Pick a name for the release branch, read-only)",
+   "label": "",
+   "rect": [
+    352,
+    50,
+    626,
+    344
+   ],
+   "best": [
+    376,
+    94
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": [],
+   "items": [
+    "You: The upload test fails now and then. Can you find out why?",
+    "Claude: I'll look at the test and the uploader.",
+    "Tool: Bash: pytest tests/test_upload.py -q",
+    "Tool result: Bash returned: 1 failed, 11 passed",
+    "Claude: ## What changed",
+    "You: Thanks. Which branch name should the release use?"
+   ],
+   "selection": 5
+  },
+  {
+   "class": "Panel",
+   "name": "panel",
+   "label": "panel",
+   "rect": [
+    350,
+    400,
+    626,
+    176
+   ],
+   "best": [
+    216,
+    169
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "About replying:",
+   "rect": [
+    350,
+    400,
+    83,
+    16
+   ],
+   "best": [
+    83,
+    16
+   ],
+   "depth": 2,
+   "parent": 6,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "TextCtrl",
+   "name": "About replying",
+   "label": "This session belongs to the Claude desktop app, so you reply to it in Claude. The Chat Place only reads it: sending from here while the desktop app has it open could run two turns at once and tangle the conversation. Open in Claude switches the desktop app to it. Continue Here starts a Chat Place copy of it, with the whole conversation so far, that you can reply to here; the desktop app session isn't changed.",
+   "rect": [
+    352,
+    422,
+    626,
+    127
+   ],
+   "best": [
+    127,
+    158
+   ],
+   "depth": 2,
+   "parent": 6,
+   "enabled": true,
+   "problems": [],
+   "value": "This session belongs to the Claude desktop app, so you reply to it in Claude. The Chat Place only reads it: sending from here while the desktop app has it open could run two turns at once and tangle the conversation. Open in Claude switches the desktop app to it. Continue Here starts a Chat Place copy of it, with the whole conversation so far, that you can reply to here; the desktop app session is"
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "Open in &Claude",
+   "rect": [
+    350,
+    553,
+    103,
+    23
+   ],
+   "best": [
+    103,
+    23
+   ],
+   "depth": 2,
+   "parent": 6,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "Con&tinue Here...",
+   "rect": [
+    459,
+    553,
+    107,
+    23
+   ],
+   "best": [
+    107,
+    23
+   ],
+   "depth": 2,
+   "parent": 6,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "CheckBox",
+   "name": "check",
+   "label": "Show tool &activity",
+   "rect": [
+    350,
+    584,
+    116,
+    15
+   ],
+   "best": [
+    116,
+    15
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&New Session...",
+   "rect": [
+    350,
+    607,
+    96,
+    23
+   ],
+   "best": [
+    96,
+    23
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Refresh",
+   "rect": [
+    452,
+    607,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "StatusBar",
+   "name": "statusBar",
+   "label": "",
+   "rect": [
+    0,
+    638,
+    984,
+    23
+   ],
+   "best": [
+    301,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Control",
+   "name": "Status",
+   "label": "Tool activity shown in Fix the flaky upload test.",
+   "rect": [
+    2,
+    642,
+    464,
+    16
+   ],
+   "best": [
+    100,
+    80
+   ],
+   "depth": 1,
+   "parent": 14,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Control",
+   "name": "Loaded session",
+   "label": "Fix the flaky upload test: needs you, Pick a name for the release branch",
+   "rect": [
+    471,
+    642,
+    312,
+    16
+   ],
+   "best": [
+    100,
+    80
+   ],
+   "depth": 1,
+   "parent": 14,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "1 session needs you",
+   "rect": [
+    788,
+    642,
+    154,
+    16
+   ],
+   "best": [
+    111,
+    23
+   ],
+   "depth": 1,
+   "parent": 14,
+   "enabled": true,
+   "problems": [
+    "text cut off: smaller than its best size"
+   ]
+  }
+ ],
+ "capture": "PrintWindow"
+}

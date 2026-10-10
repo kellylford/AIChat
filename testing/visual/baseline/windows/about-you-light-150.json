@@ -1,0 +1,302 @@
+{
+ "title": "What Claude Knows About You",
+ "class": "AboutYouDialog",
+ "size": [
+  860,
+  640
+ ],
+ "client": [
+  844,
+  601
+ ],
+ "dpi": [
+  96,
+  96
+ ],
+ "content_scale": 1.0,
+ "controls": [
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "Read from Claude Code's own files on this computer. The Chat Place only reads them: Edit opens a file in your editor, and Reload shows your changes.",
+   "rect": [
+    8,
+    8,
+    793,
+    16
+   ],
+   "best": [
+    793,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "&Kind:",
+   "rect": [
+    8,
+    32,
+    28,
+    16
+   ],
+   "best": [
+    28,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "ListBox",
+   "name": "Kind",
+   "label": "",
+   "rect": [
+    10,
+    50,
+    828,
+    120
+   ],
+   "best": [
+    578,
+    120
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "items": [
+    "Instructions, 1 item: What you've told Claude to do in every session (CLAUDE.md), and in each project",
+    "Memories, 0 items: What Claude saved about you and your projects to remember next time",
+    "Skills, 1 item: Packaged instructions Claude uses when a task calls for them",
+    "Subagents, 0 items: Helpers Claude can hand work to, each with its own instructions",
+    "Slash commands, 0 items: Your own slash commands",
+    "Output styles, 0 items: Ways you've asked Claude to shape its answers",
+    "Settings, 0 items: Permissions, hooks and other settings"
+   ],
+   "selection": 0
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "&Items:",
+   "rect": [
+    8,
+    176,
+    33,
+    16
+   ],
+   "best": [
+    33,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "ListBox",
+   "name": "Instructions, 1",
+   "label": "",
+   "rect": [
+    10,
+    194,
+    828,
+    140
+   ],
+   "best": [
+    335,
+    140
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "items": [
+    "Your instructions for every session — How I like to work"
+   ],
+   "selection": 0
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "Locatio&n:",
+   "rect": [
+    8,
+    343,
+    50,
+    16
+   ],
+   "best": [
+    50,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "TextCtrl",
+   "name": "Location",
+   "label": "",
+   "rect": [
+    66,
+    342,
+    772,
+    23
+   ],
+   "best": [
+    110,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": "C:\\Users\\vmuser\\AppData\\Local\\Temp\\tcp-probe\\about-you\\claude\\CLAUDE.md"
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "C&ontents:",
+   "rect": [
+    8,
+    371,
+    52,
+    16
+   ],
+   "best": [
+    52,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "TextCtrl",
+   "name": "Contents of Your instructions for every session",
+   "label": "",
+   "rect": [
+    10,
+    389,
+    828,
+    175
+   ],
+   "best": [
+    127,
+    200
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": "# How I like to work\n\nTest everything.\n"
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Edit in Your Editor",
+   "rect": [
+    371,
+    570,
+    116,
+    23
+   ],
+   "best": [
+    116,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "Show in Fol&der",
+   "rect": [
+    493,
+    570,
+    99,
+    23
+   ],
+   "best": [
+    99,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "Copy &Path",
+   "rect": [
+    598,
+    570,
+    76,
+    23
+   ],
+   "best": [
+    76,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Reload",
+   "rect": [
+    680,
+    570,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "C&lose",
+   "rect": [
+    761,
+    570,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  }
+ ],
+ "capture": "screen copy (stretched by Windows)"
+}

@@ -1,0 +1,307 @@
+{
+ "title": "Claude asks: Visual probe",
+ "class": "QuestionDialog",
+ "size": [
+  700,
+  560
+ ],
+ "client": [
+  684,
+  521
+ ],
+ "dpi": [
+  96,
+  96
+ ],
+ "content_scale": 1.0,
+ "controls": [
+  {
+   "class": "ScrolledWindow",
+   "name": "panel",
+   "label": "panel",
+   "rect": [
+    4,
+    4,
+    676,
+    474
+   ],
+   "best": [
+    304,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "StaticBox",
+   "name": "groupBox",
+   "label": "Branch: Which name should the release branch use?",
+   "rect": [
+    10,
+    10,
+    664,
+    122
+   ],
+   "best": [
+    292,
+    23
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "RadioButton",
+   "name": "radioButton",
+   "label": "release/0.2: Matches the last release",
+   "rect": [
+    19,
+    31,
+    209,
+    15
+   ],
+   "best": [
+    209,
+    15
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "RadioButton",
+   "name": "radioButton",
+   "label": "v0.2-prep: Shorter",
+   "rect": [
+    19,
+    54,
+    116,
+    15
+   ],
+   "best": [
+    116,
+    15
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "RadioButton",
+   "name": "radioButton",
+   "label": "Other (type below)",
+   "rect": [
+    19,
+    77,
+    121,
+    15
+   ],
+   "best": [
+    121,
+    15
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "TextCtrl",
+   "name": "Branch: your own answer",
+   "label": "",
+   "rect": [
+    21,
+    102,
+    646,
+    23
+   ],
+   "best": [
+    110,
+    23
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": [],
+   "value": ""
+  },
+  {
+   "class": "StaticBox",
+   "name": "groupBox",
+   "label": "Checks: Which checks should run first?",
+   "rect": [
+    10,
+    144,
+    664,
+    145
+   ],
+   "best": [
+    223,
+    23
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "CheckBox",
+   "name": "check",
+   "label": "Unit tests",
+   "rect": [
+    19,
+    165,
+    71,
+    15
+   ],
+   "best": [
+    71,
+    15
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "CheckBox",
+   "name": "check",
+   "label": "Smoke test",
+   "rect": [
+    19,
+    188,
+    80,
+    15
+   ],
+   "best": [
+    80,
+    15
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "CheckBox",
+   "name": "check",
+   "label": "Lint",
+   "rect": [
+    19,
+    211,
+    42,
+    15
+   ],
+   "best": [
+    42,
+    15
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "CheckBox",
+   "name": "check",
+   "label": "Other (type below)",
+   "rect": [
+    19,
+    234,
+    121,
+    15
+   ],
+   "best": [
+    121,
+    15
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "TextCtrl",
+   "name": "Checks: your own answer",
+   "label": "",
+   "rect": [
+    21,
+    259,
+    646,
+    23
+   ],
+   "best": [
+    110,
+    23
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": [],
+   "value": ""
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Send Answers",
+   "rect": [
+    389,
+    490,
+    94,
+    23
+   ],
+   "best": [
+    94,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Don't Answer",
+   "rect": [
+    489,
+    490,
+    92,
+    23
+   ],
+   "best": [
+    92,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "Answer &Later",
+   "rect": [
+    587,
+    490,
+    89,
+    23
+   ],
+   "best": [
+    89,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  }
+ ],
+ "capture": "screen copy (stretched by Windows)"
+}

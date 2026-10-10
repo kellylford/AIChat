@@ -50,7 +50,7 @@ Here the session list is 326 wide and the right column 626 wide, so the split is
 
 ## main-activity: Show tool activity turned on
 
-This picture is the same as main-desktop, but the "Show tool activity" box is ticked (a blue check box), and the messages list has six rows. Two new rows appear between Claude's messages: "Tool: Bash: pytest tests/test_upload.py -q" and "Tool result: Bash returned: 1 failed, 11 passed". They look exactly like the other rows, in the same font and colour with no indent. The status bar's left part reads "Tool activity shown."
+This picture is the same as main-desktop, but the "Show tool activity" box is ticked (a blue check box), and the messages list has six rows. Two new rows appear between Claude's messages: "Tool: Bash: pytest tests/test_upload.py -q" and "Tool result: Bash returned: 1 failed, 11 passed". They look exactly like the other rows, in the same font and colour with no indent. The status bar's left part reads "Tool activity shown in Fix the flaky upload test." (#162: the setting is per session now).
 
 **What looks off:** Tool rows can't be told apart from messages at a glance, apart from the "Tool:" word at the start. Otherwise the same cut-off status-bar text as main-desktop (#175, #179).
 

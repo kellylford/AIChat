@@ -1,0 +1,77 @@
+{
+ "title": "The Chat Place Update Installed",
+ "class": "UpdateInstalledDialog",
+ "size": [
+  272,
+  126
+ ],
+ "client": [
+  256,
+  87
+ ],
+ "dpi": [
+  96,
+  96
+ ],
+ "content_scale": 1.0,
+ "controls": [
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "The Chat Place was updated to 0.2.0.",
+   "rect": [
+    16,
+    16,
+    194,
+    16
+   ],
+   "best": [
+    194,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "See what's new in 0.2.0",
+   "label": "See &what's new in 0.2.0",
+   "rect": [
+    16,
+    48,
+    141,
+    23
+   ],
+   "best": [
+    141,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Close",
+   "rect": [
+    165,
+    48,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  }
+ ],
+ "capture": "screen copy (stretched by Windows)"
+}

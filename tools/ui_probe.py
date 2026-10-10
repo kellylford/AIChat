@@ -33,6 +33,7 @@ import ctypes
 import json
 import os
 import platform
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -121,6 +122,14 @@ def _screen_copy(left, top, width, height) -> wx.Bitmap:
     return bitmap
 
 
+def _work_area():
+    """The primary screen less the taskbar, in the calling thread's pixels."""
+    rect = (ctypes.c_long * 4)()
+    SPI_GETWORKAREA = 0x0030
+    ctypes.windll.user32.SystemParametersInfoW(SPI_GETWORKAREA, 0, ctypes.byref(rect), 0)
+    return tuple(rect)
+
+
 def _print_window(window):
     """The window as it draws itself, at its own (unscaled) size, whatever
     covers it on screen: PrintWindow with PW_RENDERFULLCONTENT, which
@@ -151,7 +160,14 @@ def _capture_windows(window: wx.TopLevelWindow) -> tuple[wx.Bitmap, str]:
         if stretched:
             window.Raise()
             _pump(0.4)
-            bl, bt, br, bb = bounds
+            # Only what's on screen above the taskbar: a dialog taller than
+            # the screen runs under it (#186), and the taskbar's own icons,
+            # which differ run to run, would show as changes.
+            wl, wt, wr, wb = _work_area()
+            bl, bt = max(bounds[0], wl), max(bounds[1], wt)
+            br, bb = min(bounds[2], wr), min(bounds[3], wb)
+            if br <= bl or bb <= bt:
+                raise RuntimeError("the window is outside the screen's work area")
             return _screen_copy(bl, bt, br - bl, bb - bt), "screen copy (stretched by Windows)"
     left, top, right, bottom = physical
     width, height = right - left, bottom - top
@@ -989,29 +1005,46 @@ def run(out: Path, tag: str, names, size) -> int:
         "wx": wx.version(), "python": platform.python_version(),
         # This Python's; a built app's own manifest may say otherwise.
         "dpi_awareness": _dpi_awareness(), "appearance": _system_appearance(),
-        "size": list(size), "surfaces": {},
+        "size": list(size),
+        # Every surface, or only some (--surface): a comparison expects only
+        # what a partial run set out to take.
+        "complete": list(names) == list(SURFACES), "surfaces": {},
     }
     started = time.time()
-    with tempfile.TemporaryDirectory(prefix="tcp-probe-", ignore_cleanup_errors=True) as tmp:
-        # One WebView2 profile for the run (the runtime keeps using the first
-        # one it was given), and none of it in the real local app data.
-        os.environ["WEBVIEW2_USER_DATA_FOLDER"] = str(Path(tmp) / "webview2")
-        for name in names:
-            stem = f"{name}-{tag}" if tag else name
-            print(f"  {stem}", flush=True)
-            entry = photograph(name, out, stem, size, Path(tmp) / name)
-            if str(entry.get("error", "")).startswith(NEVER_DREW):
-                # WebView2 now and then never draws a page in a fresh VM
-                # ("WebViewCreated ... Operation aborted"); a new window
-                # usually does. Still blank twice is reported.
-                print(f"  {stem} (again: its page never drew)", flush=True)
-                entry = photograph(name, out, stem, size, Path(tmp) / f"{name}-again")
-                entry["retried"] = True
-            manifest["surfaces"][name] = entry
-            manifest["seconds"] = round(time.time() - started, 1)
-            # Written after every surface, so a crash keeps what was done.
-            manifest_path.write_text(json.dumps(manifest, indent=1, ensure_ascii=False),
-                                     encoding="utf-8")
+    # The same folder every run, not a random temporary one: its path shows
+    # in New Session and elsewhere, and a path that changed every run would
+    # show as a change against the baseline.
+    tmp = Path(tempfile.gettempdir()) / "tcp-probe"
+    shutil.rmtree(tmp, ignore_errors=True)
+    if tmp.exists():
+        # Something still holds it: an earlier probe, or its msedgewebview2.
+        # Reusing a live WebView2 profile, or an old world's files, would
+        # show as failures or as changes that aren't the app's.
+        print(f"{tmp} couldn't be cleared: an earlier probe (or its msedgewebview2) is still "
+              "running. End it and run again.")
+        return 3
+    tmp.mkdir(parents=True)
+    # One WebView2 profile for the run (the runtime keeps using the first
+    # one it was given), and none of it in the real local app data.
+    os.environ["WEBVIEW2_USER_DATA_FOLDER"] = str(tmp / "webview2")
+    for name in names:
+        stem = f"{name}-{tag}" if tag else name
+        print(f"  {stem}", flush=True)
+        entry = photograph(name, out, stem, size, tmp / name)
+        if str(entry.get("error", "")).startswith(NEVER_DREW):
+            # WebView2 now and then never draws a page in a fresh VM
+            # ("WebViewCreated ... Operation aborted"); a new window
+            # usually does. Still blank twice is reported.
+            print(f"  {stem} (again: its page never drew)", flush=True)
+            # A formatted page shows no folder, so a file left here is harmless.
+            shutil.rmtree(tmp / name, ignore_errors=True)
+            entry = photograph(name, out, stem, size, tmp / name)
+            entry["retried"] = True
+        manifest["surfaces"][name] = entry
+        manifest["seconds"] = round(time.time() - started, 1)
+        # Written after every surface, so a crash keeps what was done.
+        manifest_path.write_text(json.dumps(manifest, indent=1, ensure_ascii=False),
+                                 encoding="utf-8")
     results = manifest["surfaces"]
     failed = [n for n, r in results.items() if r.get("error")]
     flagged = [n for n, r in results.items() if r.get("problems")]

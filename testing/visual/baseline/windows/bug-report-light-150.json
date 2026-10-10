@@ -1,0 +1,293 @@
+{
+ "title": "Report a Bug",
+ "class": "BugReportDialog",
+ "size": [
+  660,
+  640
+ ],
+ "client": [
+  644,
+  601
+ ],
+ "dpi": [
+  96,
+  96
+ ],
+ "content_scale": 1.0,
+ "controls": [
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "&Summary (the issue's title):",
+   "rect": [
+    8,
+    8,
+    143,
+    16
+   ],
+   "best": [
+    143,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "TextCtrl",
+   "name": "Summary",
+   "label": "",
+   "rect": [
+    10,
+    26,
+    628,
+    23
+   ],
+   "best": [
+    110,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": ""
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "What &happened:",
+   "rect": [
+    8,
+    55,
+    88,
+    16
+   ],
+   "best": [
+    88,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "TextCtrl",
+   "name": "What happened",
+   "label": "",
+   "rect": [
+    10,
+    73,
+    628,
+    99
+   ],
+   "best": [
+    127,
+    70
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": ""
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "What you &expected (optional):",
+   "rect": [
+    8,
+    178,
+    160,
+    16
+   ],
+   "best": [
+    160,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "TextCtrl",
+   "name": "What you expected (optional)",
+   "label": "",
+   "rect": [
+    10,
+    196,
+    628,
+    99
+   ],
+   "best": [
+    127,
+    50
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": ""
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "S&teps to reproduce (optional):",
+   "rect": [
+    8,
+    301,
+    158,
+    16
+   ],
+   "best": [
+    158,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "TextCtrl",
+   "name": "Steps to reproduce",
+   "label": "",
+   "rect": [
+    10,
+    319,
+    628,
+    99
+   ],
+   "best": [
+    127,
+    50
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": ""
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "What the report &includes besides your words (no session titles, folders or messages):",
+   "rect": [
+    8,
+    424,
+    442,
+    16
+   ],
+   "best": [
+    442,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "TextCtrl",
+   "name": "What the report includes",
+   "label": "The Chat Place: 0.1.5 (run from source)\r\nWindows: Windows-11-10.0.26300-SP0\r\nPython: 3.12.10\r\nwxPython: 4.3.1 msw (phoenix) wxWidgets 3.3.3\r\nClaude Code: 2.1.286 (Claude Code)\r\nAnnouncements: full, speech engine auto\r\nSession list: showing all, sorted status\r\nReading: formatted full messages\r\nSessions listed: 3 desktop app, 1 Chat Place, 0 terminal",
+   "rect": [
+    10,
+    442,
+    628,
+    98
+   ],
+   "best": [
+    127,
+    158
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [],
+   "value": "The Chat Place: 0.1.5 (run from source)\nWindows: Windows-11-10.0.26300-SP0\nPython: 3.12.10\nwxPython: 4.3.1 msw (phoenix) wxWidgets 3.3.3\nClaude Code: 2.1.286 (Claude Code)\nAnnouncements: full, speech engine auto\nSession list: showing all, sorted status\nReading: formatted full messages\nSessions listed: 3 desktop app, 1 Chat Place, 0 terminal"
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "Open on GitHub needs access to the app's repository on GitHub. Without it, use Copy Report and email the report to support@theideaplace.net.",
+   "rect": [
+    8,
+    546,
+    628,
+    16
+   ],
+   "best": [
+    759,
+    16
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": [
+    "text cut off: smaller than its best size"
+   ]
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Open on GitHub",
+   "rect": [
+    354,
+    570,
+    108,
+    23
+   ],
+   "best": [
+    108,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Copy Report",
+   "rect": [
+    468,
+    570,
+    87,
+    23
+   ],
+   "best": [
+    87,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "Cancel",
+   "rect": [
+    561,
+    570,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  }
+ ],
+ "capture": "screen copy (stretched by Windows)"
+}

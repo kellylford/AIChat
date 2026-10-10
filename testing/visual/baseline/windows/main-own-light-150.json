@@ -1,0 +1,434 @@
+{
+ "title": "Visual probe — The Chat Place",
+ "class": "MainFrame",
+ "size": [
+  1000,
+  632
+ ],
+ "client": [
+  984,
+  550
+ ],
+ "dpi": [
+  96,
+  96
+ ],
+ "content_scale": 1.0,
+ "controls": [
+  {
+   "class": "Panel",
+   "name": "panel",
+   "label": "panel",
+   "rect": [
+    0,
+    0,
+    984,
+    550
+   ],
+   "best": [
+    691,
+    617
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "Session &list:",
+   "rect": [
+    8,
+    8,
+    61,
+    16
+   ],
+   "best": [
+    61,
+    16
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "ListBox",
+   "name": "Session list",
+   "label": "",
+   "rect": [
+    10,
+    34,
+    378,
+    510
+   ],
+   "best": [
+    876,
+    64
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": [],
+   "items": [
+    "Fix the flaky upload test, AIChat, needs you: Pick a name for the release branch, active 1 minute ago",
+    "Visual probe, Scratch, idle, active just now, Chat Place session",
+    "Write the release notes for 0.2, AIChat, idle, active 1 hour ago",
+    "A session whose title goes on and on to show what a very long title does to the session list and the heading above the messages, Website, idle, active yesterday"
+   ],
+   "selection": 1
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "Visual probe, Scratch, idle. Chat Place session on the default model.",
+   "rect": [
+    402,
+    8,
+    356,
+    16
+   ],
+   "best": [
+    356,
+    16
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "&Messages in Visual probe (idle, on the default model):",
+   "rect": [
+    402,
+    32,
+    283,
+    16
+   ],
+   "best": [
+    283,
+    16
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "ListBox",
+   "name": "Messages in Visual probe (idle, on the default model)",
+   "label": "",
+   "rect": [
+    404,
+    50,
+    574,
+    263
+   ],
+   "best": [
+    286,
+    49
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": [],
+   "items": [
+    "You: Make the uploader flush before it signals.",
+    "Claude: ## What changed"
+   ],
+   "selection": 1
+  },
+  {
+   "class": "Panel",
+   "name": "panel",
+   "label": "panel",
+   "rect": [
+    402,
+    319,
+    574,
+    169
+   ],
+   "best": [
+    399,
+    169
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "&Your message (Ctrl+Enter sends):",
+   "rect": [
+    402,
+    319,
+    176,
+    16
+   ],
+   "best": [
+    176,
+    16
+   ],
+   "depth": 2,
+   "parent": 6,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "TextCtrl",
+   "name": "Your message",
+   "label": "",
+   "rect": [
+    404,
+    341,
+    574,
+    120
+   ],
+   "best": [
+    127,
+    120
+   ],
+   "depth": 2,
+   "parent": 6,
+   "enabled": true,
+   "problems": [],
+   "value": ""
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "Sen&d",
+   "rect": [
+    402,
+    465,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 2,
+   "parent": 6,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "Sto&p",
+   "rect": [
+    483,
+    465,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 2,
+   "parent": 6,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "C&ommands...",
+   "rect": [
+    564,
+    465,
+    92,
+    23
+   ],
+   "best": [
+    92,
+    23
+   ],
+   "depth": 2,
+   "parent": 6,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "A&ttach Files...",
+   "rect": [
+    662,
+    465,
+    91,
+    23
+   ],
+   "best": [
+    91,
+    23
+   ],
+   "depth": 2,
+   "parent": 6,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "StaticText",
+   "name": "staticText",
+   "label": "Ready.",
+   "rect": [
+    765,
+    468,
+    211,
+    16
+   ],
+   "best": [
+    36,
+    16
+   ],
+   "depth": 2,
+   "parent": 6,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "CheckBox",
+   "name": "check",
+   "label": "Show tool &activity",
+   "rect": [
+    402,
+    496,
+    116,
+    15
+   ],
+   "best": [
+    116,
+    15
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&New Session...",
+   "rect": [
+    402,
+    519,
+    96,
+    23
+   ],
+   "best": [
+    96,
+    23
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "&Refresh",
+   "rect": [
+    504,
+    519,
+    75,
+    23
+   ],
+   "best": [
+    75,
+    23
+   ],
+   "depth": 1,
+   "parent": 0,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "StatusBar",
+   "name": "statusBar",
+   "label": "",
+   "rect": [
+    0,
+    550,
+    984,
+    23
+   ],
+   "best": [
+    301,
+    23
+   ],
+   "depth": 0,
+   "parent": -1,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Control",
+   "name": "Status",
+   "label": "Loaded Visual probe, 2 messages.",
+   "rect": [
+    2,
+    554,
+    464,
+    16
+   ],
+   "best": [
+    100,
+    80
+   ],
+   "depth": 1,
+   "parent": 17,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Control",
+   "name": "Loaded session",
+   "label": "Visual probe: idle",
+   "rect": [
+    471,
+    554,
+    312,
+    16
+   ],
+   "best": [
+    100,
+    80
+   ],
+   "depth": 1,
+   "parent": 17,
+   "enabled": true,
+   "problems": []
+  },
+  {
+   "class": "Button",
+   "name": "button",
+   "label": "1 session needs you",
+   "rect": [
+    788,
+    554,
+    154,
+    16
+   ],
+   "best": [
+    111,
+    23
+   ],
+   "depth": 1,
+   "parent": 17,
+   "enabled": true,
+   "problems": [
+    "text cut off: smaller than its best size"
+   ]
+  }
+ ],
+ "capture": "screen copy (stretched by Windows)"
+}
