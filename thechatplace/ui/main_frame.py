@@ -1074,8 +1074,9 @@ class MainFrame(wx.Frame):
             if not self._store_write(self.store.update, info.cli_session_id, title=title):
                 return
         else:
+            keeper = "Claude Code's" if info.is_terminal else "the desktop app's"
             if not title and info.key not in self.titles:
-                self._feedback(f"{old} already has the desktop app's name.")
+                self._feedback(f"{old} already has {keeper} name.")
                 return
             try:
                 self.titles.set(info.key, title)
@@ -1084,8 +1085,8 @@ class MainFrame(wx.Frame):
                               wx.OK | wx.ICON_WARNING, self)
                 return
             if not title:
-                # Back to the desktop app's name, which the next read brings.
-                self._feedback(f"{old} goes back to the desktop app's name.")
+                # Back to its own name, which the next read brings.
+                self._feedback(f"{old} goes back to {keeper} name.")
                 self.refresh_sessions(force=False)
                 return
         for each in [s for s in self._snapshot.sessions if s.key == info.key] + [info]:
@@ -2318,7 +2319,9 @@ class MainFrame(wx.Frame):
         elif denials:
             self._notify(key, f"{title} needs you", f"{detail}: " + "; ".join(denials),
                          needs_you=True)
-        else:
+        elif not (event.data or {}).get("after_background"):
+            # After background work that brought no new answer, the answer
+            # before it was already notified (#161).
             self._notify(key, f"{title} finished", event.text or "Claude finished its turn.")
 
     @staticmethod
@@ -2749,7 +2752,11 @@ class MainFrame(wx.Frame):
         try:
             recent = self._pool.submit(workplaces.recent_folders, sessions).result(timeout=1.5)
         except Exception:  # noqa: BLE001 - timed out, or the pool is closing
-            recent = workplaces.recent_folders(sessions, exists=lambda folder: True)
+            # Unchecked, so the Folder box starts at the projects folder
+            # rather than at one that may be gone (asking again could hang).
+            same = lambda folder: os.path.normcase(os.path.normpath(folder))  # noqa: E731
+            recent = [root] + [folder for folder in workplaces.recent_folders(
+                sessions, exists=lambda folder: True) if same(folder) != same(root)]
         dialog = NewSessionDialog(self, root, recent=recent, projects_root=root,
                                   feedback=self._feedback,
                                   clone_root=str(platform_paths.clone_root()))
@@ -3295,7 +3302,8 @@ class MainFrame(wx.Frame):
             self._said_problems[session_id] = announce.status_text(event.text or "error", 120)
         elif denials:
             count = len(denials)
-            self._said_problems[session_id] =                 f"{count} tool{'s were' if count != 1 else ' was'} refused"
+            self._said_problems[session_id] = (
+                f"{count} tool{'s were' if count != 1 else ' was'} refused")
         if is_open:
             self._clear_activity()
         self._store_write(self.store.update, session_id, unread=not is_open,

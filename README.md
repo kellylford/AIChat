@@ -163,8 +163,8 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   screen reader. At the summary level tools are always counted; at silent only the status bar shows
   them. Tool results aren't spoken. New messages arrive at the end without moving you.
 - **Reply box:** for The Chat Place's own sessions, type and press Ctrl+Enter (or Send). You stay in
-  the reply box. For desktop app sessions the same place holds a read-only note saying why
-  replying happens in Claude, and an Open in Claude button.
+  the reply box. For a desktop app or terminal session the same place holds a read-only note
+  saying where you reply, with Open in Claude and Continue Here as they apply.
 - **Escape** in the messages or the reply box (or Backspace in the messages) goes back to the
   session list, on the same session. Enter there on the session that's already loaded takes you
   back to its messages where you left them, without reloading.
@@ -250,11 +250,11 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   terminal, or carry it on here with Continue Here; Open in Claude isn't offered, since the
   desktop app doesn't list it. Sessions run by scripts with `claude -p`, and those of the VS Code
   extension, aren't listed.
-- **Continue Here** (Ctrl+Shift+N, or the button beside Open in Claude) carries a desktop app
-  or terminal session on in The Chat Place, as a copy: a new Chat Place session in the same folder, with the
-  whole conversation so far in its messages, that you reply to here. You type its first message
-  in the same dialog as New Session; the title starts as "<title> (continued)". The original
-  session isn't changed, and what you do in the copy doesn't appear in it.
+- **Continue Here** (Ctrl+Shift+N, or the Continue Here button after that note) carries a desktop
+  app or terminal session on in The Chat Place, as a copy: a new Chat Place session in the same
+  folder, with the whole conversation so far in its messages, that you reply to here. You type its
+  first message in the same dialog as New Session; the title starts as "<title> (continued)". The
+  original session isn't changed, and what you do in the copy doesn't appear in it.
 - **New Session** (Ctrl+N) starts a session of The Chat Place's own: choose a folder, a title,
   the model (Alt+D), a permission mode (auto by default; accept edits, manual and plan are
   offered) and the first message. The models are Default (your Claude Code setting), Opus,
@@ -411,9 +411,10 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   90% or is reached, and when Claude Code compacts a conversation (the messages list shows
   "Conversation compacted" too). A turn that fails on a usage limit says so in plain words,
   with when it resets.
-- **Turn Status** (Ctrl+Shift+T) says how long Claude has been working on the current turn and what
-  it last did. There's no time limit on a turn; Stop (Ctrl+Period) ends it, along with anything it
-  started, such as a build.
+- **Turn Status** (Ctrl+Shift+T) says how long Claude has been working on the current turn and
+  what it last did, or, while Claude waits on background work, what is still running. There's no
+  time limit on a turn; Stop (Ctrl+Period) ends it, along with anything it started, such as a
+  build.
 - **User Guide** (Help menu, Alt+H, G) shows the user guide as a page, read by heading like the
   keyboard shortcuts, or as plain text (Alt+P). It's part of the app, so it works offline. It's
   edited in `thechatplace/assets/user-guide.md`; `python tools/make_docs.py` makes the copies in
@@ -628,7 +629,7 @@ shows it as plain text instead.
 | Anywhere | Ctrl+Shift+U | Usage and context: a list of how full the context is, and each plan limit |
 | Anywhere | Alt+V, H | Show Sessions: choose which sessions are listed |
 | Anywhere | Alt+V, E | Session List Columns: choose what each session's line says, and in what order |
-| Anywhere | Ctrl+Shift+N | Continue the selected (or loaded) desktop app session here, as a copy |
+| Anywhere | Ctrl+Shift+N | Continue the selected (or loaded) desktop app or terminal session here, as a copy |
 | Session list | F5 | Refresh the list now and put it in order |
 | Session list | Delete | Hide the selected session (View, Show Sessions, Hidden lists it; File, Bring Back Session returns it) |
 | Session list | Shift+Delete | Delete one of The Chat Place's own sessions permanently, after you confirm |
@@ -641,7 +642,7 @@ shows it as plain text instead.
 | Reply box | Ctrl+Enter | Send (Chat Place sessions only); you stay in the reply box |
 | Reply box | Ctrl+Shift+Enter | Send, and save the message as a prompt (asks for its name first) |
 | Reply box | Ctrl+Period | Stop the running turn |
-| Reply box | Ctrl+Shift+T | Turn status: how long it has been working, and on what |
+| Reply box | Ctrl+Shift+T | Turn status: how long it has been working, on what, or what is still running in the background |
 | Anywhere | Ctrl+Shift+A | Answer Claude: a permission request, a question or a plan |
 | Anywhere | F1 | Keyboard shortcuts |
 | Anywhere | Alt+H, G | The user guide |

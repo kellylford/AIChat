@@ -761,8 +761,9 @@ class SessionFacts:
     """What a transcript says about its session, for listing one that no
     metadata file describes: how it was started, its folder and its title."""
     entrypoint: str = ""
-    #: Where it works now: the folder of its newest record, since entering
-    #: a worktree moves a session to another folder.
+    #: Its folder: the one it started in, or the worktree it moved to since.
+    #: Not just its newest record's, which follows every ``cd`` Claude runs
+    #: into a subfolder, a build folder or a temporary one.
     cwd: str = ""
     custom_title: str = ""
     ai_title: str = ""
@@ -777,6 +778,21 @@ class SessionFacts:
     @property
     def terminal(self) -> bool:
         return self.entrypoint == TERMINAL_ENTRYPOINT
+
+
+_WORKTREE_FOLDER = re.compile(r"[\\/]\.claude[\\/]worktrees[\\/][^\\/]+")
+
+
+def _moved_to(record: dict) -> str:
+    """The folder a record says the session moved to, if it says one: Claude
+    Code's ``relocatedCwd``, or else the worktree a ``cwd`` is in (its top
+    folder, not a subfolder Claude has gone into with ``cd``)."""
+    moved = record.get("relocatedCwd")
+    if isinstance(moved, str) and moved:
+        return moved
+    cwd = record.get("cwd")
+    match = _WORKTREE_FOLDER.search(cwd) if isinstance(cwd, str) else None
+    return cwd[:match.end()] if match else ""
 
 
 class _FactsReader:
@@ -817,17 +833,16 @@ class _FactsReader:
             if record is not None:
                 self._record(record, line)
         if self.head_read:
-            # The folder it works in now, from the newest record that says:
-            # a write often ends with records that don't (titles and such).
+            # The worktree it moved to, if it did, from the newest record that
+            # says: a write often ends with records that don't (titles and such).
             for line in reversed(data.split(b"\n")):
                 if b'"cwd"' not in line and b'"relocatedCwd"' not in line:
                     continue
                 record = _json_line(line)
                 if record is None or record.get("isSidechain"):
                     continue
-                cwd = record.get("relocatedCwd") or record.get("cwd")
-                if isinstance(cwd, str) and cwd:
-                    latest_cwd = cwd
+                latest_cwd = _moved_to(record)
+                if latest_cwd:
                     break
             if latest_cwd:
                 self.facts.cwd = latest_cwd
@@ -845,8 +860,10 @@ class _FactsReader:
             return
         if not facts.entrypoint and isinstance(record.get("entrypoint"), str):
             facts.entrypoint = record["entrypoint"]
-        if isinstance(record.get("cwd"), str) and record["cwd"]:
+        if not facts.cwd and isinstance(record.get("cwd"), str) and record["cwd"]:
             facts.cwd = record["cwd"]
+        elif _moved_to(record):
+            facts.cwd = _moved_to(record)
         if self._parser is None:
             return
         if kind == USER:

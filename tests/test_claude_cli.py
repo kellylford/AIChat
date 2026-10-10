@@ -1478,6 +1478,19 @@ def test_the_parser_reads_the_background_task_list():
         {"tasks": []}
 
 
+def test_ambient_background_tasks_arent_work():
+    """Watchers and tasks kept out of the transcript are ``ambient``: Claude
+    Code says they aren't activity, so they mustn't keep a turn open."""
+    parser = StreamParser()
+    event = ev(type="system", subtype="background_tasks_changed", tasks=[
+        {"task_id": "w", "task_type": "monitor", "description": "Watch PR", "ambient": True},
+        {"task_id": "b", "task_type": "local_bash", "description": "Build"}])
+    assert parser.feed(event)[0].data == {"tasks": ["Build"]}
+    only_ambient = ev(type="system", subtype="background_tasks_changed", tasks=[
+        {"task_id": "w", "description": "Watch PR", "ambient": True}])
+    assert parser.feed(only_ambient)[0].data == {"tasks": []}
+
+
 def test_background_work_keeps_the_turn_open_until_claude_carries_on(tmp_path):
     # As Claude Code 2.1.296 does it: the reply, idle with the work still
     # running, then, when it finishes, a turn of its own (#161).
@@ -1577,6 +1590,7 @@ def test_background_work_done_with_no_turn_after_it_still_ends_the_turn(tmp_path
     # Said when Claude went idle; not said again.
     assert events[-1].kind == "finished" and events[-1].text == ""
     assert not events[-1].is_error
+    assert events[-1].data == {"after_background": True}  # not notified again
 
 
 def test_an_old_claude_code_without_the_task_list_ends_at_idle_as_before(tmp_path):

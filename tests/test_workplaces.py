@@ -145,6 +145,19 @@ def test_clone_and_recognise_the_clone(fake_gh, tmp_path):
     assert not workplaces.is_clone_of(GIT, tmp_path, "me/Thing")
 
 
+def test_a_clone_that_has_finished_kills_nothing(fake_gh, tmp_path, monkeypatch):
+    """Once gh has exited its pid may be another program's, which taskkill
+    (without a job) or killpg would end: nothing is killed after that."""
+    kills = []
+    monkeypatch.setattr(workplaces.platform_paths.ProcessTree, "kill",
+                        lambda self: kills.append(self))
+    monkeypatch.setenv("FAKE_GH_MODE", "fail")
+    clone, _result, done = _clone(fake_gh, "me/Nope", tmp_path / "Nope")
+    assert done.wait(30)
+    clone.cancel()  # too late: it has finished
+    assert kills == []
+
+
 def test_a_failed_clone_says_why_and_leaves_nothing(fake_gh, tmp_path, monkeypatch):
     monkeypatch.setenv("FAKE_GH_MODE", "fail")
     target = tmp_path / "Nope"

@@ -238,6 +238,7 @@ class Clone:
         self.kept = False  # a finished clone that couldn't be renamed
         self._cancelled = threading.Event()
         self._tree = platform_paths.ProcessTree()
+        self._process: Optional[subprocess.Popen] = None
         self._argv = [*_gh(gh), "repo", "clone", repo, str(self.staging)]
         self._thread = threading.Thread(target=self._run, name="clone", daemon=True)
 
@@ -247,7 +248,15 @@ class Clone:
 
     def cancel(self) -> None:
         self._cancelled.set()
-        self._tree.kill()
+        self._kill()
+
+    def _kill(self) -> None:
+        # Only while gh runs: once it has exited its pid may belong to
+        # another program, which taskkill (with no job) or killpg would end.
+        # On Windows, closing the job ends anything gh left behind; on a Mac
+        # a git that outlives gh is left to finish.
+        if self._process is not None and self._process.poll() is None:
+            self._tree.kill()
 
     def wait(self, timeout: Optional[float] = None) -> None:
         self._thread.join(timeout)
@@ -258,7 +267,7 @@ class Clone:
         except Exception as exc:  # noqa: BLE001 - always answer, always clean up
             folder, error = None, f"Couldn't clone {self.repo}: {exc}"
         finally:
-            self._tree.kill()
+            self._kill()
             self._tree.close()
         if folder is None and not self.kept:
             remove_tree(self.staging)
@@ -278,12 +287,13 @@ class Clone:
             stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
             env=_environment(), **platform_paths.ProcessTree.popen_kwargs())
         self._tree.attach(process)
+        self._process = process
         if self._cancelled.is_set():
-            self._tree.kill()
+            self._kill()
         try:
             _out, err = process.communicate(timeout=60 * 60)
         except subprocess.TimeoutExpired:
-            self._tree.kill()
+            self._kill()
             process.communicate()
             return None, f"Cloning {self.repo} took more than an hour, so it was stopped."
         if self._cancelled.is_set():
