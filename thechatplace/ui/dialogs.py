@@ -11,7 +11,8 @@ import wx
 
 from .. import workplaces
 from ..changes import file_text
-from ..claude_cli import DEFAULT_PERMISSION_MODE, MODELS, PERMISSION_MODES
+from ..claude_cli import (DEFAULT_PERMISSION_MODE, EFFORT_NOTE, EFFORTS, MODELS,
+                          PERMISSION_MODES)
 from ..sessions import DEFAULT_FIELDS, FIELD_IDS, FIELD_NAMES, clean_fields, field_short_name
 from ..speech import (ANNOUNCE_LABELS, ANNOUNCE_LEVELS, NOTIFY_LABELS, NOTIFY_LEVELS, RATE_PRESET_LABELS,
                       SpeechSettings)
@@ -44,7 +45,9 @@ PERMISSION_NOTE = (
     "The permission mode decides what Claude may do without asking. When Claude "
     "asks for permission, asks you a question or has a plan for you to approve, "
     "the turn waits: The Chat Place announces it, the session shows as needing "
-    "you, and Ctrl+Shift+A answers.")
+    "you, and Ctrl+Shift+A answers. Effort is how hard Claude thinks; models that "
+    "don't support effort levels ignore it. File, Change Permission Mode and Change "
+    "Effort change them later.")
 
 
 CONTINUE_NOTE = (
@@ -150,6 +153,13 @@ class NewSessionDialog(wx.Dialog):
         set_accessible_name(self.model, "Model")
         self.model.SetSelection(0)  # Claude Code's own default
         grid.Add(self.model, 1, wx.EXPAND)
+
+        # Effort (#189). What it does is in the note below, with permissions.
+        grid.Add(wx.StaticText(self, label="&Effort:"), 0, wx.ALIGN_CENTER_VERTICAL)
+        self.effort_choice = wx.Choice(self, choices=[label for _v, label in EFFORTS])
+        set_accessible_name(self.effort_choice, "Effort")
+        self.effort_choice.SetSelection(0)  # Claude Code's own setting
+        grid.Add(self.effort_choice, 1, wx.EXPAND)
 
         grid.Add(wx.StaticText(self, label="Permission m&ode:"), 0, wx.ALIGN_CENTER_VERTICAL)
         self.mode = wx.Choice(self, choices=[label for _v, label in PERMISSION_MODES])
@@ -384,6 +394,11 @@ class NewSessionDialog(wx.Dialog):
         index = self.model.GetSelection()
         model = MODELS[index][0] if 0 <= index < len(MODELS) else ""
         return folder, title, mode, message, model
+
+    def effort(self) -> str:
+        """The ``--effort`` chosen, "" for Claude Code's own setting (#189)."""
+        index = self.effort_choice.GetSelection()
+        return EFFORTS[index][0] if 0 <= index < len(EFFORTS) else ""
 
 
 class GitHubRepoDialog(wx.Dialog):

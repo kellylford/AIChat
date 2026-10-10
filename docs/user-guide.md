@@ -261,10 +261,14 @@ Press **Ctrl+N** (File, New Session) and fill in:
   kind. File, Change Model changes it later, from the next turn. Fable isn't offered, because on
   some plans it bills to usage credits without asking; if a turn would run on Fable anyway, The
   Chat Place stops it before anything is sent, and says why.
+- **Effort:** how hard Claude thinks: Default (your Claude Code setting), Low, Medium, High,
+  Extra high or Max. Models that don't support effort levels ignore it. File, Change Effort
+  changes it later, from the next turn.
 - **Permission mode:** how much Claude may do without asking. Auto, the default, lets Claude
   decide what's safe to run. Accept edits lets it change files without asking. Manual asks before
   anything that needs approval. Plan has Claude make a plan, without changing anything, for you
-  to approve.
+  to approve. File, Change Permission Mode (Ctrl+Shift+O) changes it later, from the next
+  turn.
 - **First message:** what you'd like Claude to do.
 
 If the first message never reaches Claude (Claude Code isn't signed in, for example), it goes back

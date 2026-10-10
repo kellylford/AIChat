@@ -259,15 +259,22 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   first message in the same dialog as New Session; the title starts as "<title> (continued)". The
   original session isn't changed, and what you do in the copy doesn't appear in it.
 - **New Session** (Ctrl+N) starts a session of The Chat Place's own: choose a folder, a title,
-  the model (Alt+D), a permission mode (auto by default; accept edits, manual and plan are
-  offered) and the first message. The models are Default (your Claude Code setting), Opus,
+  the model (Alt+D), the effort (Alt+E), a permission mode (auto by default; accept edits, manual
+  and plan are offered) and the first message. The models are Default (your Claude Code setting), Opus,
   Sonnet and Haiku, each the latest of its family. The model is kept with the session and
   passed to every turn. Arriving in the messages, you hear it ("Messages in Build (idle, on
   Opus)"). Fable isn't offered: on some plans it bills to usage credits, and in the headless
   mode The Chat Place uses, Claude Code does that without asking. So if a turn would run on
   Fable anyway (Claude Code's own default, or a fallback), The Chat Place stops it before
   anything is sent and says why. **File, Change Model** changes a session's model from its
-  next turn. If that first message never reaches Claude (Claude Code not signed in, say), it goes
+  next turn. **Effort** is Default (your Claude Code setting), Low, Medium, High, Extra high or
+  Max, passed to every turn as Claude Code's `--effort`; models that don't support effort levels
+  ignore it. **File, Change Effort** (Alt+F, F) and **File, Change Permission Mode**
+  (Ctrl+Shift+O) change them from the next turn: the list starts on the current choice, marked
+  "(now)", and you hear, for example, "Permission mode for Build: plan, from its next turn." A
+  turn that's running carries on as it started. The session's heading says its model, and its
+  effort and mode when they aren't the defaults ("on Opus at high effort, plan mode"). For desktop app and terminal sessions these are set
+  in Claude or the terminal, and the items say so. If that first message never reaches Claude (Claude Code not signed in, say), it goes
   back into the reply box and Send starts the session again.
 - **Where a new session works** (#154). The Folder box starts at the folder used most recently,
   and its list (Up and Down Arrow on Windows, or open it with Alt+Down Arrow) is every folder
@@ -633,6 +640,7 @@ shows it as plain text instead.
 | Anywhere | Alt+V, H | Show Sessions: choose which sessions are listed |
 | Anywhere | Alt+V, E | Session List Columns: choose what each session's line says, and in what order |
 | Anywhere | Ctrl+Shift+N | Continue the selected (or loaded) desktop app or terminal session here, as a copy |
+| Anywhere | Ctrl+Shift+O | Change Permission Mode for the selected (or loaded) Chat Place session, from its next turn |
 | Session list | F5 | Refresh the list now and put it in order |
 | Session list | Delete | Hide the selected session (View, Show Sessions, Hidden lists it; File, Bring Back Session returns it) |
 | Session list | Shift+Delete | Delete one of The Chat Place's own sessions permanently, after you confirm |
