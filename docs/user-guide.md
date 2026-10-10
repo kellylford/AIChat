@@ -269,8 +269,15 @@ On a queued message, Ctrl+Enter sends it now (Claude answers it straight away, i
 and its menu can also edit or remove it. **Stop** (Ctrl+Period) ends the turn, and anything it
 started, such as a build; a queued message then goes back into the reply box.
 
+Sometimes Claude starts something that runs in the background, such as a build, a wait for
+GitHub checks or a helper agent, and answers while it runs. You hear the answer and what is still
+running ("Still running in the background: Windows build"), but the turn stays open. When the work
+finishes, Claude carries on by itself, and its next answer is announced as usual. While Claude is
+waiting, what you send goes to it at once instead of being queued. Stop ends the turn and the
+background work with it.
+
 **Ctrl+Shift+T** (Turn Status) says how long Claude has been working on this turn and what it last
-did. There's no time limit on a turn.
+did, or what is still running in the background. There's no time limit on a turn.
 
 ### Commands, skills and attachments
 

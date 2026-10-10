@@ -205,6 +205,15 @@ def queued_text(title: str, message: str, level: str, read_back: bool,
     return f"{head} {title}: {words}"
 
 
+def background_text(tasks) -> str:
+    """What a session left running when it answered (#161): the turn stays
+    open for it, and Claude carries on when it finishes."""
+    names = [" ".join(str(t).split()) for t in tasks if str(t).strip()]
+    if not names:
+        return "Still running in the background."
+    return "Still running in the background: " + "; ".join(names) + "."
+
+
 def status_text(text: str, limit: int = 150) -> str:
     """The same news, short enough for the status bar."""
     flat = " ".join((text or "").split())
@@ -212,7 +221,7 @@ def status_text(text: str, limit: int = 150) -> str:
 
 
 __all__ = ["first_sentence", "reply_text", "turn_end_text", "status_text",
-           "sent_text", "queued_text", "activity_text",
+           "sent_text", "queued_text", "activity_text", "background_text",
            "ANNOUNCE_FULL", "ANNOUNCE_SUMMARY", "ANNOUNCE_SILENT"]
 
 

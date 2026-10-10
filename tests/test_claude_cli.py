@@ -1428,3 +1428,201 @@ def test_send_now_after_the_turn_ended_is_refused(tmp_path):
         when="never")
     assert box["done"].wait(5)
     assert box["runner"].send_now("too late") is False
+
+
+# -- Background work keeps the turn open (#161) ------------------------------------------
+
+
+def _tasks(*names):
+    """background_tasks_changed as Claude Code 2.1.296 sends it."""
+    return ev(type="system", subtype="background_tasks_changed",
+              tasks=[{"task_id": f"b{i}", "task_type": "local_bash", "description": name}
+                     for i, name in enumerate(names)])
+
+
+def _background_turn(tmp_path, lines, on_event=None):
+    process = LiveProcess(lines)
+    timers = FakeTimers()
+    events, done, box = [], threading.Event(), {}
+
+    def record(event):
+        events.append(event)
+        if on_event:
+            on_event(event, box)
+        if event.kind in ("finished", "failed"):
+            done.set()
+    runner = TurnRunner(["claude", "-p"], str(tmp_path), "Build it", record,
+                        popen=lambda cmd, **k: process, env={"PATH": "x"}, timer=timers)
+    box["runner"], box["timers"], box["done"] = runner, timers, done
+    runner.start()
+    return events, box, process
+
+
+def _wait_for(condition):
+    for _ in range(250):
+        if condition():
+            return True
+        threading.Event().wait(0.02)
+    return False
+
+
+def test_the_parser_reads_the_background_task_list():
+    parser = StreamParser()
+    [event] = parser.feed(_tasks("Windows build", "Watch CI"))
+    assert event.kind == "background"
+    assert event.data == {"tasks": ["Windows build", "Watch CI"]}
+    assert parser.feed(_tasks())[0].data == {"tasks": []}
+    odd = ev(type="system", subtype="background_tasks_changed", tasks=[{}, "x"])
+    assert parser.feed(odd)[0].data == {"tasks": ["a background task"]}
+    assert parser.feed(ev(type="system", subtype="background_tasks_changed"))[0].data == \
+        {"tasks": []}
+
+
+def test_background_work_keeps_the_turn_open_until_claude_carries_on(tmp_path):
+    # As Claude Code 2.1.296 does it: the reply, idle with the work still
+    # running, then, when it finishes, a turn of its own (#161).
+    gate = threading.Event()
+    seen = {}
+
+    def on_event(event, box):
+        if event.kind == "waiting":
+            seen["waiting"] = box["runner"].waiting_on_background
+            seen["activity"] = box["runner"].last_activity
+        if event.kind == "text" and event.text == "Build passed.":
+            # Working on what the build brought back: no ceiling, however long.
+            seen["ceilings"] = len(box["timers"].live_ceilings())
+    events, box, process = _background_turn(tmp_path, [
+        RUNNING, INIT, _tasks("Windows build"),
+        ev(type="result", subtype="success", result="Started the build."),
+        IDLE, gate, _tasks(), RUNNING, INIT,
+        ev(type="assistant", message={"content": [{"type": "text", "text": "Build passed."}]}),
+        ev(type="result", subtype="success", result="Build passed."), IDLE], on_event)
+    # Claude answered and went idle, but the build is still running.
+    assert _wait_for(lambda: any(e.kind == "waiting" for e in events))
+    [waiting] = [e for e in events if e.kind == "waiting"]
+    assert waiting.text == "Started the build."
+    assert waiting.data == {"tasks": ["Windows build"]}
+    assert seen["waiting"] is True
+    assert seen["activity"] == "waiting for background work: Windows build"
+    assert not process.stdin_closed.is_set()
+    assert not box["timers"].live_ceilings()  # no limit on how long a build takes
+    assert not box["done"].is_set()
+    gate.set()
+    assert box["done"].wait(5)
+    assert events[-1].kind == "finished" and events[-1].text == "Build passed."
+    assert not events[-1].is_error
+    assert seen["ceilings"] == 0
+    assert process.stdin_closed.is_set()
+    assert box["runner"].waiting_on_background is False
+
+
+def test_a_message_sent_while_waiting_on_background_work_goes_straight_in(tmp_path):
+    gate = threading.Event()
+
+    def on_event(event, box):
+        if event.kind == "waiting" and "follow" not in box:
+            box["follow"] = box["runner"].send_follow_up("Meanwhile, what is 2+2?")
+            box["again"] = box["runner"].send_follow_up("twice")  # not waiting now
+    events, box, process = _background_turn(tmp_path, [
+        RUNNING, INIT, _tasks("Watch CI"),
+        ev(type="result", subtype="success", result="Watching CI."), IDLE,
+        RUNNING, ev(type="result", subtype="success", result="4"), IDLE,
+        gate, _tasks(), RUNNING, ev(type="result", subtype="success", result="CI passed."),
+        IDLE], on_event)
+    assert _wait_for(lambda: sum(e.kind == "waiting" for e in events) == 2)
+    assert box["follow"] is True and box["again"] is False
+    # The answer to the message is said too, with the work still running.
+    assert [e.text for e in events if e.kind == "waiting"] == ["Watching CI.", "4"]
+    sent = [m for m in process.sent() if m.get("type") == "user"]
+    assert len(sent) == 2 and "2+2" in json.dumps(sent[1])
+    assert not any(m.get("request", {}).get("subtype") == "interrupt"
+                   for m in process.sent())  # nothing to interrupt
+    assert not process.stdin_closed.is_set()
+    gate.set()
+    assert box["done"].wait(5)
+    assert events[-1].kind == "finished" and events[-1].text == "CI passed."
+
+
+def test_send_follow_up_is_refused_unless_waiting_on_background_work(tmp_path):
+    events, box, process = _background_turn(tmp_path, [
+        RUNNING, INIT, ev(type="result", subtype="success", result="done"), IDLE])
+    assert box["done"].wait(5)
+    assert box["runner"].send_follow_up("late") is False
+    assert "waiting" not in [e.kind for e in events]
+    runner = TurnRunner(["claude", "-p"], str(tmp_path), "x", lambda e: None,
+                        popen=lambda cmd, **k: FakeProcess([]), env={"PATH": "x"})
+    runner._stdin_open = True
+    runner.waiting_on_background = True
+    runner._cancelled = True
+    assert runner.send_follow_up("stopping") is False
+
+
+def test_background_work_done_with_no_turn_after_it_still_ends_the_turn(tmp_path):
+    # Claude Code always starts a turn when the work finishes; if it ever
+    # doesn't, the turn ends after a short wait rather than staying open.
+    events, box, process = _background_turn(tmp_path, [
+        RUNNING, INIT, _tasks("Sleep"),
+        ev(type="result", subtype="success", result="Sleeping."), IDLE, _tasks()])
+    timers = box["timers"]
+
+    def short_waits():
+        return [t for t in timers.made if t.started and not t.cancelled
+                and t.interval == cli.BACKGROUND_DONE_WAIT]
+    assert _wait_for(short_waits)
+    assert not process.stdin_closed.is_set()
+    for timer in short_waits():
+        timer.cancelled = True
+        timer.function()
+    assert box["done"].wait(5)
+    assert events[-1].kind == "finished" and events[-1].text == "Sleeping."
+
+
+def test_an_old_claude_code_without_the_task_list_ends_at_idle_as_before(tmp_path):
+    events, box, process = _background_turn(tmp_path, [
+        RUNNING, INIT, ev(type="result", subtype="success", result="Started."), IDLE])
+    assert box["done"].wait(5)
+    assert [e.kind for e in events][-1] == "finished"
+
+
+def test_idle_before_the_result_with_background_work_still_waits(tmp_path):
+    gate = threading.Event()
+    events, box, process = _background_turn(tmp_path, [
+        RUNNING, INIT, _tasks("Build"), IDLE,
+        ev(type="result", subtype="success", result="Started."), gate,
+        _tasks(), RUNNING, ev(type="result", subtype="success", result="Built."), IDLE])
+    assert _wait_for(lambda: any(e.kind == "waiting" for e in events))
+    assert not process.stdin_closed.is_set()
+    gate.set()
+    assert box["done"].wait(5)
+    assert events[-1].text == "Built."
+
+
+def test_refusals_said_while_waiting_are_not_said_again_at_the_end(tmp_path):
+    gate = threading.Event()
+    events, box, _ = _background_turn(tmp_path, [
+        RUNNING, INIT, _tasks("Build"),
+        ev(type="result", subtype="success", result="Started.",
+           permission_denials=[{"tool_name": "Write", "tool_input": {"file_path": "a"}}]),
+        IDLE, gate, _tasks(), RUNNING,
+        ev(type="result", subtype="success", result="Built."), IDLE])
+    assert _wait_for(lambda: any(e.kind == "waiting" for e in events))
+    [waiting] = [e for e in events if e.kind == "waiting"]
+    assert waiting.denials
+    gate.set()
+    assert box["done"].wait(5)
+    assert events[-1].denials == [] and not events[-1].is_error
+
+
+def test_stop_while_waiting_on_background_work_says_stopped(tmp_path):
+    gate = threading.Event()
+    events, box, process = _background_turn(tmp_path, [
+        RUNNING, INIT, _tasks("Build"),
+        ev(type="result", subtype="success", result="Started."), IDLE, gate])
+    assert _wait_for(lambda: any(e.kind == "waiting" for e in events))
+    box["runner"].cancel()
+    assert process.killed
+    gate.set()
+    process.stdin_closed.set()  # the killed CLI's output ends
+    assert box["done"].wait(5)
+    # Not the reply again: it was said already, and Stop ended the work.
+    assert events[-1].kind == "failed" and events[-1].text == "Stopped."

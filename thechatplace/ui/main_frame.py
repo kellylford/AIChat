@@ -2021,8 +2021,13 @@ class MainFrame(wx.Frame):
         self.stop_btn.Enable(own)
         if info is not None and info.is_own:
             waiting = self._pending.get(info.cli_session_id)
+            runner = self._runners.get(info.cli_session_id)
             if running and waiting:
                 label = f"Waiting for you: {waiting[0].summary()}. Ctrl+Shift+A answers."
+            elif running and getattr(runner, "waiting_on_background", False):
+                # Answered; kept open only so the work can finish (#161).
+                label = (f"Claude answered. {announce.background_text(runner.background_tasks)} "
+                         "What you send goes to Claude now.")
             elif running:
                 elapsed = describe_elapsed(self._runners[info.cli_session_id].elapsed())
                 label = f"Claude is working ({elapsed})."
@@ -2587,6 +2592,12 @@ class MainFrame(wx.Frame):
             self._feedback(f"{info.title} is waiting for you: {request.summary()}. "
                            "Ctrl+Shift+A answers.")
             return
+        if runner is not None and getattr(runner, "waiting_on_background", False):
+            self._feedback(f"{info.title}: Claude answered. "
+                           f"{announce.background_text(runner.background_tasks)} "
+                           f"The turn has run for {describe_elapsed(runner.elapsed())}; "
+                           "Claude carries on when the work finishes.")
+            return
         if runner is not None:
             count = len(self._queued.get(info.cli_session_id, []))
             waiting = f"{self._queued_words(count)} " if count else ""
@@ -2927,6 +2938,21 @@ class MainFrame(wx.Frame):
             self._feedback("Still stopping. Send again in a moment.")
             self.reply_text.SetFocus()
             return
+        if runner is not None and runner.waiting_on_background:
+            # Claude has answered and is only waiting for background work
+            # (#161): the message goes in now, as the next one, rather than
+            # waiting for work that may take an hour.
+            prompt, images = attachments.build(message, attached)
+            if runner.send_follow_up(prompt, images):
+                self._clear_attachments(session_id)
+                self.reply_text.SetValue("")
+                self._drafts.pop(session_id, None)
+                self._update_send_state()
+                self._feedback(announce.sent_text(info.title, message, self.speech.announce,
+                                                  self.speech.announce_own))
+                self.reply_text.SetFocus()
+                return
+            # Claude started on the finished work just now: queue it.
         if runner is not None:
             # Queue it rather than refuse: the turn's reply comes first, then
             # this goes. More while one waits joins it as one message.
@@ -3135,6 +3161,13 @@ class MainFrame(wx.Frame):
             self._update_send_state()
             self.refresh_sessions()
             return
+        if event.kind == "background":
+            if is_open_now:
+                self._update_send_state()  # what's still running
+            return
+        if event.kind == "waiting":
+            self._answered_with_background(session_id, title, event, is_open_now)
+            return
         if event.kind in ("finished", "failed"):
             # Nothing can be waiting once the turn is over.
             self._pending.pop(session_id, None)
@@ -3227,6 +3260,59 @@ class MainFrame(wx.Frame):
                 self._give_back(session_id, "\n\n".join(unsent), is_open)
             self._update_send_state()
             self.refresh_sessions()
+
+    def _answered_with_background(self, session_id: str, title: str, event: TurnEvent,
+                                  is_open: bool):
+        """Claude answered and left work running in the background (#161).
+        The turn stays open so the work can finish and Claude can carry on;
+        the reply is said now, as a finished turn's is, with what's still
+        running, and anything queued goes in now rather than after the work."""
+        background = announce.background_text((event.data or {}).get("tasks") or [])
+        denials = event.denials or self._denials.get(session_id, [])
+        self._denials[session_id] = []  # said now, not again at the turn's end
+        if is_open:
+            self._clear_activity()
+        self._store_write(self.store.update, session_id, unread=not is_open,
+                          last_activity_ms=int(time.time() * 1000))
+        key = self._own_key(session_id)
+        if event.is_error:
+            self._notify(key, f"{title}: something failed",
+                         f"{usage.friendly_error(event.text)} {background}", needs_you=True)
+            self._say(f"{title}: something failed. {usage.friendly_error(event.text)} "
+                      f"{background}")
+        else:
+            count = len(denials)
+            detail = (f"{count} tool{'s were' if count != 1 else ' was'} refused"
+                      if denials else "")
+            if denials:
+                self._notify(key, f"{title} needs you", f"{detail}: " + "; ".join(denials),
+                             needs_you=True)
+            else:
+                self._notify(key, f"{title} answered",
+                             f"{event.text or 'Claude answered.'} {background}")
+            text = announce.reply_text(title, event.text, self.speech.announce)
+            if denials and self.speech.enabled:
+                text = (text or f"{title} answered.") + f" {detail}: " + "; ".join(denials)
+            if text:
+                self._say(f"{text} {background}")
+            else:
+                reply = announce.first_sentence(event.text) if event.text else ""
+                self._status(f"{title} answered. {reply} {background}")
+        queued = self._take_queued(session_id)
+        runner = self._runners.get(session_id)
+        if queued:
+            if runner is not None and runner.send_follow_up(queued):
+                self._feedback(f"Sent your queued message. {title} is working.")
+            else:
+                # Claude moved on already: it goes when the turn ends.
+                self._queued.setdefault(session_id, []).insert(0, queued)
+            if is_open:
+                self._rebuild_chat_list()
+        if is_open:
+            self._changes_due = True
+            self._refresh_chat()
+        self._update_send_state()
+        self.refresh_sessions()
 
     def _take_queued(self, session_id: str) -> Optional[str]:
         """All of a session's queued messages, as the one message they're
