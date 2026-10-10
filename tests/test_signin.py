@@ -40,6 +40,38 @@ def test_not_signed_in_api_keys_and_no_answer():
         assert signin.describe(status).startswith("Couldn't tell whether Claude Code is signed in")
 
 
+def test_a_notice_around_the_answer_is_skipped():
+    """An install that prints a notice before or after its JSON (an npm
+    install did) is still read; it was taken as saying only "{"."""
+    answer = json.dumps({"loggedIn": True, "authMethod": "claude.ai",
+                         "subscriptionType": "max"}, indent=2)
+    for out in (answer + "\nClaude Code has switched from npm to a native installer.\n",
+                "Warning: an update is available.\n" + answer + "\n",
+                answer + "\n" + answer + "\n",
+                "Warning: setting {x} ignored\n" + answer,
+                '{"level": "warn"}\n' + answer,
+                "\ufeff" + answer):
+        status = signin.check("claude", run=_run(out, stderr="npm warn something\n"))
+        assert status.known and status.signed_in and status.plan == "max"
+
+
+def test_an_unreadable_answer_says_where_to_see_it():
+    """A cut-off answer's first line is just "{", which said nothing; so does
+    JSON that isn't an answer, and it mustn't be taken as "not signed in"."""
+    cut_off = '{\n  "loggedIn": true,\n  "authMethod": "claude.ai",\n'
+    for out in (cut_off, "\ufeff" + cut_off, "Notice\n" + cut_off, '[{"loggedIn": false}',
+                '{"level": "warn"}\n'):
+        for stderr in ("", "npm warn something\n"):
+            status = signin.check("/x/claude", run=_run(out, stderr=stderr, code=1))
+            assert not status.known
+            assert signin.describe(status) == (
+                "Couldn't tell whether Claude Code is signed in: Claude Code (/x/claude) gave "
+                "an answer The Chat Place couldn't read (exit code 1). Run claude auth status "
+                "in a terminal to see it.")
+    assert signin.describe(signin.check("/x/claude", run=_run("\ufeff[1, 2]\n"))).endswith(
+        'said "[1, 2]".')
+
+
 def test_asked_with_the_environment_turns_get(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-for-other-tools")
     seen = {}
@@ -68,7 +100,8 @@ def test_says_why_it_could_not_tell():
     assert said(_run(error=subprocess.TimeoutExpired("claude", 20))).endswith(
         "Claude Code (/x/claude) didn't answer in 20 seconds.")
     assert "couldn't be started: gone" in said(_run(error=OSError("gone")))
-    old = said(_run(stderr="error: unknown command 'auth'\n", code=1))
+    old = said(_run(stdout="setting {x} ignored\n", stderr="error: unknown command 'auth'\n",
+                    code=1))
     assert "is too old to say" in old and "claude update" in old
     assert said(_run(stderr="\nenv: node: No such file or directory\n", code=127)).endswith(
         'said "env: node: No such file or directory".')
