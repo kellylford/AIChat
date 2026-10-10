@@ -7470,7 +7470,8 @@ def test_find_in_all_sessions_lists_matches_and_goes_to_one(frame, env, monkeypa
         user_text("thanks")])
     add_transcript(env, "C:\\G\\Scratch", "own-1", [user_text("no match here")])
     seen = _find_all(frame, monkeypatch, "database MIGRATION", lambda d: d.go())
-    assert seen["title"] == 'Find in All Sessions: "database MIGRATION"'
+    assert seen["title"] == ('The Chat Place: 1 result for "database MIGRATION", '
+                             "Find in All Sessions")
     assert len(seen["rows"]) == 1 and seen["rows"][0].startswith("Quiet one, You, ")
     assert seen["rows"][0].endswith(": Start the database migration")
     assert 'contains "database MIGRATION". Searched ' in seen["summary"]

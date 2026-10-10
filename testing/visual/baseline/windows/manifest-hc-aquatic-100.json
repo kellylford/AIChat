@@ -41,7 +41,7 @@
    "kind": "window",
    "png": "main-own-hc-aquatic-100.png",
    "json": "main-own-hc-aquatic-100.json",
-   "title": "Visual probe \u2014 The Chat Place",
+   "title": "Visual probe — The Chat Place",
    "class": "MainFrame",
    "size": [
     1000,
@@ -57,7 +57,7 @@
    "kind": "window",
    "png": "main-own-working-hc-aquatic-100.png",
    "json": "main-own-working-hc-aquatic-100.json",
-   "title": "Visual probe \u2014 The Chat Place",
+   "title": "Visual probe — The Chat Place",
    "class": "MainFrame",
    "size": [
     1000,
@@ -73,7 +73,7 @@
    "kind": "window",
    "png": "main-attachments-hc-aquatic-100.png",
    "json": "main-attachments-hc-aquatic-100.json",
-   "title": "Visual probe \u2014 The Chat Place",
+   "title": "Visual probe — The Chat Place",
    "class": "MainFrame",
    "size": [
     1000,
@@ -89,7 +89,7 @@
    "kind": "window",
    "png": "main-desktop-hc-aquatic-100.png",
    "json": "main-desktop-hc-aquatic-100.json",
-   "title": "Fix the flaky upload test \u2014 The Chat Place",
+   "title": "Fix the flaky upload test — The Chat Place",
    "class": "MainFrame",
    "size": [
     1000,
@@ -105,7 +105,7 @@
    "kind": "window",
    "png": "main-activity-hc-aquatic-100.png",
    "json": "main-activity-hc-aquatic-100.json",
-   "title": "Fix the flaky upload test \u2014 The Chat Place",
+   "title": "Fix the flaky upload test — The Chat Place",
    "class": "MainFrame",
    "size": [
     1000,
@@ -137,7 +137,7 @@
    "kind": "window",
    "png": "main-status-bar-hc-aquatic-100.png",
    "json": "main-status-bar-hc-aquatic-100.json",
-   "title": "Visual probe \u2014 The Chat Place",
+   "title": "Visual probe — The Chat Place",
    "class": "MainFrame",
    "size": [
     1000,
@@ -155,7 +155,7 @@
    "kind": "window",
    "png": "main-narrow-hc-aquatic-100.png",
    "json": "main-narrow-hc-aquatic-100.json",
-   "title": "Visual probe \u2014 The Chat Place",
+   "title": "Visual probe — The Chat Place",
    "class": "MainFrame",
    "size": [
     640,
@@ -542,7 +542,7 @@
    "kind": "dialog",
    "png": "find-all-hc-aquatic-100.png",
    "json": "find-all-hc-aquatic-100.json",
-   "title": "Find in All Sessions: \"the\"",
+   "title": "The Chat Place: 6 results for \"the\", Find in All Sessions",
    "class": "FindResultsDialog",
    "size": [
     820,

@@ -41,7 +41,7 @@
    "kind": "window",
    "png": "main-own-light-100.png",
    "json": "main-own-light-100.json",
-   "title": "Visual probe \u2014 The Chat Place",
+   "title": "Visual probe — The Chat Place",
    "class": "MainFrame",
    "size": [
     1000,
@@ -57,7 +57,7 @@
    "kind": "window",
    "png": "main-own-working-light-100.png",
    "json": "main-own-working-light-100.json",
-   "title": "Visual probe \u2014 The Chat Place",
+   "title": "Visual probe — The Chat Place",
    "class": "MainFrame",
    "size": [
     1000,
@@ -73,7 +73,7 @@
    "kind": "window",
    "png": "main-attachments-light-100.png",
    "json": "main-attachments-light-100.json",
-   "title": "Visual probe \u2014 The Chat Place",
+   "title": "Visual probe — The Chat Place",
    "class": "MainFrame",
    "size": [
     1000,
@@ -89,7 +89,7 @@
    "kind": "window",
    "png": "main-desktop-light-100.png",
    "json": "main-desktop-light-100.json",
-   "title": "Fix the flaky upload test \u2014 The Chat Place",
+   "title": "Fix the flaky upload test — The Chat Place",
    "class": "MainFrame",
    "size": [
     1000,
@@ -105,7 +105,7 @@
    "kind": "window",
    "png": "main-activity-light-100.png",
    "json": "main-activity-light-100.json",
-   "title": "Fix the flaky upload test \u2014 The Chat Place",
+   "title": "Fix the flaky upload test — The Chat Place",
    "class": "MainFrame",
    "size": [
     1000,
@@ -137,7 +137,7 @@
    "kind": "window",
    "png": "main-status-bar-light-100.png",
    "json": "main-status-bar-light-100.json",
-   "title": "Visual probe \u2014 The Chat Place",
+   "title": "Visual probe — The Chat Place",
    "class": "MainFrame",
    "size": [
     1000,
@@ -155,7 +155,7 @@
    "kind": "window",
    "png": "main-narrow-light-100.png",
    "json": "main-narrow-light-100.json",
-   "title": "Visual probe \u2014 The Chat Place",
+   "title": "Visual probe — The Chat Place",
    "class": "MainFrame",
    "size": [
     640,
@@ -208,7 +208,8 @@
    ],
    "capture": "PrintWindow",
    "problems": [],
-   "about": "Help, User Guide (formatted page)"
+   "about": "Help, User Guide (formatted page)",
+   "retried": true
   },
   "message-formatted": {
    "kind": "dialog",
@@ -542,7 +543,7 @@
    "kind": "dialog",
    "png": "find-all-light-100.png",
    "json": "find-all-light-100.json",
-   "title": "Find in All Sessions: \"the\"",
+   "title": "The Chat Place: 6 results for \"the\", Find in All Sessions",
    "class": "FindResultsDialog",
    "size": [
     820,

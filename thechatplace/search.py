@@ -73,6 +73,15 @@ class Results:
     #: Sessions with at least one match.
     sessions: int = 0
 
+    def title(self, app: str) -> str:
+        """The results window's title: what you came to hear first, how many
+        and for what, then which window this is. 'The Chat Place: 6 results
+        for "migration", Find in All Sessions'."""
+        found = len(self.matches)
+        count = (f"the first {MAX_RESULTS} results" if self.more
+                 else f"{found} result{'s' if found != 1 else ''}")
+        return f'{app}: {count} for "{self.text}", Find in All Sessions'
+
     def summary(self) -> str:
         """What's said when the search ends."""
         searched = f"{self.searched} session{'s' if self.searched != 1 else ''}"
