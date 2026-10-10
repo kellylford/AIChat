@@ -35,8 +35,8 @@ SHORTCUTS = [
                          "session in The Chat Place; the list also has the bare link, and "
                          "where they apply its Open in Claude link and claude.ai address"),
         ("Ctrl+N", "New Chat Place session"),
-        ("Ctrl+Shift+N", "Continue the selected desktop app session here, as a copy you can "
-                         "reply to (the desktop app session isn't changed)"),
+        ("Ctrl+Shift+N", "Continue the selected desktop app or terminal session here, as a "
+                         "copy you can reply to (the original isn't changed)"),
         ("F5", "Refresh the list now and put it back in order (it also refreshes itself "
                "every few seconds, without moving rows while you're in it)"),
         ("Alt+V, O", "Sort Sessions: by status, newest first, oldest first, by title or "
@@ -49,8 +49,8 @@ SHORTCUTS = [
                      "removes, and Alt+Up, Alt+Down, Alt+Home and Alt+End move"),
         ("Ctrl+E", "Export the selected (or loaded) session as Markdown, a web page or "
                    "plain text"),
-        ("F2", "Rename the selected session (a desktop app session's new name shows only "
-               "in The Chat Place)"),
+        ("F2", "Rename the selected session (a desktop app or terminal session's new name "
+               "shows only in The Chat Place)"),
         ("Applications key / Shift+F10", "The session's menu: load, open in Claude, copy "
                                          "its link, rename, Remote Control, groups, export, "
                                          "hide or delete"),
@@ -61,8 +61,8 @@ SHORTCUTS = [
         ("Delete", "Hide the selected session; View, Show Sessions, Hidden lists hidden "
                    "sessions, and File, Bring Back Session returns one"),
         ("Shift+Delete", "Delete one of The Chat Place's own sessions permanently, "
-                         "transcript and all, after you confirm (desktop app sessions "
-                         "can only be hidden)"),
+                         "transcript and all, after you confirm (desktop app and terminal "
+                         "sessions can only be hidden)"),
         ("Ctrl+F", "Show only sessions whose title, folder or what they need contains some "
                    "text; Escape in the list shows them all again"),
     ]),

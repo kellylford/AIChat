@@ -1979,6 +1979,29 @@ def test_terminal_session_reads_is_read_only_and_continues(frame, env, fake_runn
     assert "belongs to the Claude desktop app" in frame.desktop_note.GetValue()
 
 
+def test_terminal_session_waiting_on_you_is_announced(frame, env, monkeypatch):
+    """A permission or question up in the terminal: Claude Code's live file
+    says "waiting", and the session needs you, not "finished"."""
+    add_terminal(env, monkeypatch, "term-1", "C:\\T\\Docs", user_text("Clean the drive"))
+    original = hub.load_live_status
+    monkeypatch.setattr(hub, "load_live_status",
+                        lambda directory=None, alive=None, started=None: original(
+                            directory, alive=lambda pid: True, started=lambda pid: None))
+    monkeypatch.setattr(frame, "_app_is_active", lambda: False)
+    live = env["live"] / "4242.json"
+    live.write_text(json.dumps({"pid": 4242, "sessionId": "term-1", "status": "busy"}))
+    frame.refresh_sessions(force=True, resort=True)
+    settle(frame)
+    assert next(s for s in frame._snapshot.sessions if s.is_terminal).state == "working"
+    live.write_text(json.dumps({"pid": 4242, "sessionId": "term-1", "status": "waiting",
+                                "waitingFor": "dialog open"}))
+    frame.refresh_sessions(force=True, resort=True)
+    settle(frame)
+    assert env["notified"][-1] == ("Clean the drive needs you", "dialog open", "terminal:term-1")
+    row = select(frame, "Clean the drive")
+    assert "needs you: dialog open" in frame.session_list.GetString(row)
+
+
 def test_terminal_view_menu_filter_and_bug_report(frame, env, monkeypatch):
     from thechatplace.sessions import VIEW_DESKTOP, VIEW_TERMINAL
     add_terminal(env, monkeypatch, "term-1", "C:\\T\\Docs", user_text("Plan the trip"))

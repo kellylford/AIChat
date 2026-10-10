@@ -14,7 +14,9 @@ The id in a link is the one that stays put for the life of the session:
 * one of The Chat Place's own sessions: its Claude Code session id (the
   transcript's name, a UUID);
 * a Claude desktop app session, Code or Cowork: the desktop app's own id
-  (``local_...``), the one its claude:// links use.
+  (``local_...``), the one its claude:// links use;
+* a session started in a terminal (#158): its Claude Code session id, as
+  for The Chat Place's own.
 
 Nothing here imports wx, so it's all tested without a window.
 """

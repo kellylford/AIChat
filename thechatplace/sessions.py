@@ -389,9 +389,13 @@ def sort_sessions(sessions: Iterable[SessionInfo],
 
 @dataclass
 class LiveStatus:
-    status: str          # "busy" | "idle" | other
+    status: str          # "busy" | "idle" | "waiting" | other
     pid: int
     updated_ms: int = 0
+    #: With "waiting": what Claude Code is waiting on you for ("dialog open",
+    #: "input needed", "sandbox request", ...). An interactive session at its
+    #: prompt is "idle"; "waiting" is something it can't go on without.
+    waiting_for: str = ""
 
 
 def load_live_status(directory: Optional[Path] = None,
@@ -427,7 +431,8 @@ def load_live_status(directory: Optional[Path] = None,
         if not _same_process(data.get("procStart"), started(pid), data.get("startedAt")):
             continue
         status = LiveStatus(status=str(data.get("status") or ""), pid=pid,
-                            updated_ms=_int(data.get("statusUpdatedAt") or data.get("updatedAt")))
+                            updated_ms=_int(data.get("statusUpdatedAt") or data.get("updatedAt")),
+                            waiting_for=" ".join(str(data.get("waitingFor") or "").split()))
         for id_field in ("sessionId", "hostSessionId"):
             value = data.get(id_field)
             if isinstance(value, str) and value:
@@ -646,9 +651,10 @@ def load_terminal_sessions(projects: Path, live: Dict[str, LiveStatus],
     cli ids already in the list (the desktop app's, archived ones included,
     and The Chat Place's own), which aren't listed again. Transcripts of
     ``claude -p`` runs, the desktop app's and subagents' aren't sessions
-    someone typed into, so they aren't listed. A terminal session is working
-    while its live file says busy, and idle otherwise: its transcript doesn't
-    say when it is waiting on you."""
+    someone typed into, so they aren't listed. A terminal session's state is
+    its live file's: working while busy, needs you while Claude Code waits on
+    you (a permission or a question), and idle at its prompt or once it has
+    closed."""
     sessions: List[SessionInfo] = []
     seen: List[Path] = []
     try:
@@ -664,11 +670,26 @@ def load_terminal_sessions(projects: Path, live: Dict[str, LiveStatus],
         about = facts.get(path)
         if about is None or not about.terminal:
             continue
-        status = live.get(cli_id)
+        state, detail = terminal_state(live.get(cli_id))
         sessions.append(SessionInfo(
-            source=TERMINAL, key=f"terminal:{cli_id}", title=about.title,
+            source=TERMINAL, key=f"terminal:{cli_id}",
+            title=about.title or f"Untitled terminal session in {_folder_name(about.cwd)}",
             cwd=about.cwd, cli_session_id=cli_id,
-            last_activity_ms=int(_mtime(path) * 1000),
-            state=WORKING if status is not None and status.status == "busy" else IDLE))
+            last_activity_ms=about.modified_ms, state=state, detail=detail))
     facts.keep_only(seen)
     return sessions
+
+
+def terminal_state(live: Optional[LiveStatus]) -> "tuple[str, str]":
+    """(state, detail) for a terminal session, from its live file."""
+    if live is None:
+        return IDLE, ""
+    if live.status == "busy":
+        return WORKING, ""
+    if live.status == "waiting":
+        return NEEDS_YOU, live.waiting_for or "waiting for you"
+    return IDLE, ""
+
+
+def _folder_name(cwd: str) -> str:
+    return (cwd or "").rstrip("\\/").replace("\\", "/").split("/")[-1] or "an unknown folder"

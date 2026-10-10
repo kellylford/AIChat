@@ -178,8 +178,8 @@ they're read-only here. Each one's line says "terminal session" and names the fo
 it in. Its title is the name you gave it with `/rename`, or else the one Claude Code gave it, or
 else the start of your first message. To find them in a long list, press **Ctrl+F** and type
 "terminal", or choose View, Show Sessions, **Terminal Sessions**. Press **Enter** to read the
-conversation. The list shows one as working while Claude works in it, and announces when it
-answers.
+conversation. The list shows one as working while Claude works in it, and as needing you while
+it waits on you in the terminal (a permission or a question), and announces both.
 
 You reply to a terminal session in its terminal, or carry it on here with **Continue Here**
 (Ctrl+Shift+N). The desktop app doesn't list terminal sessions, so Open in Claude isn't offered for

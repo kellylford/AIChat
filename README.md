@@ -22,7 +22,8 @@ as Help, Keyboard Shortcuts (F1) in the app.
 
 A keyboard and screen reader friendly reader for Claude Code sessions. It lists every session the
 Claude desktop app has open, and the ones you started by typing `claude` in a terminal, shows each
-one as a conversation you can arrow through, tells you when a session answers, and switches the desktop app to a session when you need the real thing.
+one as a conversation you can arrow through, tells you when a session answers, and switches the
+desktop app to a session when you need the real thing.
 It can also start sessions of its own, which you can read and reply to entirely from here.
 
 It runs on your existing Claude subscription, signed in to Claude Code, and never uses an API
@@ -243,8 +244,9 @@ bar isn't a Tab stop, and your screen reader's own read-status-bar key still wor
   read-only, as desktop app sessions are. Each row says "terminal session" and names the folder
   you started it in. Its title is the name you gave it with `/rename`, or else the one Claude Code
   gave it, or else the start of your first message. View, Show Sessions, Terminal Sessions lists
-  only them, and Ctrl+F in the list finds them by "terminal". Enter reads the conversation, the
-  list shows it working while it is, and its finished turns are announced. You reply to it in its
+  only them, and Ctrl+F in the list finds them by "terminal". Enter reads the conversation. The
+  list shows one as working while Claude works in it, and as needing you while it waits on you in
+  the terminal (a permission or a question), and both are announced. You reply to it in its
   terminal, or carry it on here with Continue Here; Open in Claude isn't offered, since the
   desktop app doesn't list it. Sessions run by scripts with `claude -p`, and those of the VS Code
   extension, aren't listed.
@@ -780,8 +782,6 @@ Checked with Claude Code 2.1.286 (issues #187 and #188):
   (`cleanupPeriodDays`, 90 days on Kelly's PC). The chat says so.
 - The Chat Place's own sessions, and terminal sessions, don't appear in the desktop app, so Open in
   Claude doesn't work for them; the app says so.
-- A terminal session shows as working while Claude works in it, and otherwise as idle: Claude
-  Code doesn't record when a terminal session is waiting on you.
 - Cowork sessions can't be continued here. Their conversation is in the session's own Claude Code
   folder inside the desktop app's files, where `claude -p` on your PC can't resume it, and its
   tools were run by the desktop app. Open in Claude carries on there.

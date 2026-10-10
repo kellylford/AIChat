@@ -737,14 +737,21 @@ class LastMessages:
 #: Place's own turns) records "sdk-cli", the desktop app "claude-desktop", and
 #: the VS Code extension "claude-vscode".
 TERMINAL_ENTRYPOINT = "cli"
-#: Records that name a session, which can come anywhere in it: ``/rename``
-#: writes a custom title, and Claude Code an ai-title of its own.
+#: Records that name a session. ``/rename`` writes a custom title and Claude
+#: Code an ai-title of its own, and Claude Code writes them again, with the
+#: session's other details, as the session goes on: so the newest is near the
+#: end of the file.
 _TITLE_RECORDS = (b'"custom-title"', b'"ai-title"')
-#: Read at a time. A transcript that isn't a terminal session's says so in its
-#: first records, so until it's known whose a transcript is, only a small
-#: piece is read; most are left after that, however long they are.
+#: Read at a time. Until it's known whose a transcript is, only a small piece
+#: is read: its first records say, and most transcripts aren't a terminal
+#: session's, so they're left after that, however long they are.
 _FACTS_CHUNK = 1024 * 1024
 _FACTS_FIRST_CHUNK = 16 * 1024
+#: Of a terminal session's transcript, past its start, only this much of its
+#: end is read the first time, for its newest title and folder: a long-used
+#: session's transcript can be hundreds of megabytes. After that, only what's
+#: added to it is read.
+_FACTS_TAIL = 1024 * 1024
 #: A first prompt not found in this many records isn't looked for further.
 _FIRST_PROMPT_RECORDS = 400
 
@@ -754,10 +761,14 @@ class SessionFacts:
     """What a transcript says about its session, for listing one that no
     metadata file describes: how it was started, its folder and its title."""
     entrypoint: str = ""
+    #: Where it works now: the folder of its newest record, since entering
+    #: a worktree moves a session to another folder.
     cwd: str = ""
     custom_title: str = ""
     ai_title: str = ""
     first_prompt: str = ""
+    #: When the file last changed, in milliseconds.
+    modified_ms: int = 0
 
     @property
     def title(self) -> str:
@@ -776,6 +787,9 @@ class _FactsReader:
         self.offset = 0
         self.records = 0
         self.stamp: Tuple[int, int] = (-1, -1)
+        #: The last bytes read, up to ``offset``: if they've changed, the file
+        #: was replaced rather than added to.
+        self.edge = b""
         self._parser: Optional[TranscriptParser] = TranscriptParser()
 
     @property
@@ -783,23 +797,34 @@ class _FactsReader:
         """Not a terminal session's: nothing more in it matters."""
         return bool(self.facts.entrypoint) and not self.facts.terminal
 
+    @property
+    def head_read(self) -> bool:
+        """Its start has said all it will: whose it is, and its first prompt."""
+        return bool(self.facts.entrypoint) and self._parser is None
+
     def feed(self, data: bytes) -> None:
+        latest_cwd = ""
         for line in data.split(b"\n"):
             if self.done:
+                self._parser = None
                 return
             if not line.strip():
                 continue
             self.records += 1
-            looking = (not self.facts.entrypoint or not self.facts.cwd
-                       or self._parser is not None)
-            if not looking and not any(marker in line for marker in _TITLE_RECORDS):
+            if self.head_read and not any(marker in line for marker in _TITLE_RECORDS):
                 continue
-            try:
-                record = json.loads(line.decode("utf-8", errors="replace"))
-            except ValueError:
-                continue
-            if isinstance(record, dict):
+            record = _json_line(line)
+            if record is not None:
                 self._record(record, line)
+        if self.head_read:
+            # The folder it works in now, from the newest record that says.
+            for line in reversed(data.split(b"\n")[-4:]):
+                record = _json_line(line) if b'"cwd"' in line else None
+                if record and not record.get("isSidechain") and isinstance(record.get("cwd"), str):
+                    latest_cwd = record["cwd"]
+                    break
+            if latest_cwd:
+                self.facts.cwd = latest_cwd
 
     def _record(self, record: dict, line: bytes) -> None:
         facts = self.facts
@@ -814,7 +839,7 @@ class _FactsReader:
             return
         if not facts.entrypoint and isinstance(record.get("entrypoint"), str):
             facts.entrypoint = record["entrypoint"]
-        if not facts.cwd and isinstance(record.get("cwd"), str):
+        if isinstance(record.get("cwd"), str) and record["cwd"]:
             facts.cwd = record["cwd"]
         if self._parser is None:
             return
@@ -824,8 +849,23 @@ class _FactsReader:
                     facts.first_prompt = message.first_line(120)
                     self._parser = None
                     return
-        if self._parser is not None and self.records >= _FIRST_PROMPT_RECORDS:
+        if self.records >= _FIRST_PROMPT_RECORDS:
             self._parser = None
+
+
+def _edge(handle, offset: int, size: int = 64) -> bytes:
+    """The ``size`` bytes before ``offset``."""
+    start = max(0, offset - size)
+    handle.seek(start)
+    return handle.read(offset - start)
+
+
+def _json_line(line: bytes) -> Optional[dict]:
+    try:
+        record = json.loads(line.decode("utf-8", errors="replace"))
+    except ValueError:
+        return None
+    return record if isinstance(record, dict) else None
 
 
 def _one_line(value) -> str:
@@ -835,13 +875,16 @@ def _one_line(value) -> str:
 class SessionFactsCache:
     """``SessionFacts`` for each transcript, remembered by file size and
     modification time and read on from where it left off, so a refresh
-    reads only what was added. Safe to use from the background thread that
-    gathers the session list."""
+    reads only what was added. Claude Code only ever adds to a transcript; one
+    that shrinks, or whose first bytes change, was replaced and is read
+    again. For one caller at a time (the thread that gathers the session
+    list): each file's reader isn't locked while it reads."""
 
     def __init__(self, chunk: int = _FACTS_CHUNK,
-                 first_chunk: int = _FACTS_FIRST_CHUNK) -> None:
+                 first_chunk: int = _FACTS_FIRST_CHUNK, tail: int = _FACTS_TAIL) -> None:
         self._chunk = chunk
         self._first_chunk = min(first_chunk, chunk)
+        self._tail = tail
         self._lock = threading.Lock()
         self._readers: Dict[str, _FactsReader] = {}
         #: Bytes read from files (not answered from memory); for tests.
@@ -855,34 +898,19 @@ class SessionFactsCache:
         try:
             info = os.stat(path)
             stamp = (info.st_size, info.st_mtime_ns)
-            if reader is not None and (reader.stamp == stamp or reader.done):
+            if reader is not None and reader.stamp == stamp:
                 return reader.facts
-            if reader is None or info.st_size < reader.offset:
-                reader = _FactsReader()  # new, or rewritten: start over
             with open(path, "rb") as handle:
-                handle.seek(reader.offset)
-                while not reader.done:
-                    want = self._chunk if reader.facts.entrypoint else self._first_chunk
-                    data = handle.read(want)
-                    if not data:
-                        break
-                    end = data.rfind(b"\n")
-                    if end < 0:
-                        if len(data) < want:
-                            break  # a last line still being written
-                        # One line longer than a chunk: skip past it, once
-                        # it has been written to its end.
-                        rest = handle.readline()
-                        if not rest.endswith(b"\n"):
-                            break
-                        reader.offset += len(data) + len(rest)
-                        self.bytes_read += len(data) + len(rest)
-                        continue
-                    reader.offset += end + 1
-                    self.bytes_read += end + 1
-                    reader.feed(data[:end + 1])
-                    handle.seek(reader.offset)
+                if reader is not None and (info.st_size < reader.offset
+                                           or _edge(handle, reader.offset) != reader.edge):
+                    reader = None  # replaced: start over
+                if reader is None:
+                    reader = _FactsReader()
+                if not reader.done:
+                    self._read(handle, reader, info.st_size)
+                reader.edge = _edge(handle, reader.offset)
             reader.stamp = stamp
+            reader.facts.modified_ms = info.st_mtime_ns // 1_000_000
         except FileNotFoundError:
             with self._lock:
                 self._readers.pop(name, None)
@@ -893,6 +921,35 @@ class SessionFactsCache:
         with self._lock:
             self._readers[name] = reader
         return reader.facts
+
+    def _read(self, handle, reader: _FactsReader, size: int) -> None:
+        handle.seek(reader.offset)
+        while not reader.done:
+            want = self._chunk if reader.facts.entrypoint else self._first_chunk
+            data = handle.read(want)
+            if not data:
+                break
+            end = data.rfind(b"\n")
+            if end < 0:
+                # One line longer than the piece read (a pasted log as the
+                # first prompt): read the rest of it, once it's all written.
+                data += handle.readline()
+                if not data.endswith(b"\n"):
+                    break
+                end = len(data) - 1
+            piece = data[:end + 1]
+            reader.offset += len(piece)
+            self.bytes_read += len(piece)
+            reader.feed(piece)
+            if (reader.head_read and not reader.done
+                    and size - reader.offset > self._tail):
+                # Its middle says nothing the end doesn't: skip to the end,
+                # at the start of a line.
+                handle.seek(size - self._tail)
+                handle.readline()
+                reader.offset = handle.tell()
+            else:
+                handle.seek(reader.offset)
 
     def keep_only(self, paths: Iterable[Path]) -> None:
         """Forget files not in ``paths``: transcripts gone from the folder."""

@@ -1040,7 +1040,7 @@ class MainFrame(wx.Frame):
         if info.is_own:
             prompt = f"New name for {info.title}:"
         else:
-            keeper = "the terminal" if info.is_terminal else "the Claude desktop app"
+            keeper = "Claude Code" if info.is_terminal else "the Claude desktop app"
             prompt = (f"New name for {info.title}. It shows only in The Chat Place; "
                       f"{keeper} keeps its own name for it. Leave it empty to go "
                       "back to that name.")
